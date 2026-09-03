@@ -1,0 +1,23 @@
+# Dependencias e artefatos de build
+node_modules/
+dist/
+
+# Ambiente e credenciais
+.env
+.env.*
+!.env.example
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal
+
+# Cobertura e cache de teste
+coverage/
+.vitest/
+
+# Sistema operacional e editores
+Thumbs.db
+desktop.ini
+.DS_Store
+.idea/
+.vscode/

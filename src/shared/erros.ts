@@ -1,0 +1,69 @@
+// Erros de dominio no formato do contrato (docs/contrato-api.md, secao 2).
+//
+// Toda resposta de erro sai como:
+//   { "erro": { "codigo", "mensagem", "requisito"?, "campos"?, ... } }
+//
+// `codigo` e estavel e e por ele que o front decide comportamento - nunca pelo
+// texto da mensagem. O tratador central em middlewares/erro.ts faz a conversao.
+
+/** Codigos da tabela 2.1 do contrato. Acrescentar aqui exige alterar o contrato nos dois repos. */
+export type CodigoErro =
+  | 'VALIDACAO'
+  | 'NAO_AUTENTICADO'
+  | 'SEM_PERMISSAO'
+  | 'NAO_ENCONTRADO'
+  | 'PAR_GENETICO_INVALIDO'
+  | 'CAIXA_JA_TEM_CASAL_ATIVO'
+  | 'LIMITE_PARTOS_ATINGIDO'
+  | 'POSICAO_OCUPADA'
+  | 'DISPONIBILIDADE_EXCEDIDA'
+  | 'TRANSICAO_CONTRARIA_COMPROMISSO'
+  | 'PRAZO_INVIAVEL'
+  | 'SEQUENCIA_INVALIDA'
+  | 'ERRO_INTERNO'
+
+export type ExtrasErro = {
+  /** ID do requisito violado. Preencher sempre que houver: `RN-06`, `RF-CIC-03`. */
+  requisito?: string
+  /** Mensagem por campo. Obrigatorio em VALIDACAO. */
+  campos?: Record<string, string>
+  /** Dado extra que o contrato preveja para aquele codigo - `dataMinima` em PRAZO_INVIAVEL. */
+  [chave: string]: unknown
+}
+
+export class ErroDeAplicacao extends Error {
+  constructor(
+    readonly status: number,
+    readonly codigo: CodigoErro,
+    /** Em portugues, pronta para exibir ao usuario. */
+    mensagem: string,
+    readonly extras: ExtrasErro = {},
+  ) {
+    super(mensagem)
+    this.name = new.target.name
+  }
+}
+
+/** 401 - sem cookie de sessao valido. */
+export const naoAutenticado = () =>
+  new ErroDeAplicacao(401, 'NAO_AUTENTICADO', 'Faca login para continuar.')
+
+/** 403 - autenticado, mas o perfil nao alcanca o recurso (`RF-ACS-02`). */
+export const semPermissao = () =>
+  new ErroDeAplicacao(403, 'SEM_PERMISSAO', 'Seu perfil nao tem acesso a esta operacao.', {
+    requisito: 'RF-ACS-02',
+  })
+
+/** 404 - inexistente ou fora do alcance do perfil. */
+export const naoEncontrado = (oQue: string) =>
+  new ErroDeAplicacao(404, 'NAO_ENCONTRADO', `${oQue} nao encontrado.`)
+
+/**
+ * 409 - regra de negocio violada. No contrato **todo 409 e regra**: o front pode
+ * tratar qualquer um deles mostrando a mensagem, sem conhecer cada codigo.
+ *
+ * E a camada de servico dizendo nao - a que precisa consultar o banco para
+ * decidir. Forma de entrada e com o Zod, invariante e com o Postgres.
+ */
+export const erroDeRegra = (codigo: CodigoErro, mensagem: string, extras: ExtrasErro = {}) =>
+  new ErroDeAplicacao(409, codigo, mensagem, extras)

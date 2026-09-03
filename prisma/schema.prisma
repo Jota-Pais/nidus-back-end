@@ -1,0 +1,21 @@
+// Modelo fisico do Nidus - CPMR/UFSC.
+//
+// Fonte da verdade do banco (abordagem migrate-first): este arquivo gera as
+// migrations, nunca o contrario. Um unico banco oficial na Neon, sem branch por
+// pessoa.
+//
+//   Joao Carlos (banco)      -> prisma migrate dev     cria a migration
+//   Miguel, Gabriel, Arthur  -> npm run db:deploy      so aplica as pendentes
+//
+// Nenhum model definido ainda. O modelo logico do MVP - 14 tabelas em 6 schemas
+// - esta em faculdade/projeto-integrador-sistema-web/modelo-de-dados.md e entra
+// aqui pela mao do responsavel pelo banco.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["infra", "catalogo", "reproducao", "login", "etica", "demanda"]
+}
