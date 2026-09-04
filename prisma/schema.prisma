@@ -7,9 +7,23 @@
 //   Joao Carlos (banco)      -> prisma migrate dev     cria a migration
 //   Miguel, Gabriel, Arthur  -> npm run db:deploy      so aplica as pendentes
 //
-// Nenhum model definido ainda. O modelo logico do MVP - 14 tabelas em 6 schemas
-// - esta em faculdade/projeto-integrador-sistema-web/modelo-de-dados.md e entra
-// aqui pela mao do responsavel pelo banco.
+// As 14 tabelas do MVP em 6 schemas, transcritas de docs/modelo-de-dados.md.
+//
+// Convencao (secao 1 daquele documento), toda ela via @map/@@map:
+//   - modulo = schema do Postgres
+//   - tabela snake_case SINGULAR em portugues
+//   - PK `id` int4 autoincremento
+//   - FK `id_<tabela referenciada>`
+//   - data e hora com prefixo `dt_`
+//   - status e tipo em char(1)/char(2) com DEFAULT e CHECK
+//   - NO ACTION em TODA FK: o RNF-06 proibe apagar registro, e CASCADE seria a
+//     porta de saida para exatamente o que o requisito proibe
+//   - sem enum do Prisma: enum vira ENUM no Postgres e alterar ENUM e DDL, ou
+//     seja deploy, o que o RNF-05 proibe
+//
+// O que NAO esta aqui, de proposito, porque o Prisma nao gera: unique parcial,
+// CHECK, FK composta e o trigger do RN-09. Sao a secao 6 do modelo de dados e
+// entram como SQL na proxima migration.
 
 generator client {
   provider = "prisma-client-js"
@@ -18,4 +32,372 @@ generator client {
 datasource db {
   provider = "postgresql"
   schemas  = ["infra", "catalogo", "reproducao", "login", "etica", "demanda"]
+}
+
+// ---------------------------------------------------------------- infra
+
+/// Rack com fabricante, modelo e topologia. A capacidade e derivada
+/// (faces x linhas x colunas) e nunca vem do cliente. RF-INF-01.
+model Estante {
+  id            Int       @id @default(autoincrement())
+  sala          String    @db.VarChar(60)
+  fabricante    String    @db.VarChar(60)
+  modelo        String    @db.VarChar(60)
+  /// Como a etiqueta aparece na estante real. RF-INF-02.
+  numeroVisivel String    @map("numero_visivel") @db.VarChar(30)
+  faces         Int       @db.SmallInt
+  linhas        Int       @db.SmallInt
+  colunas       Int       @db.SmallInt
+  capacidade    Int       @db.SmallInt
+  ativa         Boolean   @default(true)
+  dtCriacao     DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
+  dtManutencao  DateTime? @map("dt_manutencao") @db.Timestamptz(6)
+
+  caixas Caixa[]
+
+  @@map("estante")
+  @@schema("infra")
+}
+
+/// A gaiola que ocupa uma posicao. Nao existe tabela `slot`: o endereco vive na
+/// propria caixa (decisao D-04) e a grade vazia se gera em codigo a partir da
+/// topologia da estante.
+model Caixa {
+  id        Int @id @default(autoincrement())
+  idEstante Int @map("id_estante")
+  /// 1 frontal, 2 traseira. A face faz parte do endereco, nao e sufixo.
+  face      Int @db.SmallInt
+  linha     Int @db.SmallInt
+  coluna    Int @db.SmallInt
+  /// Endereco legivel, gerado. Se a letra e linha ou coluna: CONF-07.
+  codigo    String @db.VarChar(20)
+  /// RF-CIC-01: a segregacao por especie e aplicada no servidor.
+  idEspecie Int @map("id_especie")
+  /// R reproducao | M maternidade | C recria | E expedicao
+  finalidade String @default("R") @db.Char(1)
+  /// R em reproducao | P parcial | T total | E preparada | X expedida
+  estado     String @default("R") @db.Char(1)
+  ativa      Boolean   @default(true)
+  dtCriacao    DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
+  dtManutencao DateTime? @map("dt_manutencao") @db.Timestamptz(6)
+
+  estante Estante @relation(fields: [idEstante], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  especie Especie @relation(fields: [idEspecie], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  casais       Casal[]
+  partosRecria Parto[] @relation("CaixaRecria")
+
+  @@index([idEstante, face])
+  @@index([estado, idEspecie])
+  @@map("caixa")
+  @@schema("infra")
+}
+
+// ------------------------------------------------------------- catalogo
+
+model Especie {
+  id             Int    @id @default(autoincrement())
+  /// Rato | Camundongo
+  nome           String @db.VarChar(40)
+  nomeCientifico String @map("nome_cientifico") @db.VarChar(80)
+
+  linhagens     Linhagem[]
+  caixas        Caixa[]
+  parametros    ParametroBiologico[]
+  solicitacoes  Solicitacao[]
+
+  @@unique([nome])
+  @@map("especie")
+  @@schema("catalogo")
+}
+
+/// Wistar, SHR, Kyoto (rato) | Swiss, C57BL/6J (camundongo). Nao sao
+/// intercambiaveis: linhagem sempre coerente com a especie.
+model Linhagem {
+  id        Int     @id @default(autoincrement())
+  idEspecie Int     @map("id_especie")
+  nome      String  @db.VarChar(60)
+  ativa     Boolean @default(true)
+
+  especie Especie @relation(fields: [idEspecie], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  casais       Casal[]
+  parametros   ParametroBiologico[]
+  solicitacoes Solicitacao[]
+
+  /// Alvo da FK composta (id_especie, id_linhagem) que entra por SQL.
+  @@unique([idEspecie, id])
+  @@unique([idEspecie, nome])
+  @@map("linhagem")
+  @@schema("catalogo")
+}
+
+/// RN-01: parametros configuraveis e VERSIONADOS. Nao sao constantes de codigo -
+/// calculo feito no passado precisa continuar reproduzivel.
+model ParametroBiologico {
+  id        Int  @id @default(autoincrement())
+  idEspecie Int  @map("id_especie")
+  /// Nulo vale para a especie inteira.
+  idLinhagem Int? @map("id_linhagem")
+
+  gestacaoDias       Int @default(23) @map("gestacao_dias") @db.SmallInt
+  aleitamentoDias    Int @default(22) @map("aleitamento_dias") @db.SmallInt
+  intervaloCicloDias Int @default(6) @map("intervalo_ciclo_dias") @db.SmallInt
+  maxPartoCasal      Int @default(5) @map("max_parto_casal") @db.SmallInt
+  /// Expectativa de ninhada nao nascida. PEN-05 e CONF-03: e estimativa, NUNCA teto.
+  expectativaM Int @default(4) @map("expectativa_m") @db.SmallInt
+  expectativaF Int @default(4) @map("expectativa_f") @db.SmallInt
+
+  dtVigenciaInicio DateTime  @map("dt_vigencia_inicio") @db.Date
+  /// Nulo e vigente.
+  dtVigenciaFim    DateTime? @map("dt_vigencia_fim") @db.Date
+
+  especie  Especie   @relation(fields: [idEspecie], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  linhagem Linhagem? @relation(fields: [idLinhagem], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([idEspecie, dtVigenciaFim])
+  @@map("parametro_biologico")
+  @@schema("catalogo")
+}
+
+/// RN-07: a variacao cresce com a idade pedida. Dado configuravel, nao codigo.
+model ToleranciaIdade {
+  id            Int  @id @default(autoincrement())
+  idadeMinDias  Int  @map("idade_min_dias") @db.SmallInt
+  /// Nulo e sem teto: e a faixa "> 90" da tabela.
+  idadeMaxDias  Int? @map("idade_max_dias") @db.SmallInt
+  variacaoDias  Int  @map("variacao_dias") @db.SmallInt
+
+  dtVigenciaInicio DateTime  @map("dt_vigencia_inicio") @db.Date
+  dtVigenciaFim    DateTime? @map("dt_vigencia_fim") @db.Date
+
+  @@map("tolerancia_idade")
+  @@schema("catalogo")
+}
+
+/// RN-02: cruzamento rotacional em anel. So valem AB, BC, CD, DE, EA.
+/// Lista configuravel: o alvo da FK composta de `casal`.
+model GrupoGeneticoPar {
+  id          Int     @id @default(autoincrement())
+  grupoMacho  String  @map("grupo_macho") @db.Char(1)
+  grupoFemea  String  @map("grupo_femea") @db.Char(1)
+  ativo       Boolean @default(true)
+
+  @@unique([grupoMacho, grupoFemea])
+  @@map("grupo_genetico_par")
+  @@schema("catalogo")
+}
+
+// ------------------------------------------------------------ reproducao
+
+/// RN-03: maximo um casal ATIVO por caixa (unique parcial, entra por SQL).
+/// RN-04: encerra no 5o parto confirmado.
+model Casal {
+  id         Int    @id @default(autoincrement())
+  idCaixa    Int    @map("id_caixa")
+  idLinhagem Int    @map("id_linhagem")
+  /// Grupos A-E. A FK composta para grupo_genetico_par entra por SQL.
+  grupoMacho String @map("grupo_macho") @db.Char(1)
+  grupoFemea String @map("grupo_femea") @db.Char(1)
+  /// 2 caracteres, primeiro e o grupo do macho. Ex.: AB.
+  identificacao String @db.Char(2)
+
+  dtFormacao         DateTime  @map("dt_formacao") @db.Date
+  dtEncerramento     DateTime? @map("dt_encerramento") @db.Date
+  motivoEncerramento String?   @map("motivo_encerramento") @db.VarChar(200)
+  ativo              Boolean   @default(true)
+
+  dtCriacao    DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
+  dtManutencao DateTime? @map("dt_manutencao") @db.Timestamptz(6)
+
+  caixa    Caixa    @relation(fields: [idCaixa], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  linhagem Linhagem @relation(fields: [idLinhagem], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  partos   Parto[]
+
+  @@index([idCaixa, ativo])
+  @@map("casal")
+  @@schema("reproducao")
+}
+
+/// A ficha de um ciclo. E onde o compromisso se ancora (decisao D-02): a caixa
+/// tem ate 5 partos na vida do casal e o RF-MOT-01 manda varrer os 5, entao pela
+/// caixa nao daria para saber qual ninhada foi prometida a quem.
+model Parto {
+  id      Int @id @default(autoincrement())
+  idCasal Int @map("id_casal")
+  /// 1 a 5. RN-04.
+  ordem   Int @db.SmallInt
+
+  /// RN-05: unica data digitada no ciclo 1. As previstas sao derivadas.
+  dtAcasalamento   DateTime  @map("dt_acasalamento") @db.Date
+  dtPartoPrevisto  DateTime  @map("dt_parto_previsto") @db.Date
+  /// Nulo ate confirmar. Confirmar recalcula toda a cadeia a frente.
+  dtPartoReal      DateTime? @map("dt_parto_real") @db.Date
+
+  nascidoM Int? @map("nascido_m") @db.SmallInt
+  nascidoF Int? @map("nascido_f") @db.SmallInt
+
+  /// RF-REP-04: eutanasia de selecao. Sem limite imposto pelo sistema.
+  eutanasiadoM Int?      @map("eutanasiado_m") @db.SmallInt
+  eutanasiadoF Int?      @map("eutanasiado_f") @db.SmallInt
+  dtSelecao    DateTime? @map("dt_selecao") @db.Date
+
+  dtDesmamePrevisto DateTime  @map("dt_desmame_previsto") @db.Date
+  dtDesmameReal     DateTime? @map("dt_desmame_real") @db.Date
+  desmamadoM        Int?      @map("desmamado_m") @db.SmallInt
+  desmamadoF        Int?      @map("desmamado_f") @db.SmallInt
+
+  /// D-03 / PEN-02 em aberto: nulo = seguem na caixa do casal;
+  /// preenchido = mudaram para caixa propria.
+  idCaixaRecria Int? @map("id_caixa_recria")
+
+  /// RN-08: C confirmado | P previsto | J projetado.
+  grauCerteza String @default("J") @map("grau_certeza") @db.Char(1)
+
+  dtCriacao    DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
+  dtManutencao DateTime? @map("dt_manutencao") @db.Timestamptz(6)
+
+  casal        Casal  @relation(fields: [idCasal], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  caixaRecria  Caixa? @relation("CaixaRecria", fields: [idCaixaRecria], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  compromissos Compromisso[]
+
+  @@unique([idCasal, ordem])
+  /// Indice quente: e literalmente a varredura do RF-MOT-01, a consulta mais
+  /// frequente do sistema.
+  @@index([grauCerteza, dtDesmamePrevisto])
+  @@map("parto")
+  @@schema("reproducao")
+}
+
+// ---------------------------------------------------------------- login
+
+model Usuario {
+  id Int @id @default(autoincrement())
+  /// SSO ID-UFSC. Fica como mock no semestre: PEN-09.
+  idInstitucional String? @unique @map("id_institucional") @db.VarChar(60)
+  nome            String  @db.VarChar(120)
+  email           String  @unique @db.VarChar(160)
+  /// P pesquisador | T tecnico | G gestor
+  perfil          String  @db.Char(1)
+  /// RF-ACS-01: acesso administrativo independente, para nao perder o sistema
+  /// se o SSO cair. Nulo para quem entra so pelo SSO.
+  hashSenha String? @map("hash_senha") @db.VarChar(255)
+  ativo     Boolean @default(true)
+  dtCriacao DateTime @default(now()) @map("dt_criacao") @db.Timestamptz(6)
+
+  projetosResponsavel Projeto[]
+  solicitacoes        Solicitacao[]
+  compromissos        Compromisso[]
+
+  @@map("usuario")
+  @@schema("login")
+}
+
+// ----------------------------------------------------------------- etica
+
+/// RN-12: cota de etica e limite rigido. Nenhuma aprovacao alem do saldo nem
+/// com projeto fora de vigencia.
+model Projeto {
+  id     Int    @id @default(autoincrement())
+  /// Formato 23080.XXXXXX/AAAA-XX. Mascara em RF-DEM-06.
+  numero String @unique @db.VarChar(30)
+  titulo String @db.VarChar(255)
+  idUsuarioResponsavel Int @map("id_usuario_responsavel")
+
+  dtVigenciaInicio DateTime @map("dt_vigencia_inicio") @db.Date
+  dtVigenciaFim    DateTime @map("dt_vigencia_fim") @db.Date
+  cotaAutorizada   Int      @map("cota_autorizada")
+  /// V vigente | N vencido | S suspenso
+  situacao         String   @default("V") @db.Char(1)
+
+  dtCriacao    DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
+  dtManutencao DateTime? @map("dt_manutencao") @db.Timestamptz(6)
+
+  usuarioResponsavel Usuario @relation(fields: [idUsuarioResponsavel], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  solicitacoes       Solicitacao[]
+
+  @@map("projeto")
+  @@schema("etica")
+}
+
+// --------------------------------------------------------------- demanda
+
+model Solicitacao {
+  id                   Int @id @default(autoincrement())
+  idProjeto            Int @map("id_projeto")
+  idUsuarioSolicitante Int @map("id_usuario_solicitante")
+  idEspecie            Int @map("id_especie")
+  idLinhagem           Int @map("id_linhagem")
+
+  qtdM           Int      @map("qtd_m") @db.SmallInt
+  qtdF           Int      @map("qtd_f") @db.SmallInt
+  idadeAlvoDias  Int      @map("idade_alvo_dias") @db.SmallInt
+  dtDesejada     DateTime @map("dt_desejada") @db.Date
+  /// U unica | S semanal | Q quinzenal | M mensal | A avulsas
+  regime         String   @default("U") @db.Char(1)
+  /// RF-DEM-03: RA rascunho | EN enviada | AN em analise | AP aprovada |
+  /// RE recusada | AJ ajustada | AT em atendimento | CO concluida | CA cancelada
+  status         String   @default("RA") @db.Char(2)
+
+  dtCriacao    DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
+  dtManutencao DateTime? @map("dt_manutencao") @db.Timestamptz(6)
+
+  projeto            Projeto  @relation(fields: [idProjeto], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuarioSolicitante Usuario  @relation(fields: [idUsuarioSolicitante], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  especie            Especie  @relation(fields: [idEspecie], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  linhagem           Linhagem @relation(fields: [idLinhagem], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  remessas           Remessa[]
+
+  @@index([status, dtDesejada])
+  @@map("solicitacao")
+  @@schema("demanda")
+}
+
+/// Uma entrega. Um pedido pode ter remessa unica ou cronograma.
+model Remessa {
+  id            Int      @id @default(autoincrement())
+  idSolicitacao Int      @map("id_solicitacao")
+  sequencia     Int      @db.SmallInt
+  dtPrevista    DateTime @map("dt_prevista") @db.Date
+  dtRealizada   DateTime? @map("dt_realizada") @db.Date
+  qtdMPrevista  Int      @map("qtd_m_prevista") @db.SmallInt
+  qtdFPrevista  Int      @map("qtd_f_prevista") @db.SmallInt
+  status        String   @default("P") @db.Char(1)
+
+  solicitacao  Solicitacao   @relation(fields: [idSolicitacao], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  compromissos Compromisso[]
+
+  @@unique([idSolicitacao, sequencia])
+  @@map("remessa")
+  @@schema("demanda")
+}
+
+/// RN-09 - UM ANIMAL, UM COMPROMISSO.
+///
+/// E a razao de existir do sistema: a unica tabela que impede alocacao dupla.
+/// A invariante (soma dos compromissos ativos <= disponibilidade do parto) NAO
+/// cabe em CHECK de coluna, porque e agregacao entre linhas. Entra como trigger
+/// AFTER INSERT/UPDATE + SELECT FOR UPDATE na linha do parto, na proxima
+/// migration.
+model Compromisso {
+  id              Int @id @default(autoincrement())
+  idRemessa       Int @map("id_remessa")
+  idParto         Int @map("id_parto")
+  idUsuarioCriacao Int @map("id_usuario_criacao")
+
+  qtdM Int @map("qtd_m") @db.SmallInt
+  qtdF Int @map("qtd_f") @db.SmallInt
+  /// Snapshot do grau no momento da reserva.
+  grauCerteza String @map("grau_certeza") @db.Char(1)
+
+  dtCriacao     DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
+  /// RNF-06: nada e apagado. Nulo e ativo.
+  dtCancelamento     DateTime? @map("dt_cancelamento") @db.Timestamptz(6)
+  motivoCancelamento String?   @map("motivo_cancelamento") @db.VarChar(200)
+
+  remessa        Remessa @relation(fields: [idRemessa], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  parto          Parto   @relation(fields: [idParto], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuarioCriacao Usuario @relation(fields: [idUsuarioCriacao], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([idParto, dtCancelamento])
+  @@map("compromisso")
+  @@schema("demanda")
 }
