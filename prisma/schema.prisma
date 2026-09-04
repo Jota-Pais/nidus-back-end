@@ -181,6 +181,8 @@ model GrupoGeneticoPar {
   grupoFemea  String  @map("grupo_femea") @db.Char(1)
   ativo       Boolean @default(true)
 
+  casais Casal[]
+
   @@unique([grupoMacho, grupoFemea])
   @@map("grupo_genetico_par")
   @@schema("catalogo")
@@ -194,7 +196,7 @@ model Casal {
   id         Int    @id @default(autoincrement())
   idCaixa    Int    @map("id_caixa")
   idLinhagem Int    @map("id_linhagem")
-  /// Grupos A-E. A FK composta para grupo_genetico_par entra por SQL.
+  /// Grupos A-E, validados pela FK composta para grupo_genetico_par (RN-02).
   grupoMacho String @map("grupo_macho") @db.Char(1)
   grupoFemea String @map("grupo_femea") @db.Char(1)
   /// 2 caracteres, primeiro e o grupo do macho. Ex.: AB.
@@ -210,6 +212,8 @@ model Casal {
 
   caixa    Caixa    @relation(fields: [idCaixa], references: [id], onDelete: NoAction, onUpdate: NoAction)
   linhagem Linhagem @relation(fields: [idLinhagem], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  /// RN-02: o par tem de estar na rotacao em anel. O banco recusa casal fora da lista.
+  parGenetico GrupoGeneticoPar @relation(fields: [grupoMacho, grupoFemea], references: [grupoMacho, grupoFemea], onDelete: NoAction, onUpdate: NoAction)
   partos   Parto[]
 
   @@index([idCaixa, ativo])
@@ -343,7 +347,9 @@ model Solicitacao {
   projeto            Projeto  @relation(fields: [idProjeto], references: [id], onDelete: NoAction, onUpdate: NoAction)
   usuarioSolicitante Usuario  @relation(fields: [idUsuarioSolicitante], references: [id], onDelete: NoAction, onUpdate: NoAction)
   especie            Especie  @relation(fields: [idEspecie], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  linhagem           Linhagem @relation(fields: [idLinhagem], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  /// FK COMPOSTA (RF-DEM-02): linhagem coerente com a especie. Wistar e de rato;
+  /// pedir Wistar de camundongo o banco recusa, nao a aplicacao.
+  linhagem           Linhagem @relation(fields: [idEspecie, idLinhagem], references: [idEspecie, id], onDelete: NoAction, onUpdate: NoAction)
   remessas           Remessa[]
 
   @@index([status, dtDesejada])
