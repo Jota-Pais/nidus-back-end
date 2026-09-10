@@ -1,5 +1,7 @@
 import cors from 'cors'
-import express, { type Express } from 'express'
+import express, { type Express, type RequestHandler } from 'express'
+import { catalogoRoutes } from './modules/catalogo/catalogo.routes.ts'
+import { estanteRoutes } from './modules/infra/infra.routes.ts'
 import { rotaNaoEncontrada, tratadorDeErros } from './shared/middlewares/erro.ts'
 
 type OpcoesApp = {
@@ -13,6 +15,20 @@ type OpcoesApp = {
   ambiente?: string
   /** Vai no /saude: a `version` do package.json. */
   versao?: string
+  /**
+   * Quem le a sessao e preenche `req.usuario` - a AUTENTICACAO.
+   *
+   * Entra por parametro, e nao por import, por dois motivos. O primeiro e de
+   * desenho: autenticar vai mudar quando o SSO do ID-UFSC entrar (`PEN-09`) e
+   * autorizar nao, entao os dois nao devem estar amarrados. O segundo e de
+   * teste: e assim que o teste de rota injeta um perfil sem subir cookie,
+   * banco nem login.
+   *
+   * O padrao nao autentica ninguem. Nao e brecha - e o contrario: sem sessao,
+   * `exigirPerfil` devolve 401 em toda rota protegida, que e o comportamento
+   * correto enquanto `POST /api/sessao` (contrato secao 3) nao existir.
+   */
+  autenticacao?: RequestHandler
 }
 
 /**
@@ -23,6 +39,7 @@ export function criarApp({
   corsOrigem = 'http://localhost:5173',
   ambiente = 'desenvolvimento',
   versao = '0.0.0',
+  autenticacao = (_req, _res, next) => next(),
 }: OpcoesApp = {}): Express {
   const app = express()
 
@@ -35,10 +52,14 @@ export function criarApp({
     res.json({ status: 'ok', ambiente, versao })
   })
 
-  // Os routers de cada modulo entram aqui, todos sob /api (contrato secao 1):
-  //
-  //   app.use('/api/estantes', estanteRoutes)
-  //   app.use('/api/casais', casalRoutes)
+  // Daqui para baixo tudo passa pela autenticacao. Ela nunca recusa por conta
+  // propria: preenche `req.usuario` quando ha sessao e segue. Quem recusa e o
+  // `exigirPerfil` de cada rota - `RF-ACS-02`, autorizacao no servidor.
+  app.use('/api', autenticacao)
+
+  // Os routers de cada modulo, todos sob /api (contrato secao 1).
+  app.use('/api/catalogo', catalogoRoutes)
+  app.use('/api/estantes', estanteRoutes)
 
   app.use(rotaNaoEncontrada)
   app.use(tratadorDeErros)
