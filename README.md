@@ -56,10 +56,10 @@ lado, muda do outro no mesmo PR.
 | Testes | Vitest + supertest |
 | Deploy | **Render** (API) · **Vercel** (front) |
 
-> **O `prisma` está pregado em 7.10.0 de propósito.** A tag `latest` do CLI
-> aponta hoje para `8.0.0-rc`, um release candidate, enquanto o
-> `@prisma/client` estável é o 7.10.0 — instalar `prisma@latest` quebra o par.
-> Suba os dois juntos ou nenhum.
+> **`prisma` e `@prisma/client` estão pregados na mesma versão exata, sem `^`,
+> de propósito.** A tag `latest` do CLI pode estar num release candidate à frente
+> do client estável, e o par desalinhado quebra a geração. Suba os dois juntos ou
+> nenhum.
 
 ## Começar
 
@@ -91,7 +91,7 @@ Precisa de internet para desenvolver: não existe Postgres local nem container �
 
 ```
 prisma/
-  schema.prisma        fonte da verdade do banco (ainda sem models)
+  schema.prisma        fonte da verdade do banco: models e migrations
 prisma.config.ts       URL do banco para a CLI — Prisma 7 tirou do schema
 src/
   server.ts            lê o ambiente, sobe a porta, encerra limpo no SIGTERM
@@ -163,15 +163,15 @@ oficial na Neon, sem branch por pessoa.**
 
 | Quem | Comando | Efeito |
 |---|---|---|
-| João Carlos (banco) | `npx prisma migrate dev` | Cria a migration. **Único comando que pode resetar o banco** |
-| Miguel, Gabriel, Arthur | `npm run db:deploy` | Só aplica o pendente, em ordem. Nunca dropa nada |
+| Responsável pelo banco | `npx prisma migrate dev` | Cria a migration. **Único comando que pode resetar o banco** |
+| Todos os demais | `npm run db:deploy` | Só aplica o pendente, em ordem. Nunca dropa nada |
 
 Alteração de schema é **pedida ao responsável pelo banco**, não feita direto —
 `migrate dev` dropa e recria o schema quando o histórico diverge, e leva junto a
 massa de teste de quem estiver usando o banco.
 
-O `schema.prisma` ainda não tem nenhum `model`: as 14 tabelas do MVP estão
-desenhadas em `docs/modelo-de-dados.md` e entram pela mão do responsável.
+O desenho lógico das tabelas mora em `docs/modelo-de-dados.md`. O schema segue
+aquele documento: mudança de modelo se discute lá antes de virar migration.
 
 ## Deploy na Render
 
@@ -185,15 +185,17 @@ desenhadas em `docs/modelo-de-dados.md` e entram pela mão do responsável.
 O free tier dorme após ~15 min de inatividade e leva de 30s a 1min para acordar.
 Abrir o sistema alguns minutos antes de qualquer apresentação.
 
-## O que ainda não está aqui
+## Sobre o andamento
 
-- **Nenhum model no `schema.prisma`** e nenhuma migration criada
-- **`modules/login` vazio.** A autenticação está decidida — cookie de sessão
-  `httpOnly` (`decisoes-de-stack.md`, 2.1) — mas não implementada
-- **Motor de atendimento parado por pendência de requisito, não de código:**
-  `CONF-01` (a idade conta do nascimento ou do desmame — 22 dias de diferença em
-  todo resultado) e `CONF-06` (ordenar pelo mais velho ou pela idade mais
-  próxima). São perguntas para o cliente
+Este README descreve estrutura e convenções, não o que já está pronto. **Quem
+responde isso é o Kanban do Trello e o histórico de commits** — cada pasta de
+`src/modules/` é preenchida conforme a área avança, e módulo que só tem
+`.gitkeep` é módulo que ainda não começou.
+
+Um ponto que não se resolve escrevendo código: os itens `CONF-` e `PEN-` de
+`docs/requisitos.md` são **perguntas ao cliente**, e alguns travam regra de
+negócio inteira. Enquanto estiverem abertos, a escolha entra como parâmetro
+administrável (`RNF-05`) num lugar só, nunca como constante espalhada.
 
 ## Equipe
 
