@@ -9,6 +9,9 @@ export default defineConfig({
   schema: 'prisma/schema.prisma',
   migrations: {
     path: 'prisma/migrations',
+    // Roda tambem depois de `migrate reset`: banco recriado ja volta com a
+    // carga inicial do Anexo A, sem passo manual.
+    seed: 'tsx prisma/seed.ts',
   },
   // A CLI usa a conexao DIRETA, sem -pooler: o PgBouncer da Neon quebra lock
   // consultivo e prepared statement, que o migrate precisa. No Prisma 7 o
