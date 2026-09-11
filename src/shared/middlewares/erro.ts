@@ -1,5 +1,6 @@
 import type { ErrorRequestHandler, RequestHandler } from 'express'
 import { ZodError } from 'zod'
+import { traduzirErroDoBanco } from '../erros-do-banco.ts'
 import { ErroDeAplicacao } from '../erros.ts'
 
 /** Rota inexistente devolve o envelope do contrato, nao o HTML de erro do Express. */
@@ -49,6 +50,25 @@ export const tratadorDeErros: ErrorRequestHandler = (erro, req, res, next) => {
     return
   }
 
+  // Invariante recusada pelo banco: `CHECK`, unique parcial ou trigger. Sao
+  // regras de negocio que a decisao de stack 1.1 poe no Postgres de proposito -
+  // viram 409 com o codigo do contrato, nunca 500.
+  //
+  // Entra ANTES do `ErroDeAplicacao` so por clareza de leitura; os dois tipos
+  // sao disjuntos, entao a ordem entre eles nao muda comportamento.
+  const doBanco = traduzirErroDoBanco(erro)
+
+  if (doBanco !== undefined) {
+    res.status(doBanco.status).json({
+      erro: {
+        codigo: doBanco.codigo,
+        mensagem: doBanco.message,
+        ...doBanco.extras,
+      },
+    })
+    return
+  }
+
   if (erro instanceof ErroDeAplicacao) {
     res.status(erro.status).json({
       erro: {
@@ -61,7 +81,8 @@ export const tratadorDeErros: ErrorRequestHandler = (erro, req, res, next) => {
   }
 
   // Aqui e bug, nao regra: log inteiro do lado do servidor, nada de stack para o
-  // cliente.
+  // cliente. Invariante do banco que ninguem mapeou cai aqui de proposito - ver
+  // `erros-do-banco.ts`.
   console.error(`[500] ${req.method} ${req.originalUrl}`, erro)
   res.status(500).json({
     erro: {
