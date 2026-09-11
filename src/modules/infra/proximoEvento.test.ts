@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  type CicloParaEvento,
-  calcularGrauCerteza,
-  calcularProximoEvento,
-  somarDias,
-} from './proximoEvento.ts'
+import { type CicloParaEvento, calcularProximoEvento, somarDias } from './proximoEvento.ts'
 
 const contexto = { maxCiclos: 5, intervaloCicloDias: 6, hoje: '2026-09-10' }
 
@@ -86,16 +81,6 @@ describe('proximo evento do ciclo - RF-REP-07', () => {
 
   it('caixa sem casal ativo nao tem evento', () => {
     expect(calcularProximoEvento(undefined, contexto)).toBeNull()
-  })
-})
-
-describe('grau de certeza - RN-08', () => {
-  it('segue o COALESCE de tres niveis', () => {
-    expect(calcularGrauCerteza({ dtPartoReal: null, dtDesmameReal: null })).toBe('projetado')
-    expect(calcularGrauCerteza({ dtPartoReal: '2026-09-26', dtDesmameReal: null })).toBe('previsto')
-    expect(calcularGrauCerteza({ dtPartoReal: '2026-09-26', dtDesmameReal: '2026-10-18' })).toBe(
-      'confirmado',
-    )
   })
 })
 

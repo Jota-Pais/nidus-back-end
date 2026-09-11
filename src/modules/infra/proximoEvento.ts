@@ -8,8 +8,11 @@
 // Datas circulam como `aaaa-mm-dd` (contrato secao 1). Comparar string ISO e
 // exatamente equivalente a comparar a data e imune a fuso - `new Date()` no
 // meio do caminho e que desloca um dia.
-
-import type { GrauCerteza } from '../../shared/traducao.ts'
+//
+// Aqui mora so a pergunta "o que vence a seguir", que e decidida por DATA. O
+// grau de certeza e a oferta sao decididos por CONTAGEM e moram em
+// `reproducao/disponibilidade.ts` - eram duas versoes da mesma regra em dois
+// arquivos, e uma delas ia envelhecer sozinha.
 
 export type TipoDeEvento = 'parto_previsto' | 'desmame_previsto' | 'reacasalamento_liberado'
 
@@ -96,21 +99,4 @@ export function calcularProximoEvento(
     data: somarDias(ciclo.dtPartoReal, intervaloCicloDias),
     atrasado: false,
   }
-}
-
-/**
- * `RN-08` - grau de certeza da oferta, o `COALESCE` de tres niveis da secao 5.1
- * do modelo de dados, na versao lida do ciclo em memoria.
- *
- * O banco guarda `grau_certeza` em coluna, mas quem confirma um evento tem de
- * manter as duas coisas de acordo; esta funcao e a definicao unica de qual
- * deveria ser o valor.
- */
-export function calcularGrauCerteza(ciclo: {
-  dtPartoReal: string | null
-  dtDesmameReal: string | null
-}): GrauCerteza {
-  if (ciclo.dtDesmameReal !== null) return 'confirmado'
-  if (ciclo.dtPartoReal !== null) return 'previsto'
-  return 'projetado'
 }

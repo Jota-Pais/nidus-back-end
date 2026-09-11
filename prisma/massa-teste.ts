@@ -30,6 +30,10 @@
 
 import { codigoDaPosicao } from '../src/modules/infra/endereco.ts'
 import { somarDias } from '../src/modules/infra/proximoEvento.ts'
+// A oferta sai da MESMA funcao que a API usa, e nao de uma conta repetida aqui:
+// massa que calcule oferta diferente do servico pede compromisso que o trigger
+// recusa, e o erro apareceria como "a massa esta quebrada".
+import { ofertaBruta } from '../src/modules/reproducao/disponibilidade.ts'
 import { prisma } from '../src/shared/prisma.ts'
 
 /** Numero do projeto de etica que serve de marca: se existe, a massa ja rodou. */
@@ -129,26 +133,6 @@ function planejarCiclos(
   }
 
   return ciclos
-}
-
-/**
- * A oferta bruta de um ciclo - `RN-08`, o COALESCE de tres niveis, com selecao
- * ausente contando zero. E o teto que o trigger do `RN-09` cobra, e a massa
- * precisa saber para nao pedir compromisso acima dele.
- */
-function ofertaDoCiclo(ciclo: CicloPlanejado, expectativa: { m: number; f: number }) {
-  if (ciclo.desmamadoM !== null && ciclo.desmamadoF !== null) {
-    return { m: ciclo.desmamadoM, f: ciclo.desmamadoF }
-  }
-
-  if (ciclo.nascidoM !== null && ciclo.nascidoF !== null) {
-    return {
-      m: ciclo.nascidoM - (ciclo.eutanasiadoM ?? 0),
-      f: ciclo.nascidoF - (ciclo.eutanasiadoF ?? 0),
-    }
-  }
-
-  return expectativa
 }
 
 /** O elenco: um casal por caixa (`RN-03`), cada um num estagio diferente. */
@@ -461,7 +445,7 @@ async function main() {
     const partoCorrente = partos.at(-1)
 
     if (papel.comprometer !== null && cicloCorrente !== undefined && partoCorrente !== undefined) {
-      const oferta = ofertaDoCiclo(cicloCorrente, expectativa)
+      const oferta = ofertaBruta(cicloCorrente, expectativa)
       const pedido = papel.comprometer === 'total' ? oferta : papel.comprometer
 
       // Passa pelo trigger `compromisso_respeita_oferta` do `RN-09`. Se algum
