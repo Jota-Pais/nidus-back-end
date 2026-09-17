@@ -18,6 +18,11 @@
 //   - violacao de CHECK e `RAISE` de trigger -> Prisma `P2010` (raw) ou `P2039`
 //     (ORM), com `originalCode: '23514'`. Nome da constraint so dentro da
 //     mensagem; trigger nosso nao tem constraint, tem a mensagem que escrevemos.
+//   - violacao de FK composta (`RN-02`, par genetico) -> `originalCode: '23503'`.
+//     So entra aqui como rede de seguranca: quem da a mensagem rica, com os
+//     pares validos para o grupo do macho, e a pre-validacao em
+//     `reproducao.service.ts`. Isto pega so a corrida rara (par desativado
+//     entre o pre-check e o insert).
 //
 // `originalCode` e o unico campo presente nos dois caminhos - `cause.code` so
 // aparece em parte deles. Usar `originalCode`.
@@ -92,11 +97,17 @@ const POR_INVARIANTE: Record<string, Traducao> = {
     requisito: 'RN-09',
     mensagem: 'A ninhada nao tem animais suficientes para este compromisso.',
   },
+  // FK composta - RN-02. Rede de seguranca; ver o comentario no topo do arquivo.
+  casal_grupo_macho_grupo_femea_fkey: {
+    codigo: 'PAR_GENETICO_INVALIDO',
+    requisito: 'RN-02',
+    mensagem: 'Este par nao esta na rotacao genetica permitida.',
+  },
 }
 
 /** Acha o nome da constraint dentro da mensagem do Postgres. */
 function constraintNaMensagem(mensagem: string): string | undefined {
-  return /violates (?:check|unique) constraint "([^"]+)"/.exec(mensagem)?.[1]
+  return /violates (?:check|unique|foreign key) constraint "([^"]+)"/.exec(mensagem)?.[1]
 }
 
 /** Acha o prefixo de requisito de uma mensagem levantada por trigger nosso. */
@@ -119,8 +130,13 @@ export function traduzirErroDoBanco(erro: unknown): ErroDeAplicacao | undefined 
     return undefined
   }
 
-  // 23505 unique_violation | 23514 check_violation (inclui RAISE de trigger).
-  if (causa.originalCode !== '23505' && causa.originalCode !== '23514') {
+  // 23505 unique_violation | 23514 check_violation (inclui RAISE de trigger) |
+  // 23503 foreign_key_violation (FK composta do RN-02).
+  if (
+    causa.originalCode !== '23505' &&
+    causa.originalCode !== '23514' &&
+    causa.originalCode !== '23503'
+  ) {
     return undefined
   }
 

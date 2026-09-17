@@ -42,6 +42,23 @@ const check = (constraint: string, tabela: string) => ({
   },
 })
 
+/** Violacao de FK: nome da constraint so dentro da mensagem, como no CHECK. */
+const fk = (constraint: string, tabela: string) => ({
+  name: 'PrismaClientKnownRequestError',
+  code: 'P2003',
+  meta: {
+    driverAdapterError: {
+      name: 'DriverAdapterError',
+      cause: {
+        originalCode: '23503',
+        originalMessage: `insert or update on table "${tabela}" violates foreign key constraint "${constraint}"`,
+        kind: 'postgres',
+        code: '23503',
+      },
+    },
+  },
+})
+
 /** `RAISE EXCEPTION` de trigger nosso: a mensagem e texto que escrevemos. */
 const trigger = (mensagem: string) => ({
   name: 'PrismaClientKnownRequestError',
@@ -106,6 +123,17 @@ describe('invariante do banco vira o 409 do contrato', () => {
     expect(traduzido?.extras.requisito).toBe('RN-04')
   })
 
+  it('RN-02 - FK composta recusada vira PAR_GENETICO_INVALIDO (rede de seguranca)', () => {
+    // O caminho normal e o pre-check em reproducao.service.ts, que da a
+    // mensagem rica com os pares validos. Isto so cobre a corrida: par
+    // desativado entre o pre-check e o insert.
+    const traduzido = traduzirErroDoBanco(fk('casal_grupo_macho_grupo_femea_fkey', 'casal'))
+
+    expect(traduzido?.status).toBe(409)
+    expect(traduzido?.codigo).toBe('PAR_GENETICO_INVALIDO')
+    expect(traduzido?.extras.requisito).toBe('RN-02')
+  })
+
   it('nao usa a mensagem crua do Postgres como texto para o usuario', () => {
     // "duplicate key value violates unique constraint" e para log.
     const traduzido = traduzirErroDoBanco(unique('caixa_uma_por_posicao', 'caixa'))
@@ -123,19 +151,21 @@ describe('o que NAO deve virar 409', () => {
     expect(traduzirErroDoBanco(unique('indice_novo_qualquer', 'caixa'))).toBeUndefined()
   })
 
-  it('outro SQLSTATE nao e traduzido', () => {
-    // 23503 (FK) e 23502 (not null) nao estao mapeados: FK quebrada e bug de
-    // programacao, nao regra que o usuario possa corrigir.
-    const fk = {
-      code: 'P2003',
-      meta: {
-        driverAdapterError: {
-          cause: { originalCode: '23503', originalMessage: 'violates foreign key constraint' },
+  it('FK sem constraint mapeada continua sem traducao', () => {
+    // 23503 (FK) so traduz a unica composta que o contrato nomeia (RN-02,
+    // acima). Qualquer outra FK quebrada e bug de programacao, e 23502 (not
+    // null) nem chega a ser considerado - nenhum dos dois deve virar 409.
+    expect(traduzirErroDoBanco(fk('casal_id_caixa_fkey', 'casal'))).toBeUndefined()
+    expect(
+      traduzirErroDoBanco({
+        code: 'P2003',
+        meta: {
+          driverAdapterError: {
+            cause: { originalCode: '23502', originalMessage: 'null value in column "id_caixa"' },
+          },
         },
-      },
-    }
-
-    expect(traduzirErroDoBanco(fk)).toBeUndefined()
+      }),
+    ).toBeUndefined()
   })
 
   it('erro que nao e de banco passa direto', () => {

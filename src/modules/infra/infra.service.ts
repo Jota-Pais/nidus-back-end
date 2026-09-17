@@ -57,8 +57,14 @@ function comTopologia(estante: {
   }
 }
 
-/** Resolve `?especie=rato` no `id` da especie. Tabela de 2 linhas no Anexo A. */
-async function idDaEspecie(codigo: string): Promise<number> {
+/**
+ * Resolve `?especie=rato` no `id` da especie. Tabela de 2 linhas no Anexo A.
+ *
+ * Exportada: o quadro (`caixa.service.ts`) tambem resolve especie a partir do
+ * codigo, e a tabela e a mesma - duplicar a consulta so daria chance de as
+ * duas telas discordarem sobre o que "rato" significa (`RF-CIC-02`).
+ */
+export async function idDaEspecie(codigo: string): Promise<number> {
   const especies = await prisma.especie.findMany({ select: { id: true, nome: true } })
   const achada = especies.find((especie) => codigoDaEspecie(especie.nome) === codigo)
 

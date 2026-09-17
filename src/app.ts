@@ -1,7 +1,9 @@
 import cors from 'cors'
 import express, { type Express, type RequestHandler } from 'express'
 import { catalogoRoutes } from './modules/catalogo/catalogo.routes.ts'
+import { caixaRoutes, quadroRoutes } from './modules/infra/caixa.routes.ts'
 import { estanteRoutes } from './modules/infra/infra.routes.ts'
+import { casalRoutes, partoRoutes } from './modules/reproducao/reproducao.routes.ts'
 import { rotaNaoEncontrada, tratadorDeErros } from './shared/middlewares/erro.ts'
 
 type OpcoesApp = {
@@ -60,6 +62,10 @@ export function criarApp({
   // Os routers de cada modulo, todos sob /api (contrato secao 1).
   app.use('/api/catalogo', catalogoRoutes)
   app.use('/api/estantes', estanteRoutes)
+  app.use('/api/casais', casalRoutes)
+  app.use('/api/partos', partoRoutes)
+  app.use('/api/quadro', quadroRoutes)
+  app.use('/api/caixas', caixaRoutes)
 
   app.use(rotaNaoEncontrada)
   app.use(tratadorDeErros)
