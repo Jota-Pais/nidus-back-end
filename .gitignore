@@ -6,6 +6,7 @@ dist/
 .env
 .env.*
 !.env.example
+credenciais-demo.md
 
 # Prisma
 prisma/*.db
