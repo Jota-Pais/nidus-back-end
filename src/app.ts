@@ -1,8 +1,11 @@
+import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import express, { type Express, type RequestHandler } from 'express'
 import { catalogoRoutes } from './modules/catalogo/catalogo.routes.ts'
 import { caixaRoutes, quadroRoutes } from './modules/infra/caixa.routes.ts'
 import { estanteRoutes } from './modules/infra/infra.routes.ts'
+import { autenticacaoPorCookie } from './modules/login/autenticacao.ts'
+import { sessaoRoutes } from './modules/login/login.routes.ts'
 import { casalRoutes, partoRoutes } from './modules/reproducao/reproducao.routes.ts'
 import { rotaNaoEncontrada, tratadorDeErros } from './shared/middlewares/erro.ts'
 
@@ -20,15 +23,12 @@ type OpcoesApp = {
   /**
    * Quem le a sessao e preenche `req.usuario` - a AUTENTICACAO.
    *
-   * Entra por parametro, e nao por import, por dois motivos. O primeiro e de
-   * desenho: autenticar vai mudar quando o SSO do ID-UFSC entrar (`PEN-09`) e
-   * autorizar nao, entao os dois nao devem estar amarrados. O segundo e de
-   * teste: e assim que o teste de rota injeta um perfil sem subir cookie,
-   * banco nem login.
-   *
-   * O padrao nao autentica ninguem. Nao e brecha - e o contrario: sem sessao,
-   * `exigirPerfil` devolve 401 em toda rota protegida, que e o comportamento
-   * correto enquanto `POST /api/sessao` (contrato secao 3) nao existir.
+   * Padrao: `autenticacaoPorCookie`, que le o cookie `nidus_sessao` contra o
+   * `Map` de `modules/login/sessao.ts`. Entra por parametro, e nao so por
+   * import direto, por dois motivos. O primeiro e de desenho: autenticar vai
+   * mudar quando o SSO do ID-UFSC entrar (`PEN-09`) e autorizar nao, entao os
+   * dois nao devem estar amarrados. O segundo e de teste: e assim que o teste
+   * de rota injeta um perfil sem subir cookie, banco nem login.
    */
   autenticacao?: RequestHandler
 }
@@ -41,12 +41,13 @@ export function criarApp({
   corsOrigem = 'http://localhost:5173',
   ambiente = 'desenvolvimento',
   versao = '0.0.0',
-  autenticacao = (_req, _res, next) => next(),
+  autenticacao = autenticacaoPorCookie,
 }: OpcoesApp = {}): Express {
   const app = express()
 
   app.use(cors({ origin: corsOrigem, credentials: true }))
   app.use(express.json())
+  app.use(cookieParser())
 
   // Healthcheck - contrato secao 9. Publico e a unica rota fora de /api: e por
   // ele que a Render sabe que a instancia subiu e o front sabe que ela acordou.
@@ -60,6 +61,7 @@ export function criarApp({
   app.use('/api', autenticacao)
 
   // Os routers de cada modulo, todos sob /api (contrato secao 1).
+  app.use('/api/sessao', sessaoRoutes)
   app.use('/api/catalogo', catalogoRoutes)
   app.use('/api/estantes', estanteRoutes)
   app.use('/api/casais', casalRoutes)
