@@ -2,10 +2,11 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { OPERA_A_COLONIA, exigirPerfil } from '../../shared/middlewares/autorizacao.ts'
 import { montarQuadro, moverCaixa } from './caixa.service.ts'
+import { montarFicha } from './ficha.service.ts'
 
 /**
- * Contrato secao 8. Dois routers: `/api/quadro` (sem `:id` - a espécie
- * segrega, nao a caixa) e `/api/caixas` (a transicao de uma caixa).
+ * Contrato secoes 6 e 8. Dois routers: `/api/quadro` (sem `:id` - a espécie
+ * segrega, nao a caixa) e `/api/caixas` (a ficha e a transicao de uma caixa).
  */
 export const quadroRoutes = Router()
 export const caixaRoutes = Router()
@@ -23,6 +24,13 @@ quadroRoutes.get('/', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
 })
 
 const idNaRota = z.object({ id: z.coerce.number().int().positive() })
+
+/** `GET /api/caixas/:id` - a ficha completa. `RF-INF-04` + `RF-REP-02`. */
+caixaRoutes.get('/:id', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+  const { id } = idNaRota.parse(req.params)
+
+  res.json(await montarFicha(id))
+})
 
 const estadoTermo = z.enum([
   'em_reproducao',

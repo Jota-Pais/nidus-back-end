@@ -256,12 +256,27 @@ model Parto {
   /// RN-08: C confirmado | P previsto | J projetado.
   grauCerteza String @default("J") @map("grau_certeza") @db.Char(1)
 
+  /// RNF-06 / RF-INF-04: quem registrou cada evento e quando, para a trilha
+  /// da ficha (contrato secao 6, `eventos`). `dtRegistro*` e o carimbo da
+  /// ACAO no sistema (para ordenar e diferenciar dois registros no mesmo
+  /// dia) - `dtPartoReal`/`dtSelecao`/`dtDesmameReal` continuam sendo a data
+  /// do fato biologico, decidida pelo usuario, nao pelo relogio do servidor.
+  idUsuarioParto    Int?      @map("id_usuario_parto")
+  dtRegistroParto   DateTime? @map("dt_registro_parto") @db.Timestamptz(6)
+  idUsuarioSelecao  Int?      @map("id_usuario_selecao")
+  dtRegistroSelecao DateTime? @map("dt_registro_selecao") @db.Timestamptz(6)
+  idUsuarioDesmame  Int?      @map("id_usuario_desmame")
+  dtRegistroDesmame DateTime? @map("dt_registro_desmame") @db.Timestamptz(6)
+
   dtCriacao    DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
   dtManutencao DateTime? @map("dt_manutencao") @db.Timestamptz(6)
 
-  casal        Casal  @relation(fields: [idCasal], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  caixaRecria  Caixa? @relation("CaixaRecria", fields: [idCaixaRecria], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  compromissos Compromisso[]
+  casal          Casal    @relation(fields: [idCasal], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  caixaRecria    Caixa?   @relation("CaixaRecria", fields: [idCaixaRecria], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuarioParto   Usuario? @relation("RegistrouParto", fields: [idUsuarioParto], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuarioSelecao Usuario? @relation("RegistrouSelecao", fields: [idUsuarioSelecao], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuarioDesmame Usuario? @relation("RegistrouDesmame", fields: [idUsuarioDesmame], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  compromissos   Compromisso[]
 
   @@unique([idCasal, ordem])
   /// Indice quente: e literalmente a varredura do RF-MOT-01, a consulta mais
@@ -290,6 +305,9 @@ model Usuario {
   projetosResponsavel Projeto[]
   solicitacoes        Solicitacao[]
   compromissos        Compromisso[]
+  partosRegistrados   Parto[]       @relation("RegistrouParto")
+  selecoesRegistradas Parto[]       @relation("RegistrouSelecao")
+  desmamesRegistrados Parto[]       @relation("RegistrouDesmame")
 
   @@map("usuario")
   @@schema("login")

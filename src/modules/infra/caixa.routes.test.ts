@@ -38,6 +38,18 @@ describe('autorizacao do quadro e da transicao - RF-ACS-02', () => {
 
     expect(resposta.status).toBe(403)
   })
+
+  it('ficha sem sessao devolve 401', async () => {
+    const resposta = await request(app()).get('/api/caixas/1')
+
+    expect(resposta.status).toBe(401)
+  })
+
+  it('pesquisador nao abre a ficha - RF-ACS-03', async () => {
+    const resposta = await request(app('pesquisador')).get('/api/caixas/1')
+
+    expect(resposta.status).toBe(403)
+  })
 })
 
 describe('validacao de entrada', () => {
@@ -74,5 +86,12 @@ describe('validacao de entrada', () => {
       .send({ estado: 'expedida', justificativa: null, confirmar: false })
 
     expect(resposta.status).toBe(400)
+  })
+
+  it('id de caixa nao numerico na ficha tambem vira 400', async () => {
+    const resposta = await request(app('tecnico')).get('/api/caixas/abc')
+
+    expect(resposta.status).toBe(400)
+    expect(resposta.body.erro.codigo).toBe('VALIDACAO')
   })
 })

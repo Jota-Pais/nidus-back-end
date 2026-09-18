@@ -87,8 +87,11 @@ async function validarParGenetico(grupoMacho: string, grupoFemea: string): Promi
   )
 }
 
-/** O objeto `casal` da ficha (contrato secao 6), reaproveitado pelo cadastro e pelo encerramento. */
-async function casalFicha(idCasal: number) {
+/**
+ * O objeto `casal` da ficha (contrato secao 6), reaproveitado pelo cadastro,
+ * pelo encerramento e pela ficha da posicao (`infra/ficha.service.ts`).
+ */
+export async function casalFicha(idCasal: number) {
   const casal = await prisma.casal.findUnique({
     where: { id: idCasal },
     include: {
@@ -126,8 +129,11 @@ async function casalFicha(idCasal: number) {
   }
 }
 
-/** O objeto `ciclo` da ficha (contrato secao 6), com a disponibilidade liquida do `RN-09`. */
-async function cicloFicha(idParto: number) {
+/**
+ * O objeto `ciclo` da ficha (contrato secao 6), com a disponibilidade liquida
+ * do `RN-09`. Reaproveitado pelos tres eventos e pela ficha da posicao.
+ */
+export async function cicloFicha(idParto: number) {
   const parto = await prisma.parto.findUnique({
     where: { id: idParto },
     include: {
@@ -277,8 +283,13 @@ export type Nascimento = {
  * enquanto o casal so avanca, porque so uma linha futura existe por vez.
  * Correcao de um parto ja confirmado (`RF-REP-09`, cadeia de verdade) fica
  * fora desta entrega.
+ *
+ * `idUsuario` vai em `id_usuario_parto`/`dt_registro_parto` - e o autor que a
+ * ficha da posicao (`RNF-06`) mostra na trilha de eventos. `req.usuario.id`
+ * ja existe na rota (`RF-ACS-02` exige sessao); so faltava um lugar pra
+ * gravar quem foi.
  */
-export async function registrarNascimento(idParto: number, dados: Nascimento) {
+export async function registrarNascimento(idParto: number, dados: Nascimento, idUsuario: number) {
   const parto = await prisma.parto.findUnique({
     where: { id: idParto },
     include: { casal: { select: { id: true, idLinhagem: true, linhagem: true } } },
@@ -314,6 +325,8 @@ export async function registrarNascimento(idParto: number, dados: Nascimento) {
         nascidoF: dados.nascidoF,
         // RF-REP-03: a oferta passa de projetada para prevista.
         grauCerteza: 'P',
+        idUsuarioParto: idUsuario,
+        dtRegistroParto: new Date(),
       },
     })
 
@@ -363,7 +376,7 @@ export type Selecao = {
  * decide quantos permanecem, pelo protocolo. A constante de 4M/4F e so
  * expectativa (`PEN-05`/`CONF-03`), nunca teto.
  */
-export async function registrarSelecao(idParto: number, dados: Selecao) {
+export async function registrarSelecao(idParto: number, dados: Selecao, idUsuario: number) {
   const parto = await prisma.parto.findUnique({ where: { id: idParto } })
 
   if (parto === null) {
@@ -388,6 +401,8 @@ export async function registrarSelecao(idParto: number, dados: Selecao) {
       dtSelecao: paraData(dados.dtSelecao),
       eutanasiadoM: dados.eutanasiadoM,
       eutanasiadoF: dados.eutanasiadoF,
+      idUsuarioSelecao: idUsuario,
+      dtRegistroSelecao: new Date(),
     },
   })
 
@@ -405,7 +420,7 @@ export type Desmame = {
  * `POST /api/partos/:id/desmame` - `RF-REP-05`. A partir daqui o estoque e
  * `confirmado`. `idCaixaRecria` nulo por proposito (D-03/`PEN-02` em aberto).
  */
-export async function registrarDesmame(idParto: number, dados: Desmame) {
+export async function registrarDesmame(idParto: number, dados: Desmame, idUsuario: number) {
   const parto = await prisma.parto.findUnique({ where: { id: idParto } })
 
   if (parto === null) {
@@ -432,6 +447,8 @@ export async function registrarDesmame(idParto: number, dados: Desmame) {
       desmamadoF: dados.desmamadoF,
       idCaixaRecria: dados.idCaixaRecria,
       grauCerteza: 'C',
+      idUsuarioDesmame: idUsuario,
+      dtRegistroDesmame: new Date(),
     },
   })
 

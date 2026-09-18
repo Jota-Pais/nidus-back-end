@@ -1,6 +1,10 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { OPERA_A_COLONIA, exigirPerfil } from '../../shared/middlewares/autorizacao.ts'
+import {
+  OPERA_A_COLONIA,
+  exigirPerfil,
+  usuarioDaRequisicao,
+} from '../../shared/middlewares/autorizacao.ts'
 import {
   encerrarCasal,
   formarCasal,
@@ -69,7 +73,7 @@ partoRoutes.post('/:id/nascimento', exigirPerfil(...OPERA_A_COLONIA), async (req
   const { id } = idNaRota.parse(req.params)
   const dados = nascimento.parse(req.body)
 
-  res.json(await registrarNascimento(id, dados))
+  res.json(await registrarNascimento(id, dados, usuarioDaRequisicao(req).id))
 })
 
 const selecao = z.object({
@@ -82,7 +86,7 @@ partoRoutes.post('/:id/selecao', exigirPerfil(...OPERA_A_COLONIA), async (req, r
   const { id } = idNaRota.parse(req.params)
   const dados = selecao.parse(req.body)
 
-  res.json(await registrarSelecao(id, dados))
+  res.json(await registrarSelecao(id, dados, usuarioDaRequisicao(req).id))
 })
 
 /** `idCaixaRecria` nulo e explicito, nunca omitido (contrato secao 1, D-03). */
@@ -97,5 +101,5 @@ partoRoutes.post('/:id/desmame', exigirPerfil(...OPERA_A_COLONIA), async (req, r
   const { id } = idNaRota.parse(req.params)
   const dados = desmame.parse(req.body)
 
-  res.json(await registrarDesmame(id, dados))
+  res.json(await registrarDesmame(id, dados, usuarioDaRequisicao(req).id))
 })
