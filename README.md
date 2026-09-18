@@ -182,6 +182,7 @@ funciona, preenchendo o que está abaixo.
 
 | Campo | Valor |
 |---|---|
+| Nome do serviço | `nidus-cpmr-api` → `https://nidus-cpmr-api.onrender.com`. É a URL fixa no `vercel.json` do front; `nidus-api` já está em uso por outro serviço na Render |
 | Runtime | Node **24** (`.node-version` na raiz). Sem o arquivo, o `engines` `>=22` faria a Render resolver para o Node mais novo que existir, que muda de major sozinho |
 | Região | Ohio — a mesma do banco na Neon (`us-east-2`) |
 | Build command | `npm ci --include=dev && npm run build && npm run db:deploy` |

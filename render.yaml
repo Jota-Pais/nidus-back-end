@@ -9,7 +9,11 @@
 # ficam neste arquivo.
 services:
   - type: web
-    name: nidus-api
+    # `nidus-api` ja esta em uso por outro servico na Render (18/09/2026), e um
+    # nome ocupado nasce com sufixo aleatorio. Este estava livre. A URL publica
+    # (https://nidus-cpmr-api.onrender.com) esta fixa no vercel.json do front:
+    # se o nome mudar aqui, tem de mudar la tambem.
+    name: nidus-cpmr-api
     runtime: node
     plan: free
     # Mesma regiao do banco na Neon (us-east-2): menos latencia por consulta.
