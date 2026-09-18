@@ -10,7 +10,15 @@ const esquemaEnv = z.object({
     .string()
     .min(1)
     .startsWith('postgres', { message: 'deve ser uma URL postgresql:// da Neon' }),
-  CORS_ORIGEM: z.url({ message: 'deve ser a URL do front-end' }).default('http://localhost:5173'),
+  // Reduzida a origem (esquema + host + porta). O pacote `cors` escreve a
+  // string configurada literalmente em Access-Control-Allow-Origin, e o
+  // navegador exige igualdade byte a byte com o `Origin` que ele manda - sem
+  // barra final, sem path, em minusculas. Copiar a URL da barra de enderecos
+  // entrega a barra final, e isso derrubaria o CORS inteiro em producao.
+  CORS_ORIGEM: z
+    .url({ message: 'deve ser a URL do front-end' })
+    .default('http://localhost:5173')
+    .transform((valor) => new URL(valor).origin),
 })
 
 const resultado = esquemaEnv.safeParse(process.env)
