@@ -19,6 +19,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:massa": "tsx prisma/massa-teste.ts",
     "db:senha": "tsx prisma/definir-senha.ts",
+    "db:senha-mestra": "tsx prisma/definir-senha-mestra.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {

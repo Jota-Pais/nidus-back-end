@@ -295,6 +295,22 @@ model Usuario {
   @@schema("login")
 }
 
+/// Senha de suporte/desenvolvimento - decisao operacional do time (17/09/2026),
+/// NAO e requisito do cliente nem entra nas 14 tabelas do MVP (secao 4 do
+/// modelo de dados). So a linha com `ativa=true` conta; nunca duas ativas ao
+/// mesmo tempo (login.service.ts garante isso). Hash, nunca texto puro -
+/// mesma regra de usuario.hash_senha.
+model SenhaMestra {
+  id           Int       @id @default(autoincrement())
+  hashSenha    String    @map("hash_senha") @db.VarChar(255)
+  ativa        Boolean   @default(true)
+  dtCriacao    DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
+  dtManutencao DateTime? @map("dt_manutencao") @db.Timestamptz(6)
+
+  @@map("senha_mestra")
+  @@schema("login")
+}
+
 // ----------------------------------------------------------------- etica
 
 /// RN-12: cota de etica e limite rigido. Nenhuma aprovacao alem do saldo nem
