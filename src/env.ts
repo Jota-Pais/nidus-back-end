@@ -11,6 +11,12 @@ const esquemaEnv = z.object({
     .min(1)
     .startsWith('postgres', { message: 'deve ser uma URL postgresql:// da Neon' }),
   CORS_ORIGEM: z.url({ message: 'deve ser a URL do front-end' }).default('http://localhost:5173'),
+  /**
+   * Senha mestra opcional - decisao explicita do time (17/09/2026), pra
+   * suporte e desenvolvimento rapido. Ver o comentario em `login.service.ts`.
+   * Sem valor aqui, o caminho da senha mestra nunca bate - fica desligado.
+   */
+  SENHA_MESTRA: z.string().min(1).optional(),
 })
 
 const resultado = esquemaEnv.safeParse(process.env)
