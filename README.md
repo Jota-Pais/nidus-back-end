@@ -182,7 +182,7 @@ funciona, preenchendo o que está abaixo.
 
 | Campo | Valor |
 |---|---|
-| Runtime | Node (a versão vem do `engines` do `package.json`) |
+| Runtime | Node **24** (`.node-version` na raiz). Sem o arquivo, o `engines` `>=22` faria a Render resolver para o Node mais novo que existir, que muda de major sozinho |
 | Região | Ohio — a mesma do banco na Neon (`us-east-2`) |
 | Build command | `npm ci --include=dev && npm run build && npm run db:deploy` |
 | Start command | `npm start` |
@@ -192,14 +192,23 @@ funciona, preenchendo o que está abaixo.
 Três detalhes que derrubam o deploy se forem ignorados:
 
 - **`--include=dev` não é opcional.** Com `NODE_ENV=production` o `npm ci`
-  omite as devDependencies, e `prisma` e `typescript` estão lá. Sem a flag o
-  build para em `prisma: not found`.
+  omite as devDependencies. `prisma` e `typescript` até sobrevivem (o
+  `@prisma/client` os declara como peer opcionais), mas os `@types/*` de
+  express, cors, cookie-parser e bcryptjs não, e o `tsc` para em `TS7016`.
 - **As duas URLs do banco são necessárias no build**, não só a pooled. O
   `prisma generate` carrega o `prisma.config.ts`, que exige
   `DATABASE_URL_UNPOOLED`, e o `db:deploy` usa essa conexão direta para aplicar
   migrations pendentes. Nunca `migrate dev` na Render.
-- **`CORS_ORIGEM` é a URL de produção do front na Vercel**, sem barra no final.
-  Preview deploy da Vercel tem outra URL e não passa no CORS — é esperado.
+- **`CORS_ORIGEM` é a URL de produção do front na Vercel.** O boot reduz o
+  valor à origem (`new URL(v).origin`), então barra final ou path sobrando não
+  quebram nada. Preview deploy da Vercel tem outra URL e não passa no CORS — é
+  esperado.
+
+No arranjo atual o navegador não fala com a Render diretamente: o
+`vercel.json` do front reescreve `/api/*` e `/saude` para esta API, e o cookie
+de sessão fica de primeira parte (o Safari e o Chrome anônimo descartam cookie
+de terceiro). O `SameSite=None` e o CORS continuam configurados para o arranjo
+direto também funcionar. Ver o README do `nidus-front-end`, "Deploy na Vercel".
 
 Riscos aceitos:
 

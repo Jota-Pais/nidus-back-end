@@ -16,8 +16,9 @@ services:
     region: ohio
     branch: main
     # `--include=dev` e obrigatorio: com NODE_ENV=production o `npm ci` omite as
-    # devDependencies, e `prisma` e `typescript` (o build inteiro) estao la.
-    # `db:deploy` aplica so as migrations pendentes - nunca `migrate dev` aqui.
+    # devDependencies, e os `@types/*` (express, cors, cookie-parser, bcryptjs)
+    # estao la - sem eles o `tsc` para em TS7016. `db:deploy` aplica so as
+    # migrations pendentes - nunca `migrate dev` aqui.
     buildCommand: npm ci --include=dev && npm run build && npm run db:deploy
     startCommand: npm start
     healthCheckPath: /saude
