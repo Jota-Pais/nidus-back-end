@@ -13,11 +13,15 @@ export const sessaoRoutes = Router()
  * navegador descarta cookie `Secure` fora de HTTPS, e o login pararia de
  * funcionar em localhost (`decisoes-de-stack.md` §2.1, "o detalhe que morde").
  */
-const opcoesCookie = {
+const atributosCookie = {
   httpOnly: true,
   secure: env.NODE_ENV === 'production',
   sameSite: (env.NODE_ENV === 'production' ? 'none' : 'lax') as 'none' | 'lax',
   path: '/',
+}
+
+const opcoesCookie = {
+  ...atributosCookie,
   // 12h, um turno - o contrato nao fixa duracao, so o mecanismo (secao 1.2).
   maxAge: 12 * 60 * 60_000,
 }
@@ -47,6 +51,10 @@ sessaoRoutes.delete('/', exigirPerfil(), (req, res) => {
     revogarSessao(idSessao)
   }
 
-  res.clearCookie(NOME_COOKIE, { path: '/' })
+  // O navegador so apaga o cookie se os atributos do Set-Cookie de remocao
+  // forem os mesmos do que o criou (fora expires/maxAge). Em producao isso
+  // inclui `Secure; SameSite=None`: sem eles, o Chrome descarta a remocao vinda
+  // de resposta cross-site e o cookie morto fica no navegador.
+  res.clearCookie(NOME_COOKIE, atributosCookie)
   res.status(204).send()
 })
