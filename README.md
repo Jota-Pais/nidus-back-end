@@ -175,15 +175,39 @@ aquele documento: mudança de modelo se discute lá antes de virar migration.
 
 ## Deploy na Render
 
+Web Service no plano free, a partir do GitHub. O `render.yaml` na raiz é um
+Blueprint com estes mesmos valores: **New → Blueprint** apontando para o
+repositório cria o serviço e só pede os três segredos. Criar pelo painel também
+funciona, preenchendo o que está abaixo.
+
 | Campo | Valor |
 |---|---|
-| Build command | `npm ci && npm run build` |
+| Runtime | Node (a versão vem do `engines` do `package.json`) |
+| Região | Ohio — a mesma do banco na Neon (`us-east-2`) |
+| Build command | `npm ci --include=dev && npm run build && npm run db:deploy` |
 | Start command | `npm start` |
 | Health check path | `/saude` |
-| Variáveis | `DATABASE_URL`, `CORS_ORIGEM`, `NODE_ENV=production` (a `PORT` a Render injeta) |
+| Variáveis | `NODE_ENV=production`, `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `CORS_ORIGEM` (a `PORT` a Render injeta) |
 
-O free tier dorme após ~15 min de inatividade e leva de 30s a 1min para acordar.
-Abrir o sistema alguns minutos antes de qualquer apresentação.
+Três detalhes que derrubam o deploy se forem ignorados:
+
+- **`--include=dev` não é opcional.** Com `NODE_ENV=production` o `npm ci`
+  omite as devDependencies, e `prisma` e `typescript` estão lá. Sem a flag o
+  build para em `prisma: not found`.
+- **As duas URLs do banco são necessárias no build**, não só a pooled. O
+  `prisma generate` carrega o `prisma.config.ts`, que exige
+  `DATABASE_URL_UNPOOLED`, e o `db:deploy` usa essa conexão direta para aplicar
+  migrations pendentes. Nunca `migrate dev` na Render.
+- **`CORS_ORIGEM` é a URL de produção do front na Vercel**, sem barra no final.
+  Preview deploy da Vercel tem outra URL e não passa no CORS — é esperado.
+
+Riscos aceitos:
+
+- O free tier dorme após ~15 min de inatividade e leva de 30s a 1min para
+  acordar (`docs/decisoes-de-stack.md` §1.3). Abrir o sistema alguns minutos
+  antes de qualquer apresentação.
+- A sessão vive em memória (`modules/login/sessao.ts`, que explica a escolha).
+  Quando a instância dorme ou reinicia, todo mundo loga de novo.
 
 ## Sobre o andamento
 

@@ -1,0 +1,35 @@
+# Blueprint da Render para a API do Nidus.
+#
+# Espelha o que o README descreve em "Deploy na Render", para o servico poder
+# ser criado por "New > Blueprint" apontando para este repositorio, em vez de
+# preencher campo a campo no painel. Criar pelo painel continua valendo: os
+# valores sao os mesmos.
+#
+# Os tres segredos (sync: false) sao pedidos pelo painel na criacao e nunca
+# ficam neste arquivo.
+services:
+  - type: web
+    name: nidus-api
+    runtime: node
+    plan: free
+    # Mesma regiao do banco na Neon (us-east-2): menos latencia por consulta.
+    region: ohio
+    branch: main
+    # `--include=dev` e obrigatorio: com NODE_ENV=production o `npm ci` omite as
+    # devDependencies, e `prisma` e `typescript` (o build inteiro) estao la.
+    # `db:deploy` aplica so as migrations pendentes - nunca `migrate dev` aqui.
+    buildCommand: npm ci --include=dev && npm run build && npm run db:deploy
+    startCommand: npm start
+    healthCheckPath: /saude
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Pooled (-pooler): a aplicacao, via driver adapter.
+      - key: DATABASE_URL
+        sync: false
+      # Direta (sem -pooler): a CLI do Prisma no build (generate e migrate deploy).
+      - key: DATABASE_URL_UNPOOLED
+        sync: false
+      # URL de producao do front na Vercel, sem barra no final.
+      - key: CORS_ORIGEM
+        sync: false
