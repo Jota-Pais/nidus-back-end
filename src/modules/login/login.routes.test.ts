@@ -4,10 +4,9 @@ import { describe, expect, it } from 'vitest'
 import { criarApp } from '../../app.ts'
 import type { Perfil } from '../../shared/traducao.ts'
 
-// Login de verdade (usuario existe, senha confere) e teste de integracao: sai
-// de `autenticar` chamando o banco. Aqui so o que nao toca banco - forma da
-// entrada e a autorizacao de quem ja tem sessao, mesmo recorte dos outros
-// arquivos de rota.
+// login de verdade (usuario existe, senha confere) e teste de integracao: sai de
+// autenticar chamando o banco. Aqui so o que nao toca banco - forma da entrada e a
+// autorizacao de quem ja tem sessao, mesmo recorte dos outros arquivos de rota
 
 const como = (perfil: Perfil): RequestHandler => (req, _res, next) => {
   req.usuario = { id: 1, nome: 'Teste', email: 'teste@ufsc.br', perfil }
@@ -19,14 +18,13 @@ const app = (perfil?: Perfil) =>
 
 describe('POST /api/sessao - forma da entrada', () => {
   it('e publica: nao exige sessao pra tentar logar', async () => {
-    // Sem isso ninguem conseguiria dar o primeiro login - a rota que cria a
-    // sessao nao pode exigir uma sessao existente.
+    // Sem isso ninguem conseguiria dar o primeiro login - a rota que cria a sessao
+    // nao pode exigir uma sessao existente
     const resposta = await request(app()).post('/api/sessao').send({ email: 'x', senha: 'x' })
 
-    // Chega a tentar autenticar (não é 401 de sessão ausente) - o corpo é
-    // válido pro Zod, então passa e cai na consulta ao banco, que aqui não
-    // existe: 500, e é isso que confirma que não parou em NAO_AUTENTICADO por
-    // falta de sessão.
+    // Chega a tentar autenticar (não é 401 de sessão ausente) - o corpo é válido pro Zod, então
+    // passa e cai na consulta ao banco, que aqui não existe: 500 e é isso que confirma que não
+    // parou em NAO_AUTENTICADO por falta de sessão
     expect(resposta.status).not.toBe(401)
   })
 

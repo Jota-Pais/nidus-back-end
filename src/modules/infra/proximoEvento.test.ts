@@ -3,7 +3,7 @@ import { type CicloParaEvento, calcularProximoEvento, somarDias } from './proxim
 
 const contexto = { maxCiclos: 5, intervaloCicloDias: 6, hoje: '2026-09-10' }
 
-/** Ciclo do exemplo da secao 6 do contrato, com o que se quiser sobrescrito. */
+/** Ciclo do exemplo da secao 6 do contrato, com o que se quiser sobrescrito */
 const ciclo = (parcial: Partial<CicloParaEvento> = {}): CicloParaEvento => ({
   ordem: 1,
   dtPartoPrevisto: '2026-09-25',
@@ -23,7 +23,7 @@ describe('proximo evento do ciclo - RF-REP-07', () => {
   })
 
   it('marca atrasado quando a previsao passou sem confirmacao', () => {
-    // O alerta que o contrato manda o front fazer gritar.
+    // O alerta que o contrato manda o front fazer gritar
     expect(
       calcularProximoEvento(ciclo({ dtPartoPrevisto: '2026-09-09' }), contexto),
     ).toMatchObject({ tipo: 'parto_previsto', atrasado: true })
@@ -44,9 +44,9 @@ describe('proximo evento do ciclo - RF-REP-07', () => {
   })
 
   it('nao deixa o reacasalamento passar na frente do desmame a confirmar', () => {
-    // RN-05 libera reacasalamento em parto real + 6 = 02/10, ANTES do desmame
-    // previsto de 17/10. Ordenar por data esconderia a confirmacao pendente -
-    // exatamente o que o RF-REP-07 existe para cobrar.
+    // RN-05 libera reacasalamento em parto real + 6 = 02/10, ANTES do desmame previsto de
+    // 17/10. Ordenar por data esconderia a confirmacao pendente - exatamente o que o RF-REP-07
+    // existe para cobrar
     expect(calcularProximoEvento(ciclo({ dtPartoReal: '2026-09-26' }), contexto)?.tipo).toBe(
       'desmame_previsto',
     )

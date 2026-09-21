@@ -4,9 +4,9 @@ import { traduzirErroDoBanco } from './erros-do-banco.ts'
 // Os erros abaixo NAO sao inventados: sao a forma que o adapter do Prisma 7
 // produziu contra o banco da Neon, copiada de uma violacao provocada de
 // proposito em cada invariante. E o que torna este teste util - um fixture
-// imaginado passaria e a producao quebraria.
+// imaginado passaria e a producao quebraria
 
-/** Violacao de unique: Prisma P2002, com o nome do indice em `constraint`. */
+/** Violacao de unique: Prisma P2002, com o nome do indice em constraint */
 const unique = (indice: string, tabela: string) => ({
   name: 'PrismaClientKnownRequestError',
   code: 'P2002',
@@ -42,7 +42,7 @@ const check = (constraint: string, tabela: string) => ({
   },
 })
 
-/** Violacao de FK: nome da constraint so dentro da mensagem, como no CHECK. */
+/** violacao de FK: nome da constraint so dentro da mensagem, como no CHECK. */
 const fk = (constraint: string, tabela: string) => ({
   name: 'PrismaClientKnownRequestError',
   code: 'P2003',
@@ -59,7 +59,7 @@ const fk = (constraint: string, tabela: string) => ({
   },
 })
 
-/** `RAISE EXCEPTION` de trigger nosso: a mensagem e texto que escrevemos. */
+/** 'RAISE EXCEPTION' de trigger nosso: a mensagem e texto que escrevemos */
 const trigger = (mensagem: string) => ({
   name: 'PrismaClientKnownRequestError',
   code: 'P2039',
@@ -92,8 +92,8 @@ describe('invariante do banco vira o 409 do contrato', () => {
   })
 
   it('preserva a mensagem do trigger, que traz os numeros do caso', () => {
-    // O banco explica melhor que qualquer texto generico: diz o parto, a oferta
-    // e o total que ficaria. E mensagem para exibir ao usuario (contrato §2).
+    // O banco explica melhor que qualquer texto generico: diz o parto, a oferta e o
+    // total que ficaria. E mensagem para exibir ao usuario (contrato §2)
     const traduzido = traduzirErroDoBanco(
       trigger('RN-09: o parto 8 oferta 4 machos e ja teria 6 comprometidos'),
     )
@@ -124,9 +124,8 @@ describe('invariante do banco vira o 409 do contrato', () => {
   })
 
   it('RN-02 - FK composta recusada vira PAR_GENETICO_INVALIDO (rede de seguranca)', () => {
-    // O caminho normal e o pre-check em reproducao.service.ts, que da a
-    // mensagem rica com os pares validos. Isto so cobre a corrida: par
-    // desativado entre o pre-check e o insert.
+    // O caminho normal e o pre-check em reproducao.service.ts, que da a mensagem rica com os
+    // pares validos. Isto so cobre a corrida: par desativado entre o pre-check e o insert
     const traduzido = traduzirErroDoBanco(fk('casal_grupo_macho_grupo_femea_fkey', 'casal'))
 
     expect(traduzido?.status).toBe(409)
@@ -135,7 +134,7 @@ describe('invariante do banco vira o 409 do contrato', () => {
   })
 
   it('nao usa a mensagem crua do Postgres como texto para o usuario', () => {
-    // "duplicate key value violates unique constraint" e para log.
+    // "duplicate key value violates unique constraint" e para log
     const traduzido = traduzirErroDoBanco(unique('caixa_uma_por_posicao', 'caixa'))
 
     expect(traduzido?.message).not.toMatch(/duplicate key/)

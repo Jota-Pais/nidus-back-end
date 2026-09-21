@@ -1,18 +1,4 @@
-// Secao 7 do contrato: casais e eventos reprodutivos.
-//
-// `RF-REP-01` forma o casal e cria o ciclo 1. Cada evento depois
-// (`RF-REP-03/04/05`) atualiza o ciclo corrente; confirmar o parto real e o
-// que faz `RN-05` avancar - so ai o ciclo seguinte passa a existir (ver o
-// comentario em `cadeiaTemporal.ts`). `RN-04` encerra o casal sozinho quando o
-// parto confirmado e o ultimo permitido; `RF-REP-08` e o mesmo encerramento
-// por decisao do tecnico, antes disso.
-//
-// Duas invariantes ficam por conta do banco, de proposito (decisao de stack
-// 1.1): `RN-03` (um casal ativo por caixa) e o CHECK de `ordem` que faria
-// `RN-04` disparar se este servico tivesse um bug. `RN-02` e pre-validado
-// aqui, porque o contrato pede uma mensagem rica (os pares validos para o
-// grupo do macho) que uma FK recusada nao carrega - `erros-do-banco.ts` cobre
-// so a corrida.
+// Secao 7 do contrato: casais e eventos reprodutivos
 
 import {
   calcularDisponibilidade,
@@ -26,7 +12,7 @@ import { prisma } from '../../shared/prisma.ts'
 import { dataISO } from '../../shared/traducao.ts'
 import { grauCerteza as dicGrauCerteza } from '../../shared/traducao.ts'
 
-/** `aaaa-mm-dd` -> meia-noite UTC, como o resto do projeto grava data de calendario. */
+/** 'aaaa-mm-dd' -> meia-noite UTC, como o resto do projeto grava data de calendario */
 function paraData(iso: string): Date {
   return new Date(`${iso}T00:00:00.000Z`)
 }
@@ -38,13 +24,15 @@ type ParametroCompleto = ParametroVigente & {
   maxPartoCasal: number
 }
 
-/** Todas as versoes do parametro de uma especie - `RN-01` pede o historico inteiro, nao so o vigente hoje. */
+/**
+ * Todas as versoes do parametro de uma especie - RN-01 pede o historico inteiro, nao so o
+ * vigente hoje.
+ */
 async function parametrosDaEspecie(idEspecie: number): Promise<ParametroCompleto[]> {
   const parametros = await prisma.parametroBiologico.findMany({ where: { idEspecie } })
 
-  // `parametroNaData` compara vigencia como string ISO (contrato secao 1); o
-  // Prisma devolve `@db.Date` como `Date`, entao a traducao entra aqui, uma
-  // vez so, e nao em cada chamador.
+  // parametroNaData compara vigencia como string ISO (contrato secao 1); o Prisma devolve
+  // '@db.Date' como Date, entao a traducao entra aqui, uma vez so e nao em cada chamador
   return parametros.map((parametro) => ({
     ...parametro,
     dtVigenciaInicio: dataISO(parametro.dtVigenciaInicio),
@@ -53,8 +41,8 @@ async function parametrosDaEspecie(idEspecie: number): Promise<ParametroCompleto
 }
 
 /**
- * `RN-02` - valida o par ANTES do insert, para dar a mensagem rica que o
- * contrato exemplifica ("com macho do grupo A, so e valido o grupo B").
+ * RN-02 - valida o par ANTES do insert, para dar a mensagem rica que o contrato exemplifica
+ * ("com macho do grupo A, so e valido o grupo B").
  */
 async function validarParGenetico(grupoMacho: string, grupoFemea: string): Promise<void> {
   const par = await prisma.grupoGeneticoPar.findFirst({
@@ -88,17 +76,17 @@ async function validarParGenetico(grupoMacho: string, grupoFemea: string): Promi
 }
 
 /**
- * O objeto `casal` da ficha (contrato secao 6), reaproveitado pelo cadastro,
- * pelo encerramento e pela ficha da posicao (`infra/ficha.service.ts`).
+ * O objeto casal da ficha (contrato secao 6), reaproveitado pelo cadastro, pelo
+ * encerramento e pela ficha da posicao (infra/ficha.service.ts).
  */
 export async function casalFicha(idCasal: number) {
   const casal = await prisma.casal.findUnique({
     where: { id: idCasal },
     include: {
       linhagem: { select: { nome: true, idEspecie: true } },
-      // O ciclo corrente e o de maior ordem - mesma leitura de `montarGrade`
-      // (`infra.service.ts`), porque so existe uma linha aberta por vez
-      // (`cadeiaTemporal.ts`) e as duas telas nao podem divergir (`RF-CIC-02`).
+      // O ciclo corrente e o de maior ordem - mesma leitura de montarGrade
+      // ('infra.service.ts') porque so existe uma linha aberta por vez ('cadeiaTemporal.ts') e
+      // as duas telas nao podem divergir (RF-CIC-02)
       partos: { orderBy: { ordem: 'desc' }, take: 1, select: { ordem: true } },
     },
   })
@@ -130,16 +118,16 @@ export async function casalFicha(idCasal: number) {
 }
 
 /**
- * O objeto `ciclo` da ficha (contrato secao 6), com a disponibilidade liquida
- * do `RN-09`. Reaproveitado pelos tres eventos e pela ficha da posicao.
+ * O objeto ciclo da ficha (contrato secao 6), com a disponibilidade liquida do RN-09.
+ * Reaproveitado pelos tres eventos e pela ficha da posicao
  */
 export async function cicloFicha(idParto: number) {
   const parto = await prisma.parto.findUnique({
     where: { id: idParto },
     include: {
       casal: { select: { idLinhagem: true, linhagem: { select: { idEspecie: true } } } },
-      // So os ativos entram na soma - `RNF-06` mantem o cancelado na tabela,
-      // mas ele nao pesa mais no comprometido (mesma regra do trigger `RN-09`).
+      // So os ativos entram na soma - RNF-06 mantem o cancelado na tabela, mas
+      // ele nao pesa mais no comprometido (mesma regra do trigger RN-09)
       compromissos: { where: { dtCancelamento: null }, select: { qtdM: true, qtdF: true } },
     },
   })
@@ -201,7 +189,7 @@ export type NovoCasal = {
   dtFormacao: string
 }
 
-/** `POST /api/casais` - `RF-REP-01`. Forma o casal e ja cria o ciclo 1. */
+/** POST /api/casais - RF-REP-01. Forma o casal e ja cria o ciclo 1 */
 export async function formarCasal(dados: NovoCasal) {
   const caixa = await prisma.caixa.findUnique({ where: { id: dados.idCaixa } })
 
@@ -215,7 +203,7 @@ export async function formarCasal(dados: NovoCasal) {
     throw naoEncontrado('Linhagem')
   }
 
-  // Contrato secao 7: "400 VALIDACAO - linhagem que nao pertence a especie da caixa".
+  // contrato secao 7: "400 VALIDACAO - linhagem que nao pertence a especie da caixa"
   if (linhagem.idEspecie !== caixa.idEspecie) {
     throw new ErroDeAplicacao(400, 'VALIDACAO', 'Confira os campos destacados.', {
       campos: { idLinhagem: 'Esta linhagem nao pertence a especie da caixa.' },
@@ -238,8 +226,8 @@ export async function formarCasal(dados: NovoCasal) {
 
   const ciclo1 = calcularCicloInicial(dados.dtFormacao, parametro)
 
-  // RN-03 (um casal ativo por caixa) fica por conta do indice parcial - ver o
-  // comentario no topo do arquivo. Se disparar, `erros-do-banco.ts` traduz.
+  // RN-03 (um casal ativo por caixa) fica por conta do indice parcial. Se disparar,
+  // 'erros-do-banco.ts' traduz.
   const casal = await prisma.$transaction(async (tx) => {
     const criado = await tx.casal.create({
       data: {
@@ -275,20 +263,7 @@ export type Nascimento = {
   nascidoF: number
 }
 
-/**
- * `POST /api/partos/:id/nascimento` - `RF-REP-03`.
- *
- * Confirma o parto e, se nao for o ultimo permitido, ja cria o ciclo seguinte
- * projetado (`RN-05`) - e a unica "cadeia a frente" que existe para recalcular
- * enquanto o casal so avanca, porque so uma linha futura existe por vez.
- * Correcao de um parto ja confirmado (`RF-REP-09`, cadeia de verdade) fica
- * fora desta entrega.
- *
- * `idUsuario` vai em `id_usuario_parto`/`dt_registro_parto` - e o autor que a
- * ficha da posicao (`RNF-06`) mostra na trilha de eventos. `req.usuario.id`
- * ja existe na rota (`RF-ACS-02` exige sessao); so faltava um lugar pra
- * gravar quem foi.
- */
+/** POST /api/partos/:id/nascimento - RF-REP-03 */
 export async function registrarNascimento(idParto: number, dados: Nascimento, idUsuario: number) {
   const parto = await prisma.parto.findUnique({
     where: { id: idParto },
@@ -323,7 +298,7 @@ export async function registrarNascimento(idParto: number, dados: Nascimento, id
         dtPartoReal: paraData(dados.dtPartoReal),
         nascidoM: dados.nascidoM,
         nascidoF: dados.nascidoF,
-        // RF-REP-03: a oferta passa de projetada para prevista.
+        // RF-REP-03: a oferta passa de projetada para prevista
         grauCerteza: 'P',
         idUsuarioParto: idUsuario,
         dtRegistroParto: new Date(),
@@ -345,9 +320,9 @@ export async function registrarNascimento(idParto: number, dados: Nascimento, id
 
     const proximo = calcularProximoCiclo(dados.dtPartoReal, parametro)
 
-    // CHECK `parto_ordem_ciclo` (1..5) e a rede de seguranca desta linha: se
-    // `parametro.maxPartoCasal` algum dia divergir de 5 no banco, o Postgres
-    // recusa antes de gravar ordem invalida.
+    // CHECK parto_ordem_ciclo (1..5) e a rede de seguranca desta linha: se
+    // 'parametro.maxPartoCasal' algum dia divergir de 5 no banco, o Postgres recusa antes
+    // de gravar ordem invalida.
     await tx.parto.create({
       data: {
         idCasal: parto.idCasal,
@@ -369,13 +344,7 @@ export type Selecao = {
   eutanasiadoF: number
 }
 
-/**
- * `POST /api/partos/:id/selecao` - `RF-REP-04`.
- *
- * Sem limite imposto pelo sistema alem de nao passar do nascido - o tecnico
- * decide quantos permanecem, pelo protocolo. A constante de 4M/4F e so
- * expectativa (`PEN-05`/`CONF-03`), nunca teto.
- */
+/** POST /api/partos/:id/selecao - RF-REP-04 */
 export async function registrarSelecao(idParto: number, dados: Selecao, idUsuario: number) {
   const parto = await prisma.parto.findUnique({ where: { id: idParto } })
 
@@ -416,10 +385,7 @@ export type Desmame = {
   idCaixaRecria: number | null
 }
 
-/**
- * `POST /api/partos/:id/desmame` - `RF-REP-05`. A partir daqui o estoque e
- * `confirmado`. `idCaixaRecria` nulo por proposito (D-03/`PEN-02` em aberto).
- */
+/** POST /api/partos/:id/desmame - RF-REP-05. A partir daqui o estoque e confirmado */
 export async function registrarDesmame(idParto: number, dados: Desmame, idUsuario: number) {
   const parto = await prisma.parto.findUnique({ where: { id: idParto } })
 
@@ -460,7 +426,7 @@ export type Encerramento = {
   motivo: string
 }
 
-/** `POST /api/casais/:id/encerramento` - `RF-REP-08`. `RNF-06`: nada e apagado, so encerra. */
+/** POST /api/casais/:id/encerramento - RF-REP-08. RNF-06: nada e apagado, so encerra */
 export async function encerrarCasal(idCasal: number, dados: Encerramento) {
   const casal = await prisma.casal.findUnique({ where: { id: idCasal } })
 

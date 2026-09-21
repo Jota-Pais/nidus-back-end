@@ -6,14 +6,7 @@ import type { Perfil } from '../../shared/traducao.ts'
 import { capacidadeDerivada } from './infra.service.ts'
 import { estanteNova } from './infra.routes.ts'
 
-// `RF-ACS-02` - autorizacao decidida no servidor. E o que este arquivo cobra.
-//
-// Nenhum destes testes abre conexao: recusa de perfil e recusa do Zod acontecem
-// antes do handler tocar o banco. A `DATABASE_URL` de placeholder vem do
-// `vitest.config.ts`, so para o `env.ts` validar no import.
-//
-// A forma das respostas de sucesso (a grade da secao 5) precisa de dados e sai
-// em teste de integracao, junto da massa de teste da colonia.
+// RF-ACS-02 - autorizacao decidida no servidor. E o que este arquivo cobra
 
 const como = (perfil: Perfil): RequestHandler => (req, _res, next) => {
   req.usuario = { id: 1, nome: 'Teste', email: 'teste@ufsc.br', perfil }
@@ -25,8 +18,7 @@ const app = (perfil?: Perfil) =>
 
 describe('autorizacao das rotas de infraestrutura - RF-ACS-02', () => {
   it('sem sessao devolve 401, nao 403', async () => {
-    // A ordem importa: 403 aqui contaria a quem nem esta logado que o recurso
-    // existe.
+    // A ordem importa: 403 aqui contaria a quem nem esta logado que o recurso existe
     const resposta = await request(app()).get('/api/estantes')
 
     expect(resposta.status).toBe(401)
@@ -34,7 +26,7 @@ describe('autorizacao das rotas de infraestrutura - RF-ACS-02', () => {
   })
 
   it('pesquisador nao enxerga a colonia - 403 com o requisito no envelope', async () => {
-    // RF-ACS-03: ele recebe MENOS dados, nao os mesmos filtrados no cliente.
+    // RF-ACS-03: ele recebe MENOS dados, nao os mesmos filtrados no cliente
     const resposta = await request(app('pesquisador')).get('/api/estantes')
 
     expect(resposta.status).toBe(403)
@@ -49,7 +41,7 @@ describe('autorizacao das rotas de infraestrutura - RF-ACS-02', () => {
   })
 
   it('cadastrar estante e so do gestor - tecnico recebe 403', async () => {
-    // RF-INF-01: cadastro de modelo novo e operacao de admin.
+    // RF-INF-01: cadastro de modelo novo e operacao de admin
     const resposta = await request(app('tecnico')).post('/api/estantes').send({
       sala: 'Sala 2',
       fabricante: 'ALESCO',
@@ -64,8 +56,8 @@ describe('autorizacao das rotas de infraestrutura - RF-ACS-02', () => {
   })
 
   it('rota inexistente sob /api nao vira 401 pela autenticacao', async () => {
-    // A autenticacao esta montada em `/api` inteiro e nao pode transformar
-    // "essa rota nao existe" em "faca login".
+    // A autenticacao esta montada em '/api' inteiro e nao pode transformar "essa rota nao
+    // existe" em "faca login"
     const resposta = await request(app('tecnico')).get('/api/nao-existe')
 
     expect(resposta.status).toBe(404)
@@ -83,7 +75,7 @@ describe('validacao de entrada das rotas de infraestrutura', () => {
   })
 
   it('recusa topologia que estoura o alfabeto do endereco', async () => {
-    // 2 faces x 20 colunas = 40 letras, e o alfabeto tem 26. RF-INF-02 ficaria
+    // 2 faces x 20 colunas = 40 letras e o alfabeto tem 26. RF-INF-02 ficaria
     // sem endereco para gerar.
     const resposta = await request(app('gestor')).post('/api/estantes').send({
       sala: 'Sala 2',
@@ -119,9 +111,10 @@ describe('capacidade da estante e derivada, nunca do cliente', () => {
   }
 
   it('o schema descarta `capacidade` mandada no corpo', () => {
-    // Sem isto, `capacidade: 1` numa estante 2x5x5 entraria no banco e o CHECK
-    // `estante_capacidade_derivada` recusaria o insert - erro 500 no lugar de
-    // um campo simplesmente ignorado. Conferido no schema, sem tocar o banco.
+    // sem isto, capacidade: 1 numa estante 2x5x5 entraria no banco e o
+    // CHECK 'estante_capacidade_derivada' recusaria o insert - erro 500 no
+    // lugar de um campo simplesmente ignorado. Conferido no schema, sem
+    // tocar o banco
     const validado = estanteNova.parse({ ...topologia, capacidade: 1 })
 
     expect(validado).not.toHaveProperty('capacidade')

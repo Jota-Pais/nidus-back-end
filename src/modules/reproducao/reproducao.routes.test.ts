@@ -5,9 +5,9 @@ import { criarApp } from '../../app.ts'
 import type { Perfil } from '../../shared/traducao.ts'
 import { casalNovo } from './reproducao.routes.ts'
 
-// `RF-ACS-02` e validacao de forma - o mesmo recorte de `infra.routes.test.ts`.
-// Sucesso com dado real (RN-02, RN-03, RN-04, RN-05 encadeados) e teste de
-// integracao, junto da massa de teste da colonia.
+// RF-ACS-02 e validacao de forma - o mesmo recorte de
+// 'infra.routes.test.ts'. Sucesso com dado real (RN-02, RN-03, RN-04, RN-05
+// encadeados) e teste de integracao, junto da massa de teste da colonia
 
 const como = (perfil: Perfil): RequestHandler => (req, _res, next) => {
   req.usuario = { id: 1, nome: 'Teste', email: 'teste@ufsc.br', perfil }
@@ -91,8 +91,8 @@ describe('validacao de entrada - formacao de casal', () => {
 
 describe('desmame aceita idCaixaRecria nulo, mas nao omitido', () => {
   it('nulo explicito passa pela forma (D-03: destino em aberto)', async () => {
-    // Sem sessao de proposito: so confere que o Zod aceita a forma antes de
-    // chegar ao servico (que devolveria 401 aqui, e nao e o que se testa).
+    // sem sessao de proposito: so confere que o Zod aceita a forma antes de chegar ao
+    // servico (que devolveria 401 aqui, e nao e o que se testa).
     const resposta = await request(app())
       .post('/api/partos/1/desmame')
       .send({ dtDesmameReal: '2026-06-16', desmamadoM: 4, desmamadoF: 5, idCaixaRecria: null })

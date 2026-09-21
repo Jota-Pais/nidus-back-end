@@ -26,12 +26,8 @@ function camposDoZod(erro: ZodError): Record<string, string> {
 }
 
 /**
- * Tratador central. Fica por ultimo na cadeia e precisa dos quatro parametros -
- * e a assinatura pela qual o Express reconhece um error handler.
- *
- * O Express 5 encaminha promise rejeitada de handler async para ca sozinho, sem
- * try/catch e sem wrapper. Por isso a rota pode chamar `esquema.parse(req.body)`
- * direto: o ZodError cai aqui e vira 400.
+ * tratador central. Fica por ultimo na cadeia e precisa dos quatro parametros -
+ * e a assinatura pela qual o Express reconhece um error handler
  */
 export const tratadorDeErros: ErrorRequestHandler = (erro, req, res, next) => {
   if (res.headersSent) {
@@ -50,12 +46,9 @@ export const tratadorDeErros: ErrorRequestHandler = (erro, req, res, next) => {
     return
   }
 
-  // Invariante recusada pelo banco: `CHECK`, unique parcial ou trigger. Sao
+  // Invariante recusada pelo banco: 'CHECK', unique parcial ou trigger. Sao
   // regras de negocio que a decisao de stack 1.1 poe no Postgres de proposito -
-  // viram 409 com o codigo do contrato, nunca 500.
-  //
-  // Entra ANTES do `ErroDeAplicacao` so por clareza de leitura; os dois tipos
-  // sao disjuntos, entao a ordem entre eles nao muda comportamento.
+  // viram 409 com o codigo do contrato, nunca 500
   const doBanco = traduzirErroDoBanco(erro)
 
   if (doBanco !== undefined) {
@@ -82,7 +75,7 @@ export const tratadorDeErros: ErrorRequestHandler = (erro, req, res, next) => {
 
   // Aqui e bug, nao regra: log inteiro do lado do servidor, nada de stack para o
   // cliente. Invariante do banco que ninguem mapeou cai aqui de proposito - ver
-  // `erros-do-banco.ts`.
+  // 'erros-do-banco.ts'
   console.error(`[500] ${req.method} ${req.originalUrl}`, erro)
   res.status(500).json({
     erro: {

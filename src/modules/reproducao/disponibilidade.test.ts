@@ -51,8 +51,8 @@ describe('RN-08 - os tres niveis do COALESCE', () => {
   })
 
   it('desmamado manda sobre nascido, mesmo quando os numeros divergem', () => {
-    // Mortalidade entre o parto e o desmame: a contagem real e menor que a
-    // ninhada que nasceu, e e a real que vale.
+    // Mortalidade entre o parto e o desmame: a contagem real e menor que a ninhada que
+    // nasceu e e a real que vale.
     const comPerda = ciclo({ nascidoM: 6, nascidoF: 6, desmamadoM: 2, desmamadoF: 3 })
 
     expect(ofertaBruta(comPerda, expectativa)).toEqual({ m: 2, f: 3 })
@@ -62,10 +62,10 @@ describe('RN-08 - os tres niveis do COALESCE', () => {
 
 describe('selecao ausente conta zero, nao nulo', () => {
   it('ninhada nascida sem selecao registrada mantem a oferta real', () => {
-    // O erro que a leitura literal da secao 5.1 produz: `nascido -
-    // eutanasiado` com eutanasiado nulo vira NULO em SQL, e a oferta cairia
-    // para a expectativa PROJETADA de uma ninhada que ja nasceu. O trigger do
-    // banco decidiu contar zero; aqui e igual, de proposito.
+    // O erro que a leitura literal da secao 5.1 produz: 'nascido - eutanasiado' com
+    // eutanasiado nulo vira NULO em SQL, e a oferta cairia para a expectativa PROJETADA de
+    // uma ninhada que ja nasceu. O trigger do banco decidiu contar zero; aqui e igual, de
+    // proposito
     const semSelecao = ciclo({ nascidoM: 7, nascidoF: 2 })
 
     expect(ofertaBruta(semSelecao, expectativa)).toEqual({ m: 7, f: 2 })
@@ -75,7 +75,7 @@ describe('selecao ausente conta zero, nao nulo', () => {
 
 describe('disponibilidade liquida', () => {
   it('parto com 4M desmamados e 2M comprometidos devolve 2M e confirmado', () => {
-    // O caso escrito no card, palavra por palavra.
+    // O caso escrito no card, palavra por palavra
     const resultado = calcularDisponibilidade(confirmado, {
       expectativa,
       comprometido: { m: 2, f: 0 },
@@ -86,8 +86,8 @@ describe('disponibilidade liquida', () => {
   })
 
   it('separa oferta bruta de disponivel liquido', () => {
-    // Os dois numeros existem separados porque o teto do RN-09 e a oferta
-    // BRUTA. Confundir os dois faz o limite valer metade.
+    // Os dois numeros existem separados porque o teto do RN-09 e a oferta BRUTA.
+    // Confundir os dois faz o limite valer metade
     const resultado = calcularDisponibilidade(confirmado, {
       expectativa,
       comprometido: { m: 2, f: 1 },
@@ -108,8 +108,8 @@ describe('disponibilidade liquida', () => {
   })
 
   it('nunca devolve negativo, mesmo com registro corrigido para menos', () => {
-    // RF-REP-09 preve correcao de registro depois do compromisso firmado. A
-    // tela tem de ler "nada disponivel", nao "-2 machos".
+    // RF-REP-09 preve correcao de registro depois do compromisso firmado. A tela tem
+    // de ler "nada disponivel", nao "-2 machos".
     const corrigido = ciclo({ nascidoM: 5, nascidoF: 5, desmamadoM: 2, desmamadoF: 2 })
     const resultado = calcularDisponibilidade(corrigido, {
       expectativa,
@@ -128,7 +128,7 @@ describe('disponibilidade liquida', () => {
 
 describe('RN-01 - expectativa vem do parametro vigente, nao de constante', () => {
   const parametros: ParametroVigente[] = [
-    // Vigência encerrada: valia até abril, com expectativa menor.
+    // vigência encerrada: valia até abril, com expectativa menor
     {
       idLinhagem: null,
       expectativaM: 3,
@@ -136,7 +136,7 @@ describe('RN-01 - expectativa vem do parametro vigente, nao de constante', () =>
       dtVigenciaInicio: '2026-01-01',
       dtVigenciaFim: '2026-04-30',
     },
-    // Vigente hoje, para a espécie inteira.
+    // vigente hoje, para a espécie inteira
     {
       idLinhagem: null,
       expectativaM: 4,
@@ -169,8 +169,9 @@ describe('RN-01 - expectativa vem do parametro vigente, nao de constante', () =>
   })
 
   it('calculo de data passada reproduz o parametro daquela epoca', () => {
-    // O coracao do RN-01. Filtrar por `dtVigenciaFim: null` devolveria 4 e 4,
-    // que e a resposta de hoje - e a errada para recalcular algo de marco.
+    // O coracao do RN-01. Filtrar por 'dtVigenciaFim: null' devolveria 4 e
+    // 4, que e a resposta de hoje - e a errada para recalcular algo de
+    // marco.
     expect(expectativaNaData(parametros, { idLinhagem: null, em: '2026-03-15' })).toEqual({
       m: 3,
       f: 3,

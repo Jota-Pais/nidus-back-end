@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { criarApp } from '../../app.ts'
 import type { Perfil } from '../../shared/traducao.ts'
 
-// RF-ACS-02 e validacao de forma. Sucesso com dado real (as quatro listas
-// contra a massa de teste da colonia) e teste de integracao.
+// RF-ACS-02 e validacao de forma. Sucesso com dado real (as quatro listas contra a massa de
+// teste da colonia) e teste de integracao.
 
 const como = (perfil: Perfil): RequestHandler => (req, _res, next) => {
   req.usuario = { id: 1, nome: 'Teste', email: 'teste@ufsc.br', perfil }
@@ -31,8 +31,8 @@ describe('autorizacao dos alertas - RF-ACS-02', () => {
 
 describe('validacao de entrada', () => {
   it('especie e dias sao opcionais - forma valida sem nenhum dos dois', async () => {
-    // Sem sessao real de proposito: so confere que o Zod aceita ausencia dos
-    // dois campos (o painel cobre as duas especies por padrao).
+    // sem sessao real de proposito: so confere que o Zod aceita ausencia dos dois campos (o
+    // painel cobre as duas especies por padrao).
     const resposta = await request(app()).get('/api/alertas')
 
     expect(resposta.status).toBe(401) // passou do Zod, parou na sessao

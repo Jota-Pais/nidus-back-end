@@ -18,7 +18,7 @@ describe('endereco da posicao - RF-INF-02', () => {
 
   it('acompanha a topologia estreita: TECNIPLAST M1 e 8 x 7, A-G e H-N', () => {
     // E esta contagem que sustenta a suposicao do CONF-07: sete letras para
-    // sete colunas. Se a letra fosse a linha, seriam oito.
+    // sete colunas. Se a letra fosse a linha, seriam oito
     const letras = (face: number) =>
       Array.from({ length: 7 }, (_, i) => letraDaPosicao(face, i + 1, 7)).join('')
 
@@ -37,9 +37,8 @@ describe('endereco da posicao - RF-INF-02', () => {
   })
 
   it('CONF-07: trocar o eixo da letra troca o endereco, e so isso', () => {
-    // O teste que prova o isolamento. Linha 1, coluna 2 e `B1` hoje; se o
-    // cliente responder que a letra e a linha, o mesmo ponto vira `A2`. Uma
-    // funcao muda - nao o servico, nao a rota, nao o front.
+    // O teste que prova o isolamento. Linha 1, coluna 2 e 'B1' hoje; se o
+    // cliente responder que a letra e a linha, o mesmo ponto vira 'A2'
     expect(codigoDaPosicao(1, 1, 2, 8)).toBe('B1')
     expect(codigoDaPosicao(1, 2, 1, 8)).toBe('A2')
   })

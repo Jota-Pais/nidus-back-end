@@ -1,12 +1,4 @@
-// Secao 4 do contrato: todo o dado de referencia numa chamada so.
-//
-// Sao os dados do Anexo A - carga inicial que quase nunca muda (RNF-05). O
-// front chama uma vez no boot e cacheia com `staleTime` longo, entao o custo
-// aqui e uma vez por sessao, nao por tela.
-//
-// As seis consultas saem em paralelo: nao dependem uma da outra e o free tier
-// da Neon cobra latencia de rede, nao CPU - serializar isto seria somar seis
-// RTTs sem motivo.
+// secao 4 do contrato: todo o dado de referencia numa chamada so
 
 import { prisma } from '../../shared/prisma.ts'
 import { codigoDaEspecie, dataISO } from '../../shared/traducao.ts'
@@ -26,8 +18,8 @@ export async function montarCatalogo() {
       },
     }),
 
-    // Nao existe tabela `sala` no MVP (entra na fase 2): a sala e coluna da
-    // estante, e a lista sai do que esta instalado.
+    // nao existe tabela sala no MVP (entra na fase 2): a sala e coluna da
+    // estante e a lista sai do que esta instalado
     prisma.estante.findMany({
       where: { ativa: true },
       distinct: ['sala'],
@@ -41,8 +33,8 @@ export async function montarCatalogo() {
       select: { grupoMacho: true, grupoFemea: true },
     }),
 
-    // Vigente = sem data de fim (RN-01: o parametro e versionado, e o passado
-    // continua no banco para o calculo antigo seguir reproduzivel).
+    // Vigente = sem data de fim (RN-01: o parametro e versionado e o passado continua no banco
+    // para o calculo antigo seguir reproduzivel)
     prisma.parametroBiologico.findMany({
       where: { dtVigenciaFim: null },
       orderBy: [{ idEspecie: 'asc' }, { idLinhagem: 'asc' }],
@@ -54,9 +46,8 @@ export async function montarCatalogo() {
       select: { idadeMinDias: true, idadeMaxDias: true, variacaoDias: true },
     }),
 
-    // Modelo de estante tambem nao e tabela no MVP: os quatro modelos sao as
-    // topologias distintas ja cadastradas. RF-INF-01 - um quinto entra por
-    // cadastro, nao por deploy.
+    // modelo de estante tambem nao e tabela no MVP: os quatro modelos sao as topologias
+    // distintas ja cadastradas. RF-INF-01 - um quinto entra por cadastro, nao por deploy.
     prisma.estante.findMany({
       distinct: ['fabricante', 'modelo'],
       orderBy: [{ fabricante: 'asc' }, { modelo: 'asc' }],

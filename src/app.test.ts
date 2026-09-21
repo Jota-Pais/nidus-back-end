@@ -2,8 +2,9 @@ import request from 'supertest'
 import { describe, expect, it } from 'vitest'
 import { criarApp } from './app.ts'
 
-// Fumaca do esqueleto: app, CORS, JSON e tratador de erro ligados, e o envelope
-// de erro no formato do contrato (docs/contrato-api.md, secao 2). Nao toca o banco.
+// Fumaca do esqueleto: app, CORS, JSON e tratador de erro ligados, e o
+// envelope de erro no formato do contrato (docs/contrato-api.md, secao 2)
+// Nao toca o banco
 describe('esqueleto da API', () => {
   it('responde o healthcheck no formato do contrato', async () => {
     const resposta = await request(criarApp({ ambiente: 'teste', versao: '9.9.9' })).get('/saude')
