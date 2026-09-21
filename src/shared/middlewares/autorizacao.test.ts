@@ -3,9 +3,9 @@ import { ErroDeAplicacao } from '../erros.ts'
 import type { Perfil } from '../traducao.ts'
 import { OPERA_A_COLONIA, exigirPerfil, usuarioDaRequisicao } from './autorizacao.ts'
 
-// `RF-ACS-02` - a decisao de autorizacao. Testada aqui, no middleware, e nao
-// pela rota: nao envolve HTTP, banco nem Express de verdade, e e a regra que
-// toda rota do contrato reusa.
+// RF-ACS-02 - a decisao de autorizacao. Testada aqui, no middleware e nao pela
+// rota: nao envolve HTTP, banco nem Express de verdade e e a regra que toda rota do
+// contrato reusa
 
 const requisicao = (perfil?: Perfil) => ({
   usuario:
@@ -14,12 +14,12 @@ const requisicao = (perfil?: Perfil) => ({
       : { id: 1, nome: 'Teste', email: 'teste@ufsc.br', perfil },
 })
 
-/** Roda o middleware e devolve o erro que ele passou ao `next`, se houve. */
+/** roda o middleware e devolve o erro que ele passou ao next, se houve. */
 function rodar(middleware: ReturnType<typeof exigirPerfil>, perfil?: Perfil) {
   const next = vi.fn()
 
-  // O middleware so le `req.usuario` e chama `next` - o cast mantem o teste
-  // sem montar um Request inteiro do Express.
+  // O middleware so le req.usuario e chama next - o cast mantem o teste sem
+  // montar um Request inteiro do Express
   middleware(requisicao(perfil) as never, undefined as never, next)
 
   const [primeiro] = next.mock.calls[0] ?? []
@@ -53,7 +53,7 @@ describe('exigirPerfil', () => {
   })
 
   it('sem lista de perfis exige apenas sessao - e o caso do catalogo', () => {
-    // `GET /api/catalogo` vale para qualquer perfil: o pesquisador tambem
+    // 'GET /api/catalogo' vale para qualquer perfil: o pesquisador tambem
     // precisa de especie e linhagem para montar o pedido.
     expect(rodar(exigirPerfil(), 'pesquisador').passou).toBe(true)
     expect(rodar(exigirPerfil(), 'tecnico').passou).toBe(true)
@@ -61,8 +61,8 @@ describe('exigirPerfil', () => {
   })
 
   it('OPERA_A_COLONIA deixa o pesquisador fora, por desenho', () => {
-    // RF-ACS-03: ele nao enxerga a colonia - recebe menos dados, nao os mesmos
-    // dados filtrados no cliente.
+    // RF-ACS-03: ele nao enxerga a colonia - recebe menos dados, nao os mesmos dados filtrados
+    // no cliente
     expect(OPERA_A_COLONIA).toEqual(['tecnico', 'gestor'])
     expect(rodar(exigirPerfil(...OPERA_A_COLONIA), 'pesquisador').erro?.status).toBe(403)
   })
@@ -74,8 +74,8 @@ describe('usuarioDaRequisicao', () => {
   })
 
   it('estoura quando a rota esqueceu o exigirPerfil - e bug, nao regra', () => {
-    // Cai como 500 no log do servidor, que e onde bug nosso deve aparecer, e
-    // nao como 401 silencioso que pareceria problema do usuario.
+    // Cai como 500 no log do servidor, que e onde bug nosso deve aparecer, e nao
+    // como 401 silencioso que pareceria problema do usuario.
     expect(() => usuarioDaRequisicao(requisicao())).toThrow(/sem exigirPerfil/)
   })
 })

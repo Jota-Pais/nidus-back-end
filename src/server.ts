@@ -24,8 +24,8 @@ const servidor = app.listen(env.PORT, () => {
   console.log(`Nidus API ouvindo em http://localhost:${env.PORT} [${env.NODE_ENV}]`)
 })
 
-// A Render manda SIGTERM ao reciclar a instancia. Fechar servidor e pool antes
-// de sair evita request cortado no meio e conexao pendurada na Neon.
+// A Render manda SIGTERM ao reciclar a instancia. Fechar servidor e pool antes de sair evita
+// request cortado no meio e conexao pendurada na Neon
 for (const sinal of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sinal, () => {
     console.log(`\n${sinal} recebido, encerrando.`)

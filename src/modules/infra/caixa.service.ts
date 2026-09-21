@@ -1,18 +1,4 @@
-// Secao 8 do contrato: quadro de acompanhamento e transicao de estado de caixa.
-//
-// O quadro so cobre caixa de `finalidade` reproducao **que ja teve casal**: e
-// o recorte que faz sentido para um workflow de comprometimento (`RF-CIC-*`) -
-// caixa de maternidade/recria/expedicao ou nunca ocupada nao tem ciclo para
-// mostrar, e entraria como card vazio poluindo a coluna. Nao e regra escrita
-// no contrato; e leitura deste modulo, registrada aqui para o time revisar.
-//
-// `disponivel`/`comprometido`/`grauCerteza` saem do CICLO e nao dependem do
-// casal estar ativo: um casal encerrado (`RN-04`, 5o parto) ainda pode ter a
-// ultima ninhada comprometida para expedicao - e exatamente o caso "5o parto,
-// ja expedido" da massa de teste. Ja `casal` (identificacao/ciclo) e
-// `proximoEvento` somem quando o casal encerrou, porque nao ha mais o que
-// acasalar ou acompanhar - a mesma leitura de `montarGrade` (`infra.service.ts`),
-// que as duas telas tem de compartilhar (`RF-CIC-02`).
+// secao 8 do contrato: quadro de acompanhamento e transicao de estado de caixa
 
 import { calcularDisponibilidade, expectativaNaData, parametroNaData } from '../reproducao/disponibilidade.ts'
 import type { ParametroVigente } from '../reproducao/disponibilidade.ts'
@@ -28,7 +14,7 @@ type ParametroCompleto = ParametroVigente & {
   maxPartoCasal: number
 }
 
-/** Mesma traducao de `parametrosDaEspecie` em `reproducao.service.ts` - ver o comentario la. */
+/** mesma traducao de parametrosDaEspecie em 'reproducao.service.ts' */
 async function parametrosDaEspecie(idEspecie: number): Promise<ParametroCompleto[]> {
   const parametros = await prisma.parametroBiologico.findMany({ where: { idEspecie } })
 
@@ -145,15 +131,14 @@ function cardDaCaixa(caixa: CaixaDoQuadro, parametros: ParametroCompleto[], hoje
   }
 }
 
-/** `GET /api/quadro?especie=` - `RF-CIC-01`, um quadro por especie, sem mistura. */
+/** 'GET /api/quadro?especie=' - RF-CIC-01, um quadro por especie, sem mistura. */
 export async function montarQuadro(codigoEspecie: string, agora: Date = new Date()) {
   const hoje = hojeISO(agora)
   const idEspecie = await idDaEspecie(codigoEspecie)
 
   const [caixas, parametros] = await Promise.all([
     prisma.caixa.findMany({
-      // finalidade 'R' e casal com pelo menos um registro: ver o comentario no
-      // topo do arquivo.
+      // O quadro so cobre caixa de reproducao que ja teve casal
       where: { idEspecie, ativa: true, finalidade: 'R', casais: { some: {} } },
       select: selecaoDoQuadro,
     }),
@@ -168,9 +153,9 @@ export async function montarQuadro(codigoEspecie: string, agora: Date = new Date
     const estadoApi = estadoCaixa.paraApi(caixa.estado)
     const coluna = colunas.get(estadoApi)
 
-    // Nunca deveria faltar: `estadoCaixa.termos` cobre o dominio inteiro do
-    // CHECK do banco. Se faltar, e porque o dominio mudou dos dois lados e
-    // isto e bug, nao entrada do usuario - por isso nao lanca `naoEncontrado`.
+    // nunca deveria faltar: 'estadoCaixa.termos' cobre o dominio inteiro do
+    // CHECK do banco. Se faltar e porque o dominio mudou dos dois lados e isto
+    // e bug, nao entrada do usuario - por isso nao lanca 'naoEncontrado'
     if (coluna === undefined) {
       throw new Error(`Estado de caixa fora do dominio traduzivel: ${estadoApi}`)
     }
@@ -181,9 +166,9 @@ export async function montarQuadro(codigoEspecie: string, agora: Date = new Date
 
   return {
     especie: codigoEspecie,
-    // `Map` preserva a ordem de inserção, que foi `estadoCaixa.termos` -
-    // identica a `COLUNAS_DO_QUADRO` do front (`RF-CIC-01`: as cinco vem
-    // sempre, mesmo vazias).
+    // 'Map' preserva a ordem de inserção, que foi 'estadoCaixa.termos' -
+    // identica a 'COLUNAS_DO_QUADRO' do front (RF-CIC-01: as cinco vem sempre,
+    // mesmo vazias).
     colunas: Array.from(colunas.values()),
   }
 }
@@ -194,26 +179,7 @@ export type PedidoDeTransicao = {
   confirmar: boolean
 }
 
-/**
- * `PATCH /api/caixas/:id/estado` - `RF-CIC-03`.
- *
- * A transicao e livre, inclusive retrocedendo - nao ha maquina de estados
- * aqui de proposito, o contrato e explicito nisso.
- *
- * ⚠️ **Interpretacao registrada, nao texto literal do contrato:** "transicao
- * que contraria compromisso" aqui e "a caixa tem compromisso ativo no ciclo
- * corrente", em qualquer direcao - o contrato da um exemplo (mover para
- * `preparada_para_envio` com compromisso firmado) mas nao define o caso geral.
- * Errar para o lado de confirmar demais e mais seguro, numa aplicacao cuja
- * razao de existir e nao alocar duas vezes (`RN-09`), do que deixar passar uma
- * mudanca que devia ter aviso. Revisar com o time se um caso concreto pedir
- * outra leitura.
- *
- * O que o `RF-CIC-03` tambem pede e RF-BI-04 nao tem onde gravar ainda:
- * "toda transicao registra autor, data, origem e destino" precisaria de uma
- * tabela de evento, que so entra na fase 4 (`auditoria`, modelo-de-dados.md
- * secao 7). A transicao aplica; o registro de quem/quando fica pendente.
- */
+/** PATCH /api/caixas/:id/estado - RF-CIC-03 */
 export async function moverCaixa(idCaixa: number, dados: PedidoDeTransicao) {
   const caixa = await prisma.caixa.findUnique({
     where: { id: idCaixa },

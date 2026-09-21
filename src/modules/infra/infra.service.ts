@@ -1,20 +1,4 @@
-// Secao 5 do contrato: estantes, grade de ocupacao e cadastro.
-//
-// `GET /api/estantes/:id/grade` e o endpoint central do `RF-INF-03` e o mais
-// importante do MVP para o front, e traz a regra que define o formato: **nao
-// existe tabela `slot`** (decisao D-04 do modelo de dados). As posicoes vazias
-// sao geradas aqui, a partir da topologia, e vao na resposta com `caixa: null`.
-// O front nunca gera grade - ele desenha o que recebe.
-//
-// Custo das consultas, que e o que decide se a grade abre rapido:
-//
-//   lista  -> 1 consulta de estantes + 1 `groupBy` de caixa ativa por estante.
-//             O `RF-INF-06` pede capacidade/ocupada/livre de cada uma, e contar
-//             por estante dentro do laco seria uma consulta por linha.
-//   grade  -> 1 consulta da estante + 1 das caixas (com casal e ciclo corrente
-//             aninhados) + 1 dos parametros vigentes. Nao cresce com o numero
-//             de posicoes: uma estante ALESCO 1 tem 128 e continua em tres
-//             idas ao banco.
+// secao 5 do contrato: estantes, grade de ocupacao e cadastro.
 
 import { Prisma } from '@prisma/client'
 import { naoEncontrado } from '../../shared/erros.ts'
@@ -30,7 +14,7 @@ import {
 import { codigoDaPosicao } from './endereco.ts'
 import { calcularProximoEvento } from './proximoEvento.ts'
 
-/** O objeto `estante` da lista e do cadastro (contrato secao 5). */
+/** O objeto 'estante' da lista e do cadastro (contrato secao 5) */
 function comTopologia(estante: {
   id: number
   sala: string
@@ -57,13 +41,7 @@ function comTopologia(estante: {
   }
 }
 
-/**
- * Resolve `?especie=rato` no `id` da especie. Tabela de 2 linhas no Anexo A.
- *
- * Exportada: o quadro (`caixa.service.ts`) tambem resolve especie a partir do
- * codigo, e a tabela e a mesma - duplicar a consulta so daria chance de as
- * duas telas discordarem sobre o que "rato" significa (`RF-CIC-02`).
- */
+/** Resolve '?especie=rato' no id da especie. Tabela de 2 linhas no Anexo A */
 export async function idDaEspecie(codigo: string): Promise<number> {
   const especies = await prisma.especie.findMany({ select: { id: true, nome: true } })
   const achada = especies.find((especie) => codigoDaEspecie(especie.nome) === codigo)
@@ -81,9 +59,8 @@ export type FiltroDeEstantes = {
 }
 
 export async function listarEstantes({ sala, especie }: FiltroDeEstantes = {}) {
-  // Filtrar por especie e filtrar a ESTANTE pelo que ela abriga: `RF-CIC-01`
-  // segrega por especie e a estante entra se tiver ao menos uma caixa ativa
-  // daquela especie.
+  // Filtrar por especie e filtrar a ESTANTE pelo que ela abriga: RF-CIC-01 segrega
+  // por especie e a estante entra se tiver ao menos uma caixa ativa daquela especie
   const where: Prisma.EstanteWhereInput = {
     ...(sala === undefined ? {} : { sala }),
     ...(especie === undefined
@@ -116,7 +93,7 @@ export async function listarEstantes({ sala, especie }: FiltroDeEstantes = {}) {
 
       return {
         ...comTopologia(estante),
-        // RF-INF-06: capacidade instalada, ocupada e livre.
+        // RF-INF-06: capacidade instalada, ocupada e livre
         ocupacao: {
           capacidade: estante.capacidade,
           ocupada,
@@ -147,10 +124,10 @@ export async function montarGrade(id: number, agora: Date = new Date()) {
         idEspecie: true,
         especie: { select: { nome: true } },
         casais: {
-          // O casal corrente e o ultimo formado. Trazer 1 em vez de filtrar por
-          // `ativo` de proposito: a caixa que acabou de encerrar o casal ainda
-          // guarda animais daquela linhagem, e o contrato pede a linhagem da
-          // caixa - mas `casal` na resposta so vale se estiver ativo.
+          // O casal corrente e o ultimo formado. Trazer 1 em vez de filtrar por ativo de
+          // proposito: a caixa que acabou de encerrar o casal ainda guarda animais daquela
+          // linhagem, e o contrato pede a linhagem da caixa - mas casal na resposta so
+          // vale se estiver ativo
           orderBy: { dtFormacao: 'desc' },
           take: 1,
           select: {
@@ -159,7 +136,7 @@ export async function montarGrade(id: number, agora: Date = new Date()) {
             ativo: true,
             linhagem: { select: { nome: true } },
             partos: {
-              // Ciclo corrente: o de maior ordem. RN-04 limita a 5.
+              // Ciclo corrente: o de maior ordem. RN-04 limita a 5
               orderBy: { ordem: 'desc' },
               take: 1,
               select: {
@@ -191,8 +168,8 @@ export async function montarGrade(id: number, agora: Date = new Date()) {
 
   const parametroPorEspecie = new Map(parametros.map((p) => [p.idEspecie, p]))
 
-  // Indexar por endereco antes de gerar a grade: a busca vira O(1) por posicao,
-  // em vez de varrer a lista de caixas para cada uma das 128.
+  // indexar por endereco antes de gerar a grade: a busca vira O(1) por posicao, em vez de
+  // varrer a lista de caixas para cada uma das 128.
   const caixaPorEndereco = new Map(
     caixas.map((caixa) => [`${caixa.face}:${caixa.linha}:${caixa.coluna}`, caixa]),
   )
@@ -207,9 +184,9 @@ export async function montarGrade(id: number, agora: Date = new Date()) {
     return {
       id: caixa.id,
       especie: codigoDaEspecie(caixa.especie.nome),
-      // Vem do casal - `infra.caixa` nao tem linhagem no MVP. `null` na caixa
-      // que nunca teve casal, conforme a secao 1 do contrato (ausencia e
-      // sempre `null` explicito, nunca string vazia).
+      // vem do casal - infra.caixa nao tem linhagem no MVP. null na caixa que nunca
+      // teve casal, conforme a secao 1 do contrato (ausencia e sempre null explicito,
+      // nunca string vazia).
       linhagem: casal?.linhagem.nome ?? null,
       finalidade: finalidadeCaixa.paraApi(caixa.finalidade),
       estado: estadoCaixa.paraApi(caixa.estado),
@@ -249,9 +226,8 @@ export async function montarGrade(id: number, agora: Date = new Date()) {
     const numeroDaFace = indice + 1
     const posicoes = []
 
-    // Ordem linha-major, como o contrato promete: todas as colunas da linha 1,
-    // depois da linha 2. O front agrupa pelo campo `linha` de qualquer forma,
-    // mas a promessa e da API.
+    // ordem linha-major, como o contrato promete: todas as colunas da linha 1, depois da linha
+    // 2. O front agrupa pelo campo 'linha' de qualquer forma, mas a promessa e da API.
     for (let linha = 1; linha <= estante.linhas; linha += 1) {
       for (let coluna = 1; coluna <= estante.colunas; coluna += 1) {
         const caixa = caixaPorEndereco.get(`${numeroDaFace}:${linha}:${coluna}`)
@@ -287,10 +263,9 @@ export type NovaEstante = {
 }
 
 /**
- * `capacidade` e derivada da topologia e **nunca vem do cliente** (contrato
- * secao 5). O banco cobra o mesmo no CHECK `estante_capacidade_derivada` - esta
- * e a mesma conta, do lado de fora, para a resposta sair certa sem reler a
- * linha.
+ * 'capacidade' e derivada da topologia e nunca vem do cliente (contrato secao 5). O banco
+ * cobra o mesmo no CHECK 'estante_capacidade_derivada' - esta e a mesma conta, do lado de
+ * fora, para a resposta sair certa sem reler a linha.
  */
 export function capacidadeDerivada(faces: number, linhas: number, colunas: number): number {
   return faces * linhas * colunas

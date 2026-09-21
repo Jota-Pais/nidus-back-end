@@ -1,13 +1,4 @@
-// Secao 8 do contrato: `GET /api/alertas` - `RF-REP-07`.
-//
-// "E a tela em que o tecnico comeca o dia": o que vence hoje e nos proximos
-// dias, mais tudo que ja venceu sem confirmacao - por isso a janela filtra so
-// o teto de cima (`data <= hoje + dias`), nunca o de baixo. Um atraso de 30
-// dias tem que continuar aparecendo, nao sumir por estar "fora da janela".
-//
-// Reaproveita `calcularProximoEvento` (`infra/proximoEvento.ts`), a mesma
-// funcao que a grade e o quadro chamam - e o que garante que "atrasado" aqui
-// e o mesmo "atrasado" das outras duas telas (`RF-CIC-02`).
+// Secao 8 do contrato: 'GET /api/alertas' - RF-REP-07
 
 import { calcularProximoEvento } from '../infra/proximoEvento.ts'
 import { idDaEspecie } from '../infra/infra.service.ts'

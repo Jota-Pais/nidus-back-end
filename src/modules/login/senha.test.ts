@@ -21,7 +21,7 @@ describe('hash de senha', () => {
   })
 
   it('o mesmo texto gera hashes diferentes a cada chamada (salt)', async () => {
-    // Sem isto, duas contas com a mesma senha teriam o mesmo hash na tabela -
+    // sem isto, duas contas com a mesma senha teriam o mesmo hash na tabela -
     // vazamento de "estas duas pessoas usam a mesma senha".
     const [hashA, hashB] = await Promise.all([hashSenha('correta123'), hashSenha('correta123')])
 

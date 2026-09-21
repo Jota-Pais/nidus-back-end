@@ -15,27 +15,24 @@ import {
 
 /**
  * Contrato secao 7. Dois routers porque a URL do contrato tem duas raizes -
- * `/api/casais` e `/api/partos` - e um `parto` nao pertence a um `casal` na
- * rota (`RF-CIC-02`: quadro e ficha abrem pelo `idCaixa`/`idParto`, nunca
- * navegando `casal -> parto` na URL).
- *
- * Todas as rotas sao tecnico ou gestor - `RF-ACS-03`, o pesquisador nao
- * enxerga a colonia.
+ * '/api/casais' e /api/partos - e um 'parto' nao pertence a um casal na
+ * rota (RF-CIC-02: quadro e ficha abrem pelo idCaixa/idParto, nunca
+ * navegando 'casal -> parto' na URL).
  */
 export const casalRoutes = Router()
 export const partoRoutes = Router()
 
 const idNaRota = z.object({ id: z.coerce.number().int().positive() })
 
-/** Contrato secao 1: `aaaa-mm-dd`, nunca timestamp para data de calendario. */
+/** contrato secao 1: 'aaaa-mm-dd', nunca timestamp para data de calendario. */
 const dataCalendario = z.iso.date('Data invalida. Use aaaa-mm-dd.')
 
 const grupoGenetico = z.enum(['A', 'B', 'C', 'D', 'E'])
 
 /**
- * Corpo de `POST /api/casais`. `RN-02` (o par esta na rotacao) e `RF-DEM-02`
- * (linhagem da especie da caixa) sao responsabilidade do servico - o Zod
- * garante so a forma, nao consulta o banco.
+ * Corpo de POST /api/casais. RN-02 (o par esta na rotacao) e RF-DEM-02 (linhagem da
+ * especie da caixa) sao responsabilidade do servico - o Zod garante so a forma, nao consulta o
+ * banco
  */
 export const casalNovo = z.object({
   idCaixa: z.number().int().positive(),
@@ -89,7 +86,7 @@ partoRoutes.post('/:id/selecao', exigirPerfil(...OPERA_A_COLONIA), async (req, r
   res.json(await registrarSelecao(id, dados, usuarioDaRequisicao(req).id))
 })
 
-/** `idCaixaRecria` nulo e explicito, nunca omitido (contrato secao 1, D-03). */
+/** idCaixaRecria nulo e explicito, nunca omitido (contrato secao 1, D-03) */
 const desmame = z.object({
   dtDesmameReal: dataCalendario,
   desmamadoM: z.number().int().min(0),

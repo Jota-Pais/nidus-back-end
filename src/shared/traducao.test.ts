@@ -11,9 +11,9 @@ import {
   perfil,
 } from './traducao.ts'
 
-// A secao 1.1 do contrato e uma tabela de equivalencia. O que pode dar errado
-// aqui e silencioso e caro: um termo diferente do que o front espera nao quebra
-// build nenhum dos dois lados - so aparece como tela vazia.
+// A secao 1.1 do contrato e uma tabela de equivalencia. O que pode dar
+// errado aqui e silencioso e caro: um termo diferente do que o front espera
+// nao quebra build nenhum dos dois lados - so aparece como tela vazia
 const dicionarios = [
   { nome: 'estadoCaixa', dic: estadoCaixa, codigos: ['R', 'P', 'T', 'E', 'X'] },
   { nome: 'finalidadeCaixa', dic: finalidadeCaixa, codigos: ['R', 'M', 'C', 'E'] },
@@ -32,8 +32,8 @@ describe('traducao do char(1) - contrato secao 1.1', () => {
   })
 
   it('usa exatamente os termos de tipos.ts e estados.ts do front', () => {
-    // Renomear qualquer um destes quebra o front sem quebrar build. Estao
-    // escritos a mao de proposito: e a copia que o teste compara.
+    // Renomear qualquer um destes quebra o front sem quebrar build. Estao escritos a mao
+    // de proposito: e a copia que o teste compara
     expect(estadoCaixa.termos).toEqual([
       'em_reproducao',
       'parcialmente_comprometida',
@@ -48,8 +48,8 @@ describe('traducao do char(1) - contrato secao 1.1', () => {
   })
 
   it('trata codigo fora do dominio como bug, nao como entrada invalida', () => {
-    // O CHECK de dominio da migration das invariantes nao deveria deixar entrar.
-    // Se entrou, quero stack no log do servidor - nao 404 disfarcado.
+    // O CHECK de dominio da migration das invariantes nao deveria deixar entrar. Se
+    // entrou, quero stack no log do servidor - nao 404 disfarcado.
     expect(() => estadoCaixa.paraApi('Z')).toThrow(/fora do dominio/)
   })
 
@@ -73,7 +73,7 @@ describe('codigo da especie', () => {
 
   it('tira acento sem comer digito', () => {
     // A faixa de diacriticos e facil de escrever errado e o estrago aparece
-    // longe: `[0-9]` dentro da classe apagaria o numero da linhagem.
+    // longe: [0-9] dentro da classe apagaria o numero da linhagem.
     expect(codigoDaEspecie('Ratao-do-banhado')).toBe('ratao-do-banhado')
     expect(codigoDaEspecie('C57BL/6J')).toBe('c57bl-6j')
   })
@@ -85,8 +85,8 @@ describe('data de calendario', () => {
   })
 
   it('le a coluna @db.Date em UTC, sem deslocar um dia no fuso do servidor', () => {
-    // O erro classico: `toLocaleDateString` em servidor a oeste de Greenwich
-    // devolveria 24/05 para esta data.
+    // O erro classico: toLocaleDateString em servidor a oeste de Greenwich devolveria
+    // 24/05 para esta data
     expect(dataISO(new Date(Date.UTC(2026, 4, 25)))).toBe('2026-05-25')
     expect(hojeISO(new Date('2026-09-10T23:30:00.000Z'))).toBe('2026-09-10')
   })

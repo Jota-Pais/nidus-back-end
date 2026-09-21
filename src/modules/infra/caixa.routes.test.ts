@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest'
 import { criarApp } from '../../app.ts'
 import type { Perfil } from '../../shared/traducao.ts'
 
-// `RF-ACS-02` e validacao de forma. A forma da resposta de sucesso (secao 8 do
+// RF-ACS-02 e validacao de forma. A forma da resposta de sucesso (secao 8 do
 // contrato, com casal/ciclo/disponivel reais) e teste de integracao, junto da
-// massa de teste da colonia - mesmo recorte de `infra.routes.test.ts`.
+// massa de teste da colonia - mesmo recorte de 'infra.routes.test.ts'
 
 const como = (perfil: Perfil): RequestHandler => (req, _res, next) => {
   req.usuario = { id: 1, nome: 'Teste', email: 'teste@ufsc.br', perfil }
@@ -54,8 +54,8 @@ describe('autorizacao do quadro e da transicao - RF-ACS-02', () => {
 
 describe('validacao de entrada', () => {
   it('quadro sem `especie` e VALIDACAO, nao quadro vazio', async () => {
-    // RF-CIC-01: nao existe "todas as especies" - omitir o filtro e erro de
-    // forma, e nao devolver as duas espécies misturadas.
+    // RF-CIC-01: nao existe "todas as especies" - omitir o filtro e erro de forma, e
+    // nao devolver as duas espécies misturadas
     const resposta = await request(app('tecnico')).get('/api/quadro')
 
     expect(resposta.status).toBe(400)

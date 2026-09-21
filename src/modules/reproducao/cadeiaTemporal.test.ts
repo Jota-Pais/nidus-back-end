@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { calcularCicloInicial, calcularProximoCiclo } from './cadeiaTemporal.ts'
 
-// Anexo A: gestacao 23d, aleitamento 22d, intervalo 6d.
+// Anexo A: gestacao 23d, aleitamento 22d, intervalo 6d
 const parametro = { gestacaoDias: 23, aleitamentoDias: 22, intervaloCicloDias: 6 }
 
 describe('RN-05 - ciclo inicial, a partir do acasalamento digitado', () => {
@@ -25,8 +25,8 @@ describe('RN-05 - ciclo inicial, a partir do acasalamento digitado', () => {
 
 describe('RN-05 - proximo ciclo, a partir do parto REAL do anterior', () => {
   it('acasalamento do ciclo n+1 sai do parto real, nao do previsto', () => {
-    // Parto real atrasou 3 dias em relacao ao previsto (25/05) - o proximo
-    // ciclo tem de partir do que aconteceu, nao do que se esperava.
+    // Parto real atrasou 3 dias em relacao ao previsto (25/05) - o proximo ciclo tem de
+    // partir do que aconteceu, nao do que se esperava
     const ciclo = calcularProximoCiclo('2026-05-28', parametro)
 
     expect(ciclo).toEqual({
@@ -40,8 +40,8 @@ describe('RN-05 - proximo ciclo, a partir do parto REAL do anterior', () => {
     const ciclo1 = calcularCicloInicial('2026-05-02', parametro)
     const ciclo2 = calcularProximoCiclo(ciclo1.dtPartoPrevisto, parametro)
 
-    // Sem atraso: parto real == previsto, entao encadear reproduz a mesma
-    // conta que fazer a mao a partir do primeiro acasalamento.
+    // Sem atraso: parto real == previsto, entao encadear reproduz a mesma conta
+    // que fazer a mao a partir do primeiro acasalamento
     expect(ciclo2.dtAcasalamento).toBe('2026-05-31')
   })
 })

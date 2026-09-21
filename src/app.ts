@@ -12,31 +12,22 @@ import { rotaNaoEncontrada, tratadorDeErros } from './shared/middlewares/erro.ts
 
 type OpcoesApp = {
   /**
-   * Origem do front autorizada. Front (Vercel) e API (Render) ficam em dominios
-   * diferentes, entao CORS com origem explicita e `credentials: true` - `*` e
-   * recusado pelo navegador quando ha cookie de sessao.
+   * origem do front autorizada. Front (Vercel) e API (Render) ficam em dominios
+   * diferentes, entao CORS com origem explicita e 'credentials: true' - * e recusado
+   * pelo navegador quando ha cookie de sessao.
    */
   corsOrigem?: string
-  /** Vai no /saude: desenvolvimento | teste | producao. */
+  /** Vai no /saude: desenvolvimento | teste | producao */
   ambiente?: string
-  /** Vai no /saude: a `version` do package.json. */
+  /** vai no /saude: a version do package.json. */
   versao?: string
-  /**
-   * Quem le a sessao e preenche `req.usuario` - a AUTENTICACAO.
-   *
-   * Padrao: `autenticacaoPorCookie`, que le o cookie `nidus_sessao` contra o
-   * `Map` de `modules/login/sessao.ts`. Entra por parametro, e nao so por
-   * import direto, por dois motivos. O primeiro e de desenho: autenticar vai
-   * mudar quando o SSO do ID-UFSC entrar (`PEN-09`) e autorizar nao, entao os
-   * dois nao devem estar amarrados. O segundo e de teste: e assim que o teste
-   * de rota injeta um perfil sem subir cookie, banco nem login.
-   */
+  /** quem le a sessao e preenche req.usuario - a AUTENTICACAO */
   autenticacao?: RequestHandler
 }
 
 /**
- * Monta a aplicacao sem subir servidor. Separado de server.ts para que o teste
- * chame a API em memoria, sem porta e sem .env.
+ * Monta a aplicacao sem subir servidor. Separado de server.ts para que o
+ * teste chame a API em memoria, sem porta e sem .env
  */
 export function criarApp({
   corsOrigem = 'http://localhost:5173',
@@ -51,17 +42,16 @@ export function criarApp({
   app.use(cookieParser())
 
   // Healthcheck - contrato secao 9. Publico e a unica rota fora de /api: e por
-  // ele que a Render sabe que a instancia subiu e o front sabe que ela acordou.
+  // ele que a Render sabe que a instancia subiu e o front sabe que ela acordou
   app.get('/saude', (_req, res) => {
     res.json({ status: 'ok', ambiente, versao })
   })
 
-  // Daqui para baixo tudo passa pela autenticacao. Ela nunca recusa por conta
-  // propria: preenche `req.usuario` quando ha sessao e segue. Quem recusa e o
-  // `exigirPerfil` de cada rota - `RF-ACS-02`, autorizacao no servidor.
+  // Daqui para baixo tudo passa pela autenticacao. Ela nunca recusa por conta propria: preenche
+  // req.usuario quando ha sessao e segue.
   app.use('/api', autenticacao)
 
-  // Os routers de cada modulo, todos sob /api (contrato secao 1).
+  // Os routers de cada modulo, todos sob /api (contrato secao 1)
   app.use('/api/sessao', sessaoRoutes)
   app.use('/api/catalogo', catalogoRoutes)
   app.use('/api/estantes', estanteRoutes)

@@ -1,31 +1,4 @@
-// Traduz invariante recusada pelo Postgres para o codigo de erro do contrato.
-//
-// A divisao de responsabilidade da decisao de stack 1.1 poe a invariante no
-// banco: `CHECK`, unique parcial e trigger. Isso e certo - a regra fica de pe
-// mesmo com dois processos concorrendo -, mas o preco e que a recusa chega como
-// SQLSTATE, e o front nao sabe o que fazer com `23514`.
-//
-// Sem este arquivo toda invariante virava **500 ERRO_INTERNO**, o que e mentira
-// duas vezes: nao e erro interno e nao e irrecuperavel. Sao regras de negocio,
-// e o contrato ja tem codigo 409 para cada uma.
-//
-// **Como o erro chega.** O adapter do Prisma 7 embrulha o erro do Postgres em
-// `meta.driverAdapterError.cause`, e a forma foi conferida contra o banco de
-// verdade, nao suposta:
-//
-//   - violacao de unique -> Prisma `P2002`, com `originalCode: '23505'` e
-//     `constraint.index` com o nome do indice.
-//   - violacao de CHECK e `RAISE` de trigger -> Prisma `P2010` (raw) ou `P2039`
-//     (ORM), com `originalCode: '23514'`. Nome da constraint so dentro da
-//     mensagem; trigger nosso nao tem constraint, tem a mensagem que escrevemos.
-//   - violacao de FK composta (`RN-02`, par genetico) -> `originalCode: '23503'`.
-//     So entra aqui como rede de seguranca: quem da a mensagem rica, com os
-//     pares validos para o grupo do macho, e a pre-validacao em
-//     `reproducao.service.ts`. Isto pega so a corrida rara (par desativado
-//     entre o pre-check e o insert).
-//
-// `originalCode` e o unico campo presente nos dois caminhos - `cause.code` so
-// aparece em parte deles. Usar `originalCode`.
+// traduz invariante recusada pelo Postgres para o codigo de erro do contrato
 
 import { type CodigoErro, ErroDeAplicacao } from './erros.ts'
 
@@ -35,7 +8,7 @@ type CausaDoBanco = {
   constraint?: { index?: string }
 }
 
-/** Desembrulha a causa do Postgres, se o erro for de banco. */
+/** desembrulha a causa do Postgres, se o erro for de banco */
 export function causaDoBanco(erro: unknown): CausaDoBanco | undefined {
   if (typeof erro !== 'object' || erro === null) {
     return undefined
@@ -57,47 +30,34 @@ type Traducao = {
   mensagem: string
 }
 
-/**
- * As invariantes que o banco cobra, com o codigo do contrato de cada uma.
- *
- * A chave e o nome da constraint (unique e CHECK) ou o prefixo da mensagem do
- * trigger - que e texto nosso, escrito na migration, e por isso estavel.
- *
- * **Acrescentar linha aqui exige que o codigo exista na tabela 2.1 do
- * contrato.** Inventar codigo novo quebra o front, que decide comportamento
- * pelo `codigo` - e mexer no contrato e nos dois repos, no mesmo PR.
- */
+/** As invariantes que o banco cobra, com o codigo do contrato de cada uma. */
 const POR_INVARIANTE: Record<string, Traducao> = {
-  // Unicidade parcial - RF-INF-05.
+  // unicidade parcial - RF-INF-05
   caixa_uma_por_posicao: {
     codigo: 'POSICAO_OCUPADA',
     requisito: 'RF-INF-05',
     mensagem: 'Esta posicao da estante ja tem uma caixa ativa.',
   },
-  // Unicidade parcial - RN-03.
+  // unicidade parcial - RN-03
   casal_um_ativo_por_caixa: {
     codigo: 'CAIXA_JA_TEM_CASAL_ATIVO',
     requisito: 'RN-03',
     mensagem: 'Esta caixa ja tem um casal ativo. Encerre o casal atual antes de formar outro.',
   },
-  // CHECK - RN-04.
+  // CHECK - RN-04
   parto_ordem_ciclo: {
     codigo: 'LIMITE_PARTOS_ATINGIDO',
     requisito: 'RN-04',
     mensagem: 'O casal ja atingiu o limite de 5 partos.',
   },
-  // Trigger - RN-09, a invariante que o sistema existe para garantir.
-  //
-  // A mensagem do banco e melhor que qualquer texto generico que eu escrevesse
-  // aqui: ela ja diz o parto, a oferta e o total que ficaria. Por isso
-  // `mensagem` abaixo e so o fallback, e `traduzirErroDoBanco` prefere a do
-  // banco quando ela vem.
+  // trigger - RN-09, a invariante que o sistema existe para garantir
   'RN-09': {
     codigo: 'DISPONIBILIDADE_EXCEDIDA',
     requisito: 'RN-09',
     mensagem: 'A ninhada nao tem animais suficientes para este compromisso.',
   },
-  // FK composta - RN-02. Rede de seguranca; ver o comentario no topo do arquivo.
+  // FK composta - RN-02. Rede de seguranca: a mensagem rica vem da pre-validacao em
+  // 'reproducao.service.ts'
   casal_grupo_macho_grupo_femea_fkey: {
     codigo: 'PAR_GENETICO_INVALIDO',
     requisito: 'RN-02',
@@ -105,23 +65,19 @@ const POR_INVARIANTE: Record<string, Traducao> = {
   },
 }
 
-/** Acha o nome da constraint dentro da mensagem do Postgres. */
+/** Acha o nome da constraint dentro da mensagem do Postgres */
 function constraintNaMensagem(mensagem: string): string | undefined {
   return /violates (?:check|unique|foreign key) constraint "([^"]+)"/.exec(mensagem)?.[1]
 }
 
-/** Acha o prefixo de requisito de uma mensagem levantada por trigger nosso. */
+/** Acha o prefixo de requisito de uma mensagem levantada por trigger nosso */
 function requisitoNaMensagem(mensagem: string): string | undefined {
   return /^(R[NF]-[A-Z]*-?\d+):/.exec(mensagem)?.[1]
 }
 
 /**
- * O erro do contrato para uma invariante do banco, ou `undefined` se esta nao e
- * uma violacao que a API sabe nomear.
- *
- * `undefined` e de proposito: violacao de invariante que ninguem mapeou e **bug
- * nosso**, e tem de continuar caindo em 500 com log inteiro no servidor. Virar
- * 409 generico esconderia o bug atras de uma mensagem amigavel.
+ * O erro do contrato para uma invariante do banco, ou undefined se esta nao e uma
+ * violacao que a API sabe nomear
  */
 export function traduzirErroDoBanco(erro: unknown): ErroDeAplicacao | undefined {
   const causa = causaDoBanco(erro)
@@ -130,8 +86,8 @@ export function traduzirErroDoBanco(erro: unknown): ErroDeAplicacao | undefined 
     return undefined
   }
 
-  // 23505 unique_violation | 23514 check_violation (inclui RAISE de trigger) |
-  // 23503 foreign_key_violation (FK composta do RN-02).
+  // 23505 unique_violation | 23514 check_violation (inclui RAISE de
+  // trigger) | 23503 foreign_key_violation (FK composta do RN-02).
   if (
     causa.originalCode !== '23505' &&
     causa.originalCode !== '23514' &&
@@ -153,9 +109,9 @@ export function traduzirErroDoBanco(erro: unknown): ErroDeAplicacao | undefined 
     return undefined
   }
 
-  // Mensagem levantada por trigger nosso ja e em portugues e traz os numeros do
-  // caso; mensagem gerada pelo Postgres ("duplicate key value violates...") e
-  // para log, nao para usuario.
+  // Mensagem levantada por trigger nosso ja e em portugues e traz os numeros do caso;
+  // mensagem gerada pelo Postgres ("duplicate key value violates...") e para log, nao para
+  // usuario
   const doTrigger = requisitoNaMensagem(mensagemDoBanco) !== undefined
 
   return new ErroDeAplicacao(

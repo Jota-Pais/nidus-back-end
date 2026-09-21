@@ -1,19 +1,4 @@
-// Secao 6 do contrato: ficha da posicao. `RF-INF-04` + `RF-REP-02`.
-//
-// Abre do card da grade e do card do quadro - mesma fonte, `RF-CIC-02`.
-//
-// ⚠️ `casal` aqui NAO segue a convencao de `montarGrade`/`montarQuadro`
-// (nulo quando o casal esta inativo): a ficha e HISTORICO, entao mostra o
-// ultimo casal mesmo encerrado - `RF-REP-08` fala em "apoio a escolha do par
-// de reposicao", que sem ver o casal anterior nao faz sentido pedir. Grade e
-// quadro sao "o que esta acontecendo agora"; a ficha e "o que aconteceu
-// nesta posicao".
-//
-// `eventos` e reconstruido dos carimbos `dt_registro_*`/`id_usuario_*` de
-// `reproducao.parto` (RNF-06) - nao existe tabela de evento generica no MVP
-// (isso e fase 4, `docs/modelo-de-dados.md` secao 8). Parto seedado antes
-// desta funcionalidade nao tem esses carimbos: simplesmente nao aparece na
-// trilha, em vez de inventar autor ou hora.
+// secao 6 do contrato: ficha da posicao. RF-INF-04 + RF-REP-02
 
 import { casalFicha, cicloFicha } from '../reproducao/reproducao.service.ts'
 import { naoEncontrado } from '../../shared/erros.ts'
@@ -32,7 +17,7 @@ async function ciclosDoCasal(idCasal: number) {
     select: { id: true },
   })
 
-  // No maximo 5 (RN-04): N+1 aqui e uma ficha aberta por vez, nao uma lista.
+  // No maximo 5 (RN-04): N+1 aqui e uma ficha aberta por vez, nao uma lista
   return Promise.all(partos.map((parto) => cicloFicha(parto.id)))
 }
 
@@ -94,21 +79,20 @@ async function eventosDoCasal(idCasal: number): Promise<EventoDaFicha[]> {
     }
   }
 
-  // Ordem cronologica entre partos diferentes: dentro de cada parto ja sai
-  // em ordem (parto -> selecao -> desmame), mas o `.sort` cobre qualquer
-  // corrida entre carimbos de partos vizinhos.
+  // ordem cronologica entre partos diferentes: dentro de cada parto ja sai
+  // em ordem (parto -> selecao -> desmame), mas o '.sort' cobre qualquer
+  // corrida entre carimbos de partos vizinhos
   return eventos.sort((a, b) => a.dataHora.localeCompare(b.dataHora))
 }
 
-/** `GET /api/caixas/:id` - a ficha completa. */
+/** GET /api/caixas/:id - a ficha completa */
 export async function montarFicha(idCaixa: number) {
   const caixa = await prisma.caixa.findUnique({
     where: { id: idCaixa },
     include: {
       estante: { select: { id: true, numeroVisivel: true, sala: true } },
       especie: { select: { nome: true } },
-      // O casal mais recente, ativo ou nao - ver o comentario no topo do
-      // arquivo sobre por que a ficha nao zera o casal encerrado.
+      // O casal mais recente, ativo ou nao: a ficha e historico (RF-REP-08)
       casais: { orderBy: { dtFormacao: 'desc' }, take: 1, select: { id: true } },
     },
   })
@@ -141,9 +125,8 @@ export async function montarFicha(idCaixa: number) {
         codigo: caixa.codigo,
       },
       especie: codigoDaEspecie(caixa.especie.nome),
-      // Vem do casal - infra.caixa nao tem linhagem no MVP (mesma leitura de
-      // montarGrade). Mostra mesmo com o casal encerrado, pelo motivo do
-      // comentario no topo do arquivo.
+      // Vem do casal - infra.caixa nao tem linhagem no MVP (mesma leitura de montarGrade).
+      // Mostra mesmo com o casal encerrado: a ficha e historico.
       linhagem: casal?.linhagem ?? null,
       finalidade: finalidadeCaixa.paraApi(caixa.finalidade),
       estado: estadoCaixa.paraApi(caixa.estado),

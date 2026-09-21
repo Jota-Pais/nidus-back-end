@@ -1,4 +1,4 @@
-// Secao 3 do contrato: sessao. `RF-ACS-01`.
+// secao 3 do contrato: sessao. RF-ACS-01
 
 import { ErroDeAplicacao } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
@@ -27,10 +27,9 @@ function paraUsuarioDaSessao(usuario: {
 }
 
 /**
- * A senha mestra ativa, se existir. `login.senha_mestra` nao e requisito do
- * cliente nem tabela do MVP (`docs/modelo-de-dados.md`) - e decisao
- * operacional do time, guardada como hash (nunca texto puro, mesma regra de
- * `usuario.hash_senha`).
+ * A senha mestra ativa, se existir. login.senha_mestra nao e requisito do cliente
+ * nem tabela do MVP ('docs/modelo-de-dados.md') - e decisao operacional do time,
+ * guardada como hash (nunca texto puro, mesma regra de usuario.hash_senha)
  */
 async function senhaMestraConfere(senha: string): Promise<boolean> {
   const mestra = await prisma.senhaMestra.findFirst({ where: { ativa: true } })
@@ -38,28 +37,7 @@ async function senhaMestraConfere(senha: string): Promise<boolean> {
   return mestra !== null && (await senhaCorresponde(senha, mestra.hashSenha))
 }
 
-/**
- * `POST /api/sessao` - autentica e abre sessao.
- *
- * Contrato secao 3: "mesma mensagem para e-mail inexistente e senha errada,
- * sem distinguir os dois" - por isso as recusas (usuario inexistente,
- * inativo, sem senha local, senha errada) caem no mesmo `throw`.
- *
- * `hashSenha` nulo e quem entra so pelo SSO (`RF-ACS-01`/`PEN-09`, mock no
- * semestre) - sem senha local possivel, mesma recusa de credencial invalida,
- * nao um erro diferente que revelaria que o e-mail existe.
- *
- * ⚠️ **Senha mestra - decisao explicita do time, 17/09/2026, cientes do risco.**
- * Se existir uma `senha_mestra` ativa no banco, ela abre sessao pra qualquer
- * conta ATIVA (nao pula a checagem de `ativo`) - suporte e desenvolvimento
- * rapido, "simular o erro de um usuario" sem resetar a senha dele. So
- * consultada quando a senha propria do usuario NAO confere, pra nao pagar
- * uma consulta extra no caminho comum (login com a senha certa). Sem linha
- * ativa na tabela, esse caminho nunca bate - nada de valor padrao no codigo.
- * Cada uso fica um `console.warn` no log; nao e trilha de auditoria de
- * verdade (RF-BI-04, fase 4), so a menor visibilidade possivel sem tabela de
- * evento.
- */
+/** POST /api/sessao - autentica e abre sessao */
 export async function autenticar({ email, senha }: Credenciais): Promise<{
   usuario: UsuarioDaSessao
   idSessao: string
