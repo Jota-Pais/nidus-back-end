@@ -6,7 +6,6 @@ import { caixaRoutes, quadroRoutes } from './modules/infra/caixa.routes.ts'
 import { estanteRoutes } from './modules/infra/infra.routes.ts'
 import { autenticacaoPorCookie } from './modules/login/autenticacao.ts'
 import { sessaoRoutes } from './modules/login/login.routes.ts'
-import { alertasRoutes } from './modules/reproducao/alertas.routes.ts'
 import { casalRoutes, partoRoutes } from './modules/reproducao/reproducao.routes.ts'
 import { rotaNaoEncontrada, tratadorDeErros } from './shared/middlewares/erro.ts'
 
@@ -59,7 +58,6 @@ export function criarApp({
   app.use('/api/partos', partoRoutes)
   app.use('/api/quadro', quadroRoutes)
   app.use('/api/caixas', caixaRoutes)
-  app.use('/api/alertas', alertasRoutes)
 
   app.use(rotaNaoEncontrada)
   app.use(tratadorDeErros)

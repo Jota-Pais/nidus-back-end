@@ -31,16 +31,10 @@ describe('traducao do char(1) - contrato secao 1.1', () => {
     expect(dic.termos).toHaveLength(codigos.length)
   })
 
-  it('usa exatamente os termos de tipos.ts e estados.ts do front', () => {
+  it('usa exatamente os termos que o front espera', () => {
     // Renomear qualquer um destes quebra o front sem quebrar build. Estao escritos a mao
-    // de proposito: e a copia que o teste compara
-    expect(estadoCaixa.termos).toEqual([
-      'em_reproducao',
-      'parcialmente_comprometida',
-      'totalmente_comprometida',
-      'preparada_para_envio',
-      'expedida',
-    ])
+    // de proposito: e a copia que o teste compara. As colunas seguem a ordem do kanban
+    expect(estadoCaixa.termos).toEqual(['livres', 'pre_reserva', 'estoque', 'reserva', 'enviado'])
     expect(finalidadeCaixa.termos).toEqual(['reproducao', 'maternidade', 'recria', 'expedicao'])
     expect(grauCerteza.termos).toEqual(['confirmado', 'previsto', 'projetado'])
     expect(perfil.termos).toEqual(['pesquisador', 'tecnico', 'gestor'])
@@ -58,7 +52,7 @@ describe('traducao do char(1) - contrato secao 1.1', () => {
   })
 
   it('exigirCodigo vira 404 no envelope do contrato', () => {
-    expect(exigirCodigo(estadoCaixa, 'em_reproducao', 'Estado')).toBe('R')
+    expect(exigirCodigo(estadoCaixa, 'livres', 'Estado')).toBe('R')
     expect(() => exigirCodigo(estadoCaixa, 'em_ferias', 'Estado')).toThrowError(
       expect.objectContaining({ status: 404, codigo: 'NAO_ENCONTRADO' }),
     )

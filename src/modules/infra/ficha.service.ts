@@ -1,7 +1,8 @@
-// secao 6 do contrato: ficha da posicao. RF-INF-04 + RF-REP-02
+// A ficha da caixa: dados da caixa, o casal, os partos (1 a 5) e o historico
 
 import { casalFicha, cicloFicha } from '../reproducao/reproducao.service.ts'
 import { naoEncontrado } from '../../shared/erros.ts'
+import { codigoDaPosicao } from './endereco.ts'
 import { prisma } from '../../shared/prisma.ts'
 import {
   codigoDaEspecie,
@@ -10,7 +11,7 @@ import {
   finalidadeCaixa,
 } from '../../shared/traducao.ts'
 
-async function ciclosDoCasal(idCasal: number) {
+async function partosDoCasal(idCasal: number) {
   const partos = await prisma.parto.findMany({
     where: { idCasal },
     orderBy: { ordem: 'asc' },
@@ -90,7 +91,7 @@ export async function montarFicha(idCaixa: number) {
   const caixa = await prisma.caixa.findUnique({
     where: { id: idCaixa },
     include: {
-      estante: { select: { id: true, numeroVisivel: true, sala: true } },
+      estante: { select: { id: true, numeroVisivel: true, sala: true, colunas: true } },
       especie: { select: { nome: true } },
       // O casal mais recente, ativo ou nao: a ficha e historico (RF-REP-08)
       casais: { orderBy: { dtFormacao: 'desc' }, take: 1, select: { id: true } },
@@ -103,12 +104,12 @@ export async function montarFicha(idCaixa: number) {
 
   const casalRecente = caixa.casais[0]
 
-  const [casal, ciclos, eventos] =
+  const [casal, partos, eventos] =
     casalRecente === undefined
       ? [null, [], []]
       : await Promise.all([
           casalFicha(casalRecente.id),
-          ciclosDoCasal(casalRecente.id),
+          partosDoCasal(casalRecente.id),
           eventosDoCasal(casalRecente.id),
         ])
 
@@ -122,7 +123,7 @@ export async function montarFicha(idCaixa: number) {
         face: dicFace.paraApi(String(caixa.face)),
         linha: caixa.linha,
         coluna: caixa.coluna,
-        codigo: caixa.codigo,
+        codigo: codigoDaPosicao(caixa.face, caixa.linha, caixa.coluna, caixa.estante.colunas),
       },
       especie: codigoDaEspecie(caixa.especie.nome),
       // Vem do casal - infra.caixa nao tem linhagem no MVP (mesma leitura de montarGrade).
@@ -133,7 +134,7 @@ export async function montarFicha(idCaixa: number) {
       ativa: caixa.ativa,
     },
     casal,
-    ciclos,
+    partos,
     eventos,
   }
 }

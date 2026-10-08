@@ -1,16 +1,19 @@
-// RF-INF-02: o endereco como aparece na etiqueta fisica da estante
+// O endereco como aparece na etiqueta fisica da estante, no formato da spec do cliente:
+// face + linha + letra da coluna. ex: F1A (frontal, linha 1, coluna A), T2K (traseira)
 
 const ALFABETO = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
-/** A letra de uma posicao. face e 1 ou 2, 'coluna' e 1-based. */
+/**
+ * A letra de uma posicao. face e 1 ou 2, 'coluna' e 1-based. A traseira continua a
+ * sequencia da frontal: ALESCO M1 e A-H na frontal e I-P na traseira
+ */
 export function letraDaPosicao(face: number, coluna: number, colunas: number): string {
   const indiceDaLetra = (face - 1) * colunas + (coluna - 1)
   const letra = ALFABETO[indiceDaLetra]
 
   if (letra === undefined) {
-    // Topologia grande demais para o alfabeto (faces x colunas > 26). Nenhum dos
-    // quatro modelos do Anexo A chega perto mas cadastro e livre (RF-INF-01) e
-    // falhar alto e melhor que gerar 'undefined1' na etiqueta
+    // Topologia grande demais para o alfabeto (faces x colunas > 26): falhar alto e melhor
+    // que gerar 'undefined1' na etiqueta
     throw new Error(
       `Topologia sem letra disponivel: face ${face}, coluna ${coluna} de ${colunas} (indice ${indiceDaLetra}).`,
     )
@@ -19,14 +22,14 @@ export function letraDaPosicao(face: number, coluna: number, colunas: number): s
   return letra
 }
 
-/** O codigo completo da posicao. ex: C3 */
+/** O codigo completo da posicao. ex: F1A */
 export function codigoDaPosicao(
   face: number,
   linha: number,
   coluna: number,
   colunas: number,
 ): string {
-  return `${letraDaPosicao(face, coluna, colunas)}${linha}`
+  return `${face === 1 ? 'F' : 'T'}${linha}${letraDaPosicao(face, coluna, colunas)}`
 }
 
 /**

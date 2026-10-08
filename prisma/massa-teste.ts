@@ -29,7 +29,7 @@
 // mexer aqui.
 
 import { codigoDaPosicao } from '../src/modules/infra/endereco.ts'
-import { somarDias } from '../src/modules/infra/proximoEvento.ts'
+import { somarDias } from '../src/modules/reproducao/cadeiaTemporal.ts'
 // A oferta sai da MESMA funcao que a API usa, e nao de uma conta repetida aqui:
 // massa que calcule oferta diferente do servico pede compromisso que o trigger
 // recusa, e o erro apareceria como "a massa esta quebrada".

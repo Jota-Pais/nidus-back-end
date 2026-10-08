@@ -30,13 +30,16 @@ function dicionario<Codigo extends string, Termo extends string>(
   }
 }
 
-/** infra.caixa.estado - as 5 colunas do quadro (RF-CIC-01) */
+/**
+ * infra.caixa.estado - as 5 colunas do kanban, com os nomes e na ordem da spec do cliente
+ * (secao 1.9). A ordem aqui e a ordem das colunas na tela.
+ */
 export const estadoCaixa = dicionario({
-  R: 'em_reproducao',
-  P: 'parcialmente_comprometida',
-  T: 'totalmente_comprometida',
-  E: 'preparada_para_envio',
-  X: 'expedida',
+  R: 'livres',
+  P: 'pre_reserva',
+  E: 'estoque',
+  T: 'reserva',
+  X: 'enviado',
 } as const)
 
 /** infra.caixa.finalidade */
