@@ -1,6 +1,6 @@
-// erros de dominio no formato do contrato (docs/contrato-api.md, secao 2).
+// Erros de dominio, sempre no envelope { erro: { codigo, mensagem, ... } }
 
-/** Codigos da tabela 2.1 do contrato. Acrescentar aqui exige alterar o contrato nos dois repos. */
+/** O front trata qualquer 409 mostrando a mensagem, sem precisar conhecer cada codigo */
 export type CodigoErro =
   | 'VALIDACAO'
   | 'NAO_AUTENTICADO'
@@ -14,6 +14,8 @@ export type CodigoErro =
   | 'TRANSICAO_CONTRARIA_COMPROMISSO'
   | 'PRAZO_INVIAVEL'
   | 'SEQUENCIA_INVALIDA'
+  | 'PROJETO_INVALIDO'
+  | 'SOLICITACAO_JA_ALOCADA'
   | 'ERRO_INTERNO'
 
 export type ExtrasErro = {

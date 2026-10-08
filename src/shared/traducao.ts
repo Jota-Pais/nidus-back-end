@@ -42,6 +42,28 @@ export const estadoCaixa = dicionario({
   X: 'enviado',
 } as const)
 
+/** demanda.solicitacao.status */
+export const statusSolicitacao = dicionario({
+  RA: 'rascunho',
+  EN: 'enviada',
+  AN: 'em_analise',
+  AP: 'aprovada',
+  RE: 'recusada',
+  AJ: 'ajustada',
+  AT: 'em_atendimento',
+  CO: 'concluida',
+  CA: 'cancelada',
+} as const)
+
+/** demanda.solicitacao.regime - entrega unica ou cronograma */
+export const cronograma = dicionario({
+  U: 'unica',
+  S: 'semanal',
+  Q: 'quinzenal',
+  M: 'mensal',
+  A: 'avulsas',
+} as const)
+
 /** infra.caixa.finalidade */
 export const finalidadeCaixa = dicionario({
   R: 'reproducao',
