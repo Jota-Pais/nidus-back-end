@@ -1,5 +1,6 @@
-// Secao 7 do contrato: casais e eventos reprodutivos
+// Casais e o registro dos partos: nascimento, eutanasia de selecao e desmame
 
+import { codigoDaPosicao } from '../infra/endereco.ts'
 import {
   calcularDisponibilidade,
   expectativaNaData,
@@ -17,7 +18,7 @@ function paraData(iso: string): Date {
   return new Date(`${iso}T00:00:00.000Z`)
 }
 
-type ParametroCompleto = ParametroVigente & {
+export type ParametroCompleto = ParametroVigente & {
   gestacaoDias: number
   aleitamentoDias: number
   intervaloCicloDias: number
@@ -28,7 +29,7 @@ type ParametroCompleto = ParametroVigente & {
  * Todas as versoes do parametro de uma especie - RN-01 pede o historico inteiro, nao so o
  * vigente hoje.
  */
-async function parametrosDaEspecie(idEspecie: number): Promise<ParametroCompleto[]> {
+export async function parametrosDaEspecie(idEspecie: number): Promise<ParametroCompleto[]> {
   const parametros = await prisma.parametroBiologico.findMany({ where: { idEspecie } })
 
   // parametroNaData compara vigencia como string ISO (contrato secao 1); o Prisma devolve
@@ -181,30 +182,65 @@ export async function cicloFicha(idParto: number) {
   }
 }
 
+export type PosicaoVazia = {
+  idEstante: number
+  face: 'frontal' | 'traseira'
+  linha: number
+  coluna: number
+}
+
 export type NovoCasal = {
-  idCaixa: number
+  idCaixa?: number | undefined
+  posicao?: PosicaoVazia | undefined
   idLinhagem: number
   grupoMacho: string
   grupoFemea: string
   dtFormacao: string
 }
 
-/** POST /api/casais - RF-REP-01. Forma o casal e ja cria o ciclo 1 */
-export async function formarCasal(dados: NovoCasal) {
-  const caixa = await prisma.caixa.findUnique({ where: { id: dados.idCaixa } })
+/** A estante e a caixa que ocupa a posicao (null se vazia). Recusa posicao fora da estante */
+async function caixaNaPosicao(posicao: PosicaoVazia) {
+  const estante = await prisma.estante.findUnique({ where: { id: posicao.idEstante } })
 
-  if (caixa === null) {
-    throw naoEncontrado('Caixa')
+  if (estante === null) {
+    throw naoEncontrado('Estante')
   }
 
+  const face = posicao.face === 'frontal' ? 1 : 2
+
+  if (face > estante.faces || posicao.linha > estante.linhas || posicao.coluna > estante.colunas) {
+    throw new ErroDeAplicacao(400, 'VALIDACAO', 'Esta posicao nao existe na estante.')
+  }
+
+  const caixa = await prisma.caixa.findFirst({
+    where: { idEstante: estante.id, face, linha: posicao.linha, coluna: posicao.coluna, ativa: true },
+  })
+
+  return { estante, face, caixa }
+}
+
+/**
+ * POST /api/casais - forma o casal e ja cria o 1o parto, com as datas previstas. Numa posicao
+ * vazia a caixa nasce na mesma transacao, com a especie da linhagem escolhida
+ */
+export async function formarCasal(dados: NovoCasal) {
   const linhagem = await prisma.linhagem.findUnique({ where: { id: dados.idLinhagem } })
 
   if (linhagem === null) {
     throw naoEncontrado('Linhagem')
   }
 
-  // contrato secao 7: "400 VALIDACAO - linhagem que nao pertence a especie da caixa"
-  if (linhagem.idEspecie !== caixa.idEspecie) {
+  const naPosicao = dados.posicao === undefined ? null : await caixaNaPosicao(dados.posicao)
+  const caixaExistente =
+    dados.idCaixa === undefined
+      ? (naPosicao?.caixa ?? null)
+      : await prisma.caixa.findUnique({ where: { id: dados.idCaixa } })
+
+  if (dados.idCaixa !== undefined && caixaExistente === null) {
+    throw naoEncontrado('Caixa')
+  }
+
+  if (caixaExistente !== null && linhagem.idEspecie !== caixaExistente.idEspecie) {
     throw new ErroDeAplicacao(400, 'VALIDACAO', 'Confira os campos destacados.', {
       campos: { idLinhagem: 'Esta linhagem nao pertence a especie da caixa.' },
     })
@@ -212,7 +248,7 @@ export async function formarCasal(dados: NovoCasal) {
 
   await validarParGenetico(dados.grupoMacho, dados.grupoFemea)
 
-  const parametros = await parametrosDaEspecie(caixa.idEspecie)
+  const parametros = await parametrosDaEspecie(linhagem.idEspecie)
   const parametro = parametroNaData(parametros, {
     idLinhagem: linhagem.id,
     em: dados.dtFormacao,
@@ -220,18 +256,43 @@ export async function formarCasal(dados: NovoCasal) {
 
   if (parametro === undefined) {
     throw new Error(
-      `Sem parametro_biologico vigente em ${dados.dtFormacao} para a especie ${caixa.idEspecie}.`,
+      `Sem parametro_biologico vigente em ${dados.dtFormacao} para a especie ${linhagem.idEspecie}.`,
     )
   }
 
-  const ciclo1 = calcularCicloInicial(dados.dtFormacao, parametro)
+  const parto1 = calcularCicloInicial(dados.dtFormacao, parametro)
 
-  // RN-03 (um casal ativo por caixa) fica por conta do indice parcial. Se disparar,
-  // 'erros-do-banco.ts' traduz.
+  // um casal ativo por caixa fica por conta do indice parcial do banco. Se disparar,
+  // 'erros-do-banco.ts' traduz
   const casal = await prisma.$transaction(async (tx) => {
+    let idCaixa = caixaExistente?.id
+
+    if (idCaixa === undefined && naPosicao !== null && dados.posicao !== undefined) {
+      const criada = await tx.caixa.create({
+        data: {
+          idEstante: naPosicao.estante.id,
+          face: naPosicao.face,
+          linha: dados.posicao.linha,
+          coluna: dados.posicao.coluna,
+          codigo: codigoDaPosicao(
+            naPosicao.face,
+            dados.posicao.linha,
+            dados.posicao.coluna,
+            naPosicao.estante.colunas,
+          ),
+          idEspecie: linhagem.idEspecie,
+        },
+      })
+      idCaixa = criada.id
+    }
+
+    if (idCaixa === undefined) {
+      throw naoEncontrado('Caixa')
+    }
+
     const criado = await tx.casal.create({
       data: {
-        idCaixa: dados.idCaixa,
+        idCaixa,
         idLinhagem: dados.idLinhagem,
         grupoMacho: dados.grupoMacho,
         grupoFemea: dados.grupoFemea,
@@ -244,9 +305,9 @@ export async function formarCasal(dados: NovoCasal) {
       data: {
         idCasal: criado.id,
         ordem: 1,
-        dtAcasalamento: paraData(ciclo1.dtAcasalamento),
-        dtPartoPrevisto: paraData(ciclo1.dtPartoPrevisto),
-        dtDesmamePrevisto: paraData(ciclo1.dtDesmamePrevisto),
+        dtAcasalamento: paraData(parto1.dtAcasalamento),
+        dtPartoPrevisto: paraData(parto1.dtPartoPrevisto),
+        dtDesmamePrevisto: paraData(parto1.dtDesmamePrevisto),
         grauCerteza: 'J',
       },
     })
@@ -254,7 +315,7 @@ export async function formarCasal(dados: NovoCasal) {
     return criado
   })
 
-  return casalFicha(casal.id)
+  return { idCaixa: casal.idCaixa, casal: await casalFicha(casal.id) }
 }
 
 export type Nascimento = {

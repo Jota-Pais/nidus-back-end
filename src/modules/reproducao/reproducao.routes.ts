@@ -30,17 +30,30 @@ const dataCalendario = z.iso.date('Data invalida. Use aaaa-mm-dd.')
 const grupoGenetico = z.enum(['A', 'B', 'C', 'D', 'E'])
 
 /**
- * Corpo de POST /api/casais. RN-02 (o par esta na rotacao) e RF-DEM-02 (linhagem da
- * especie da caixa) sao responsabilidade do servico - o Zod garante so a forma, nao consulta o
- * banco
+ * Corpo de POST /api/casais. O casal vai numa caixa que ja existe ('idCaixa') ou numa posicao
+ * vazia da estante ('posicao'), e ai a caixa nasce junto. Par genetico e linhagem da especie
+ * certa sao conferidos no servico - o Zod garante so a forma
  */
-export const casalNovo = z.object({
-  idCaixa: z.number().int().positive(),
-  idLinhagem: z.number().int().positive(),
-  grupoMacho: grupoGenetico,
-  grupoFemea: grupoGenetico,
-  dtFormacao: dataCalendario,
-})
+export const casalNovo = z
+  .object({
+    idCaixa: z.number().int().positive().optional(),
+    posicao: z
+      .object({
+        idEstante: z.number().int().positive(),
+        face: z.enum(['frontal', 'traseira']),
+        linha: z.number().int().positive(),
+        coluna: z.number().int().positive(),
+      })
+      .optional(),
+    idLinhagem: z.number().int().positive(),
+    grupoMacho: grupoGenetico,
+    grupoFemea: grupoGenetico,
+    dtFormacao: dataCalendario,
+  })
+  .refine((dados) => (dados.idCaixa === undefined) !== (dados.posicao === undefined), {
+    path: ['idCaixa'],
+    error: 'Informe a caixa ou a posicao vazia, uma das duas.',
+  })
 
 casalRoutes.post('/', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const dados = casalNovo.parse(req.body)

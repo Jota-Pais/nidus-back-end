@@ -73,6 +73,24 @@ describe('validacao de entrada - formacao de casal', () => {
     expect(resultado.success).toBe(false)
   })
 
+  it('aceita formar casal numa posicao vazia, sem caixa', () => {
+    const { idCaixa: _semCaixa, ...semCaixa } = corpoValido
+    const resultado = casalNovo.safeParse({
+      ...semCaixa,
+      posicao: { idEstante: 2, face: 'traseira', linha: 1, coluna: 3 },
+    })
+
+    expect(resultado.success).toBe(true)
+  })
+
+  it('recusa caixa e posicao juntas, e recusa nenhuma das duas', () => {
+    const posicao = { idEstante: 2, face: 'frontal', linha: 1, coluna: 1 }
+    const { idCaixa: _semCaixa, ...semCaixa } = corpoValido
+
+    expect(casalNovo.safeParse({ ...corpoValido, posicao }).success).toBe(false)
+    expect(casalNovo.safeParse(semCaixa).success).toBe(false)
+  })
+
   it('recusa data fora do formato aaaa-mm-dd', () => {
     const resultado = casalNovo.safeParse({ ...corpoValido, dtFormacao: '02/05/2026' })
 
