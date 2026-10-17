@@ -1,6 +1,12 @@
-// RN-05: datas previstas sao derivadas, nunca digitadas
+// Cadeia temporal dos partos (spec do cliente, secao 1.13): as datas previstas sao
+// derivadas, nunca digitadas
 
-import { somarDias } from '../infra/proximoEvento.ts'
+/** Soma dias a uma data 'aaaa-mm-dd', em UTC, devolvendo 'aaaa-mm-dd' */
+export function somarDias(data: string, dias: number): string {
+  const calendario = new Date(`${data}T00:00:00.000Z`)
+  calendario.setUTCDate(calendario.getUTCDate() + dias)
+  return calendario.toISOString().slice(0, 10)
+}
 
 export type ParametroDoCiclo = {
   gestacaoDias: number
@@ -14,7 +20,7 @@ export type CicloCalculado = {
   dtDesmamePrevisto: string
 }
 
-/** O primeiro ciclo do casal, a partir do acasalamento digitado (RF-REP-01) */
+/** O primeiro ciclo do casal, a partir do acasalamento digitado */
 export function calcularCicloInicial(
   dtFormacao: string,
   parametro: ParametroDoCiclo,
@@ -28,7 +34,7 @@ export function calcularCicloInicial(
   }
 }
 
-/** O ciclo seguinte, a partir do parto REAL do anterior (RF-REP-03). */
+/** O ciclo seguinte, a partir do parto REAL do anterior. */
 export function calcularProximoCiclo(
   dtPartoRealAnterior: string,
   parametro: ParametroDoCiclo,

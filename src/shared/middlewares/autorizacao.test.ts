@@ -3,9 +3,8 @@ import { ErroDeAplicacao } from '../erros.ts'
 import type { Perfil } from '../traducao.ts'
 import { OPERA_A_COLONIA, exigirPerfil, usuarioDaRequisicao } from './autorizacao.ts'
 
-// RF-ACS-02 - a decisao de autorizacao. Testada aqui, no middleware e nao pela
-// rota: nao envolve HTTP, banco nem Express de verdade e e a regra que toda rota do
-// contrato reusa
+// A decisao de autorizacao. Testada aqui, no middleware e nao pela
+// rota: nao envolve HTTP, banco nem Express de verdade e e a regra que toda rota reusa
 
 const requisicao = (perfil?: Perfil) => ({
   usuario:
@@ -61,7 +60,7 @@ describe('exigirPerfil', () => {
   })
 
   it('OPERA_A_COLONIA deixa o pesquisador fora, por desenho', () => {
-    // RF-ACS-03: ele nao enxerga a colonia - recebe menos dados, nao os mesmos dados filtrados
+    // Ele nao enxerga a colonia - recebe menos dados, nao os mesmos dados filtrados
     // no cliente
     expect(OPERA_A_COLONIA).toEqual(['tecnico', 'gestor'])
     expect(rodar(exigirPerfil(...OPERA_A_COLONIA), 'pesquisador').erro?.status).toBe(403)

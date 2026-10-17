@@ -3,7 +3,7 @@
 import { randomBytes } from 'node:crypto'
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 
-/** Nome do cookie - contrato secao 1.2. Uma fonte so, para rota e middleware nao divergirem */
+/** Nome do cookie. Uma fonte so, para rota e middleware nao divergirem */
 export const NOME_COOKIE = 'nidus_sessao'
 
 const sessoes = new Map<string, UsuarioDaSessao>()

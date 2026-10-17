@@ -1,4 +1,4 @@
-// secao 3 do contrato: sessao. RF-ACS-01
+// Sessao: login e senha mestra
 
 import { ErroDeAplicacao } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
@@ -28,7 +28,7 @@ function paraUsuarioDaSessao(usuario: {
 
 /**
  * A senha mestra ativa, se existir. login.senha_mestra nao e requisito do cliente
- * nem tabela do MVP ('docs/modelo-de-dados.md') - e decisao operacional do time,
+ * nem tabela do MVP - e decisao operacional do time,
  * guardada como hash (nunca texto puro, mesma regra de usuario.hash_senha)
  */
 async function senhaMestraConfere(senha: string): Promise<boolean> {

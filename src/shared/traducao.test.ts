@@ -11,7 +11,7 @@ import {
   perfil,
 } from './traducao.ts'
 
-// A secao 1.1 do contrato e uma tabela de equivalencia. O que pode dar
+// Cada dicionario e uma tabela de equivalencia. O que pode dar
 // errado aqui e silencioso e caro: um termo diferente do que o front espera
 // nao quebra build nenhum dos dois lados - so aparece como tela vazia
 const dicionarios = [
@@ -22,7 +22,7 @@ const dicionarios = [
   { nome: 'face', dic: face, codigos: ['1', '2'] },
 ]
 
-describe('traducao do char(1) - contrato secao 1.1', () => {
+describe('traducao do char(1)', () => {
   it.each(dicionarios)('$nome traduz e volta sem perder nada', ({ dic, codigos }) => {
     for (const codigo of codigos) {
       expect(dic.paraBanco(dic.paraApi(codigo))).toBe(codigo)
@@ -31,16 +31,10 @@ describe('traducao do char(1) - contrato secao 1.1', () => {
     expect(dic.termos).toHaveLength(codigos.length)
   })
 
-  it('usa exatamente os termos de tipos.ts e estados.ts do front', () => {
+  it('usa exatamente os termos que o front espera', () => {
     // Renomear qualquer um destes quebra o front sem quebrar build. Estao escritos a mao
-    // de proposito: e a copia que o teste compara
-    expect(estadoCaixa.termos).toEqual([
-      'em_reproducao',
-      'parcialmente_comprometida',
-      'totalmente_comprometida',
-      'preparada_para_envio',
-      'expedida',
-    ])
+    // de proposito: e a copia que o teste compara. As colunas seguem a ordem do kanban
+    expect(estadoCaixa.termos).toEqual(['livres', 'pre_reserva', 'estoque', 'reserva', 'enviado'])
     expect(finalidadeCaixa.termos).toEqual(['reproducao', 'maternidade', 'recria', 'expedicao'])
     expect(grauCerteza.termos).toEqual(['confirmado', 'previsto', 'projetado'])
     expect(perfil.termos).toEqual(['pesquisador', 'tecnico', 'gestor'])
@@ -57,8 +51,8 @@ describe('traducao do char(1) - contrato secao 1.1', () => {
     expect(estadoCaixa.paraBanco('em_ferias')).toBeUndefined()
   })
 
-  it('exigirCodigo vira 404 no envelope do contrato', () => {
-    expect(exigirCodigo(estadoCaixa, 'em_reproducao', 'Estado')).toBe('R')
+  it('exigirCodigo vira 404 no envelope de erro da API', () => {
+    expect(exigirCodigo(estadoCaixa, 'livres', 'Estado')).toBe('R')
     expect(() => exigirCodigo(estadoCaixa, 'em_ferias', 'Estado')).toThrowError(
       expect.objectContaining({ status: 404, codigo: 'NAO_ENCONTRADO' }),
     )

@@ -14,7 +14,7 @@ describe('sessao em memoria', () => {
     expect(sessaoValida('id-que-nunca-existiu')).toBeUndefined()
   })
 
-  it('revogar e a revogacao real que decisoes-de-stack.md pede - some, nao so expira', () => {
+  it('revogar e revogacao real - some, nao so expira', () => {
     const id = criarSessao(usuario)
     revogarSessao(id)
 

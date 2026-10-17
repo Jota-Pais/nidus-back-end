@@ -2,11 +2,12 @@ import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import express, { type Express, type RequestHandler } from 'express'
 import { catalogoRoutes } from './modules/catalogo/catalogo.routes.ts'
+import { projetoRoutes, solicitacaoRoutes } from './modules/demanda/demanda.routes.ts'
 import { caixaRoutes, quadroRoutes } from './modules/infra/caixa.routes.ts'
 import { estanteRoutes } from './modules/infra/infra.routes.ts'
 import { autenticacaoPorCookie } from './modules/login/autenticacao.ts'
 import { sessaoRoutes } from './modules/login/login.routes.ts'
-import { alertasRoutes } from './modules/reproducao/alertas.routes.ts'
+import { buscaRoutes } from './modules/motor/motor.routes.ts'
 import { casalRoutes, partoRoutes } from './modules/reproducao/reproducao.routes.ts'
 import { rotaNaoEncontrada, tratadorDeErros } from './shared/middlewares/erro.ts'
 
@@ -41,7 +42,7 @@ export function criarApp({
   app.use(express.json())
   app.use(cookieParser())
 
-  // Healthcheck - contrato secao 9. Publico e a unica rota fora de /api: e por
+  // Healthcheck. Publico e a unica rota fora de /api: e por
   // ele que a Render sabe que a instancia subiu e o front sabe que ela acordou
   app.get('/saude', (_req, res) => {
     res.json({ status: 'ok', ambiente, versao })
@@ -51,7 +52,7 @@ export function criarApp({
   // req.usuario quando ha sessao e segue.
   app.use('/api', autenticacao)
 
-  // Os routers de cada modulo, todos sob /api (contrato secao 1)
+  // Os routers de cada modulo, todos sob /api
   app.use('/api/sessao', sessaoRoutes)
   app.use('/api/catalogo', catalogoRoutes)
   app.use('/api/estantes', estanteRoutes)
@@ -59,7 +60,9 @@ export function criarApp({
   app.use('/api/partos', partoRoutes)
   app.use('/api/quadro', quadroRoutes)
   app.use('/api/caixas', caixaRoutes)
-  app.use('/api/alertas', alertasRoutes)
+  app.use('/api/projetos', projetoRoutes)
+  app.use('/api/solicitacoes', solicitacaoRoutes)
+  app.use('/api/busca', buscaRoutes)
 
   app.use(rotaNaoEncontrada)
   app.use(tratadorDeErros)

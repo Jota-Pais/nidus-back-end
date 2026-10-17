@@ -1,4 +1,4 @@
-// traduz invariante recusada pelo Postgres para o codigo de erro do contrato
+// traduz invariante recusada pelo Postgres para o codigo de erro da API
 
 import { type CodigoErro, ErroDeAplicacao } from './erros.ts'
 
@@ -30,33 +30,33 @@ type Traducao = {
   mensagem: string
 }
 
-/** As invariantes que o banco cobra, com o codigo do contrato de cada uma. */
+/** As invariantes que o banco cobra, com o codigo de erro da API de cada uma. */
 const POR_INVARIANTE: Record<string, Traducao> = {
-  // unicidade parcial - RF-INF-05
+  // unicidade parcial
   caixa_uma_por_posicao: {
     codigo: 'POSICAO_OCUPADA',
     requisito: 'RF-INF-05',
     mensagem: 'Esta posicao da estante ja tem uma caixa ativa.',
   },
-  // unicidade parcial - RN-03
+  // unicidade parcial
   casal_um_ativo_por_caixa: {
     codigo: 'CAIXA_JA_TEM_CASAL_ATIVO',
     requisito: 'RN-03',
     mensagem: 'Esta caixa ja tem um casal ativo. Encerre o casal atual antes de formar outro.',
   },
-  // CHECK - RN-04
+  // CHECK
   parto_ordem_ciclo: {
     codigo: 'LIMITE_PARTOS_ATINGIDO',
     requisito: 'RN-04',
     mensagem: 'O casal ja atingiu o limite de 5 partos.',
   },
-  // trigger - RN-09, a invariante que o sistema existe para garantir
+  // trigger de disponibilidade, a invariante que o sistema existe para garantir
   'RN-09': {
     codigo: 'DISPONIBILIDADE_EXCEDIDA',
     requisito: 'RN-09',
     mensagem: 'A ninhada nao tem animais suficientes para este compromisso.',
   },
-  // FK composta - RN-02. Rede de seguranca: a mensagem rica vem da pre-validacao em
+  // FK composta do par genetico. Rede de seguranca: a mensagem rica vem da pre-validacao em
   // 'reproducao.service.ts'
   casal_grupo_macho_grupo_femea_fkey: {
     codigo: 'PAR_GENETICO_INVALIDO',
@@ -76,7 +76,7 @@ function requisitoNaMensagem(mensagem: string): string | undefined {
 }
 
 /**
- * O erro do contrato para uma invariante do banco, ou undefined se esta nao e uma
+ * O erro da API para uma invariante do banco, ou undefined se esta nao e uma
  * violacao que a API sabe nomear
  */
 export function traduzirErroDoBanco(erro: unknown): ErroDeAplicacao | undefined {
@@ -87,7 +87,7 @@ export function traduzirErroDoBanco(erro: unknown): ErroDeAplicacao | undefined 
   }
 
   // 23505 unique_violation | 23514 check_violation (inclui RAISE de
-  // trigger) | 23503 foreign_key_violation (FK composta do RN-02).
+  // trigger) | 23503 foreign_key_violation (FK composta do par genetico).
   if (
     causa.originalCode !== '23505' &&
     causa.originalCode !== '23514' &&

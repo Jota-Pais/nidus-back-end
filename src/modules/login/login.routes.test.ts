@@ -51,14 +51,14 @@ describe('GET e DELETE /api/sessao - autenticado, qualquer perfil', () => {
     expect(resposta.body.erro.codigo).toBe('NAO_AUTENTICADO')
   })
 
-  it('quem sou eu com sessao devolve o usuario, qualquer perfil - nao e RF-ACS-02 aqui', async () => {
+  it('quem sou eu com sessao devolve o usuario, qualquer perfil', async () => {
     const resposta = await request(app('pesquisador')).get('/api/sessao')
 
     expect(resposta.status).toBe(200)
     expect(resposta.body.usuario.perfil).toBe('pesquisador')
   })
 
-  it('logout sem sessao tambem devolve 401 - contrato exige autenticado', async () => {
+  it('logout sem sessao tambem devolve 401 - exige autenticado', async () => {
     const resposta = await request(app()).delete('/api/sessao')
 
     expect(resposta.status).toBe(401)

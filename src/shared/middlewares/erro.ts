@@ -3,7 +3,7 @@ import { ZodError } from 'zod'
 import { traduzirErroDoBanco } from '../erros-do-banco.ts'
 import { ErroDeAplicacao } from '../erros.ts'
 
-/** Rota inexistente devolve o envelope do contrato, nao o HTML de erro do Express. */
+/** Rota inexistente devolve o envelope de erro da API, nao o HTML de erro do Express. */
 export const rotaNaoEncontrada: RequestHandler = (req, res) => {
   res.status(404).json({
     erro: {
@@ -13,7 +13,7 @@ export const rotaNaoEncontrada: RequestHandler = (req, res) => {
   })
 }
 
-/** Um par campo -> mensagem a partir das issues do Zod, como o contrato exige em VALIDACAO. */
+/** Um par campo -> mensagem a partir das issues do Zod, exigido em VALIDACAO. */
 function camposDoZod(erro: ZodError): Record<string, string> {
   const campos: Record<string, string> = {}
 
@@ -47,8 +47,8 @@ export const tratadorDeErros: ErrorRequestHandler = (erro, req, res, next) => {
   }
 
   // Invariante recusada pelo banco: 'CHECK', unique parcial ou trigger. Sao
-  // regras de negocio que a decisao de stack 1.1 poe no Postgres de proposito -
-  // viram 409 com o codigo do contrato, nunca 500
+  // regras de negocio que ficam no Postgres de proposito -
+  // viram 409 com o codigo de erro da API, nunca 500
   const doBanco = traduzirErroDoBanco(erro)
 
   if (doBanco !== undefined) {

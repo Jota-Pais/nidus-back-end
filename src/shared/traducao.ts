@@ -1,4 +1,4 @@
-// Secao 1.1 do contrato: o 'char(1)' do banco NUNCA cruza a rede.
+// O 'char(1)' do banco NUNCA cruza a rede.
 
 import { naoEncontrado } from './erros.ts'
 
@@ -30,13 +30,38 @@ function dicionario<Codigo extends string, Termo extends string>(
   }
 }
 
-/** infra.caixa.estado - as 5 colunas do quadro (RF-CIC-01) */
+/**
+ * infra.caixa.estado - as 5 colunas do kanban, com os nomes e na ordem da spec do cliente
+ * (secao 1.9). A ordem aqui e a ordem das colunas na tela.
+ */
 export const estadoCaixa = dicionario({
-  R: 'em_reproducao',
-  P: 'parcialmente_comprometida',
-  T: 'totalmente_comprometida',
-  E: 'preparada_para_envio',
-  X: 'expedida',
+  R: 'livres',
+  P: 'pre_reserva',
+  E: 'estoque',
+  T: 'reserva',
+  X: 'enviado',
+} as const)
+
+/** demanda.solicitacao.status */
+export const statusSolicitacao = dicionario({
+  RA: 'rascunho',
+  EN: 'enviada',
+  AN: 'em_analise',
+  AP: 'aprovada',
+  RE: 'recusada',
+  AJ: 'ajustada',
+  AT: 'em_atendimento',
+  CO: 'concluida',
+  CA: 'cancelada',
+} as const)
+
+/** demanda.solicitacao.regime - entrega unica ou cronograma */
+export const cronograma = dicionario({
+  U: 'unica',
+  S: 'semanal',
+  Q: 'quinzenal',
+  M: 'mensal',
+  A: 'avulsas',
 } as const)
 
 /** infra.caixa.finalidade */
@@ -47,14 +72,14 @@ export const finalidadeCaixa = dicionario({
   E: 'expedicao',
 } as const)
 
-/** reproducao.parto.grau_certeza - RN-08 */
+/** reproducao.parto.grau_certeza */
 export const grauCerteza = dicionario({
   C: 'confirmado',
   P: 'previsto',
   J: 'projetado',
 } as const)
 
-/** login.usuario.perfil - os tres perfis do 'RF-ACS-*'. */
+/** login.usuario.perfil - os tres perfis de acesso. */
 export const perfil = dicionario({
   P: 'pesquisador',
   T: 'tecnico',
@@ -82,7 +107,7 @@ export function codigoDaEspecie(nome: string): string {
     .replace(/[^a-z0-9]+/g, '-')
 }
 
-/** Data de calendario no formato do contrato: 'aaaa-mm-dd', nunca timestamp */
+/** Data de calendario no formato da API: 'aaaa-mm-dd', nunca timestamp */
 export function dataISO(data: Date): string {
   return data.toISOString().slice(0, 10)
 }

@@ -1,8 +1,8 @@
-// RN-08 e RN-09 - quanto um parto tem para oferecer, e com que confiança
+// Quanto um parto tem para oferecer, e com que confiança
 
 import type { GrauCerteza } from '../../shared/traducao.ts'
 
-/** Quantidade por sexo. É como o contrato conta animal em todo lugar. */
+/** Quantidade por sexo. É como a API conta animal em todo lugar. */
 export type PorSexo = {
   m: number
   f: number
@@ -18,7 +18,7 @@ export type ContagemDoCiclo = {
   desmamadoF: number | null
 }
 
-/** RN-08 - o grau de certeza sai da mesma cascata da oferta. */
+/** O grau de certeza sai da mesma cascata da oferta. */
 export function calcularGrauCerteza(ciclo: ContagemDoCiclo): GrauCerteza {
   if (ciclo.desmamadoM !== null && ciclo.desmamadoF !== null) {
     return 'confirmado'
@@ -50,7 +50,7 @@ export function ofertaBruta(ciclo: ContagemDoCiclo, expectativa: PorSexo): PorSe
 
 export type Disponibilidade = {
   grauCerteza: GrauCerteza
-  /** Oferta bruta: o teto do RN-09 */
+  /** Oferta bruta: o teto do que se pode comprometer */
   oferta: PorSexo
   /** soma dos compromissos ativos */
   comprometido: PorSexo
