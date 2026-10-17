@@ -34,7 +34,7 @@ const confirmado = ciclo({
   desmamadoF: 4,
 })
 
-describe('RN-08 - os tres niveis do COALESCE', () => {
+describe('os tres niveis do COALESCE', () => {
   it('projetado: nada nasceu, a oferta e a expectativa', () => {
     expect(calcularGrauCerteza(projetado)).toBe('projetado')
     expect(ofertaBruta(projetado, expectativa)).toEqual({ m: 4, f: 4 })
@@ -62,7 +62,7 @@ describe('RN-08 - os tres niveis do COALESCE', () => {
 
 describe('selecao ausente conta zero, nao nulo', () => {
   it('ninhada nascida sem selecao registrada mantem a oferta real', () => {
-    // O erro que a leitura literal da secao 5.1 produz: 'nascido - eutanasiado' com
+    // O erro que a leitura literal da formula produz: 'nascido - eutanasiado' com
     // eutanasiado nulo vira NULO em SQL, e a oferta cairia para a expectativa PROJETADA de
     // uma ninhada que ja nasceu. O trigger do banco decidiu contar zero; aqui e igual, de
     // proposito
@@ -86,7 +86,7 @@ describe('disponibilidade liquida', () => {
   })
 
   it('separa oferta bruta de disponivel liquido', () => {
-    // Os dois numeros existem separados porque o teto do RN-09 e a oferta BRUTA.
+    // Os dois numeros existem separados porque o teto do compromisso e a oferta BRUTA.
     // Confundir os dois faz o limite valer metade
     const resultado = calcularDisponibilidade(confirmado, {
       expectativa,
@@ -108,7 +108,7 @@ describe('disponibilidade liquida', () => {
   })
 
   it('nunca devolve negativo, mesmo com registro corrigido para menos', () => {
-    // RF-REP-09 preve correcao de registro depois do compromisso firmado. A tela tem
+    // Correcao de registro pode vir depois do compromisso firmado. A tela tem
     // de ler "nada disponivel", nao "-2 machos".
     const corrigido = ciclo({ nascidoM: 5, nascidoF: 5, desmamadoM: 2, desmamadoF: 2 })
     const resultado = calcularDisponibilidade(corrigido, {
@@ -126,7 +126,7 @@ describe('disponibilidade liquida', () => {
   })
 })
 
-describe('RN-01 - expectativa vem do parametro vigente, nao de constante', () => {
+describe('expectativa vem do parametro vigente, nao de constante', () => {
   const parametros: ParametroVigente[] = [
     // vigência encerrada: valia até abril, com expectativa menor
     {
@@ -169,7 +169,7 @@ describe('RN-01 - expectativa vem do parametro vigente, nao de constante', () =>
   })
 
   it('calculo de data passada reproduz o parametro daquela epoca', () => {
-    // O coracao do RN-01. Filtrar por 'dtVigenciaFim: null' devolveria 4 e
+    // O coracao do versionamento. Filtrar por 'dtVigenciaFim: null' devolveria 4 e
     // 4, que e a resposta de hoje - e a errada para recalcular algo de
     // marco.
     expect(expectativaNaData(parametros, { idLinhagem: null, em: '2026-03-15' })).toEqual({

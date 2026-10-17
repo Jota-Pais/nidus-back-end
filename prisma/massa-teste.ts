@@ -1,32 +1,28 @@
-// Massa de demonstracao da colonia.
+// Massa de demonstracao da colonia: casais, partos e pedidos inventados para a
+// grade, o Kanban e a ficha terem o que mostrar. E ficcao; a carga real e o
+// `prisma/seed.ts`.
 //
 //   npm run db:massa
 //
-// Separada do seed de proposito: **carga inicial e dado real, massa e ficcao.**
-// O `prisma/seed.ts` carrega o Anexo A, que o cliente forneceu e vale em
-// producao; nada aqui vale - sao casais, partos e pedidos inventados para a
-// grade, o quadro e a ficha terem o que mostrar em 24/09.
-//
-// O que a massa cobre, item por item do card:
-//
+// O que a massa cobre:
 //   - uma estante densa (E-02, 42 das 50 posicoes) e uma quase vazia (E-04, 3
 //     das 40). E-01 e E-03 ficam vazias - grade vazia tambem precisa ser vista.
-//   - casais do 1o ao 5o ciclo, incluindo um no 5o parto (`RN-04`).
-//   - partos nos tres graus do `RN-08`: confirmado (desmamou), previsto
+//   - casais do 1o ao 5o ciclo, incluindo um no 5o parto (limite do casal).
+//   - partos nos tres graus de certeza: confirmado (desmamou), previsto
 //     (nasceu, desmame estimado) e projetado (nem nasceu).
-//   - uma caixa em cada um dos 5 estados do quadro.
-//   - um parto com previsao VENCIDA sem confirmacao: o alerta do `RF-REP-07`.
-//   - compromissos firmados, que fazem a caixa ser parcial ou totalmente
-//     comprometida - e que passam pelo trigger do `RN-09` no caminho.
+//   - uma caixa em cada coluna do Kanban: R livres, P pre-reserva, E estoque,
+//     T reserva, X enviado.
+//   - um parto com previsao VENCIDA sem confirmacao, o caso do alerta.
+//   - compromissos de parte ou de toda a oferta, que passam pelo trigger
+//     `compromisso_respeita_oferta` no caminho.
 //
-// As datas saem de `RN-05`, nunca digitadas soltas: parto previsto =
+// As datas saem da cadeia temporal, nunca digitadas soltas: parto previsto =
 // acasalamento + gestacao, desmame previsto = parto previsto + aleitamento,
 // acasalamento do ciclo n = parto real do ciclo n-1 + intervalo. Sao calculadas
 // a partir de HOJE, para "previsto" cair no futuro e "vencido" no passado.
 //
 // O endereco de cada caixa sai de `codigoDaPosicao`, a mesma funcao que a API
-// usa - o `CONF-07` continua num lugar so, e responder o cliente nao exige
-// mexer aqui.
+// usa - a regra do endereco fica num lugar so.
 
 import { codigoDaPosicao } from '../src/modules/infra/endereco.ts'
 import { somarDias } from '../src/modules/reproducao/cadeiaTemporal.ts'
@@ -42,7 +38,7 @@ const PROJETO_MARCA = '23080.001234/2026-11'
 const hoje = new Date().toISOString().slice(0, 10)
 const dia = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 
-/** Parametros do Anexo A. Lidos do banco para nao virarem constante aqui. */
+/** Parametros biologicos. Lidos do banco para nao virarem constante aqui. */
 type Parametros = {
   gestacaoDias: number
   aleitamentoDias: number
@@ -54,8 +50,8 @@ type Parametros = {
  * Um ciclo ja resolvido em datas, pronto para gravar.
  *
  * `desmamado`/`nascido`/`eutanasiado` nulos onde o evento nao aconteceu - e a
- * diferenca entre "vai nascer" e "nasceu" que o `RF-REP-02` manda a ficha
- * mostrar, e o que o `RN-08` usa para achar o grau de certeza.
+ * diferenca entre "vai nascer" e "nasceu" que a ficha mostra, e o que define o
+ * grau de certeza.
  */
 type CicloPlanejado = {
   ordem: number
@@ -79,8 +75,8 @@ type CicloPlanejado = {
  *
  * `fechados` e quantos ciclos ja desmamaram; o ciclo seguinte fica no estagio
  * pedido em `estagioDoUltimo`. E a unica maneira honesta de ter um casal "no 3o
- * ciclo": os dois anteriores existem, com data real, porque `RN-05` faz o
- * acasalamento de cada ciclo depender do parto real do anterior.
+ * ciclo": os dois anteriores existem, com data real, porque o acasalamento de
+ * cada ciclo depende do parto real do anterior.
  */
 function planejarCiclos(
   primeiroAcasalamento: string,
@@ -135,7 +131,7 @@ function planejarCiclos(
   return ciclos
 }
 
-/** O elenco: um casal por caixa (`RN-03`), cada um num estagio diferente. */
+/** O elenco: um casal por caixa, cada um num estagio diferente. */
 type CasalPlanejado = {
   apelido: string
   face: number
@@ -152,13 +148,13 @@ type CasalPlanejado = {
   ninhada: { nascidoM: number; nascidoF: number; eutanasiadoM: number; eutanasiadoF: number }
   /** Quanto do ciclo corrente ja esta prometido. `total` reserva a oferta toda. */
   comprometer: { m: number; f: number } | 'total' | null
-  /** Estado do quadro que esta caixa tem de exibir. */
+  /** Coluna do Kanban (`caixa.estado`) em que esta caixa tem de aparecer. */
   estado: 'R' | 'P' | 'T' | 'E' | 'X'
 }
 
 const elenco: CasalPlanejado[] = [
   {
-    // 1o ciclo, nada nasceu: oferta PROJETADA, so expectativa. Estado R.
+    // 1o ciclo, nada nasceu: oferta PROJETADA, so expectativa. R (livres).
     apelido: 'projetado no 1o ciclo',
     face: 1,
     linha: 1,
@@ -174,7 +170,7 @@ const elenco: CasalPlanejado[] = [
     estado: 'R',
   },
   {
-    // 2o ciclo, nasceu e nao desmamou: grau PREVISTO. Parte prometida -> P.
+    // 2o ciclo, nasceu e nao desmamou: grau PREVISTO. Parte prometida -> P (pre-reserva).
     apelido: 'previsto no 2o ciclo, parcialmente comprometido',
     face: 1,
     linha: 2,
@@ -190,7 +186,7 @@ const elenco: CasalPlanejado[] = [
     estado: 'P',
   },
   {
-    // 3o ciclo fechado: grau CONFIRMADO e oferta toda prometida -> T.
+    // 3o ciclo fechado: grau CONFIRMADO e oferta toda prometida -> T (reserva).
     apelido: 'confirmado no 3o ciclo, totalmente comprometido',
     face: 1,
     linha: 3,
@@ -206,7 +202,7 @@ const elenco: CasalPlanejado[] = [
     estado: 'T',
   },
   {
-    // 4o ciclo, animais separados e conferidos: preparada para envio -> E.
+    // 4o ciclo, ninhada pronta e alocada para expedicao -> E (estoque).
     apelido: 'confirmado no 4o ciclo, preparado para envio',
     face: 1,
     linha: 4,
@@ -222,7 +218,7 @@ const elenco: CasalPlanejado[] = [
     estado: 'E',
   },
   {
-    // 5o parto: `RN-04` no limite. Ja entregue -> X, e sem proximo evento.
+    // 5o parto: limite do casal. Animais ja sairam -> X (enviado), e sem proximo evento.
     apelido: 'no 5o parto (RN-04), ja expedido',
     face: 1,
     linha: 5,
@@ -238,7 +234,7 @@ const elenco: CasalPlanejado[] = [
     estado: 'X',
   },
   {
-    // O ALERTA do `RF-REP-07`: previsao de parto ja passou e ninguem confirmou.
+    // O ALERTA: previsao de parto ja passou e ninguem confirmou.
     // Sem este caso nao da para ver se o front faz o aviso gritar.
     apelido: 'previsao de parto VENCIDA sem confirmacao',
     face: 1,
@@ -296,10 +292,9 @@ async function main() {
 
   // ---------------------------------------------------------------- usuarios
   //
-  // `hashSenha` fica NULO: a coluna e anulavel de proposito (`RF-ACS-01` -
-  // quem entra so pelo SSO nao tem senha local), e escolher entre argon2 e
-  // bcrypt e do card "Login local com os tres perfis". Quem implementar aquele
-  // card grava o hash nestes tres usuarios - senha nunca em claro, nem aqui.
+  // `hashSenha` fica NULO: a coluna e anulavel (quem entra so pelo SSO nao tem
+  // senha local) e senha nunca vai em claro num script versionado. Para dar
+  // senha a um destes usuarios: `npm run db:senha -- <email> "<senha>"`.
   const usuarios = await Promise.all(
     [
       { nome: 'Beatriz Lima', email: 'pesquisador@ufsc.br', perfil: 'P' },
@@ -382,7 +377,7 @@ async function main() {
         idEspecie: especieRato.id,
         finalidade: 'R',
         // O estado entra depois dos compromissos: e consequencia deles, nao
-        // dado solto. Comeca em reproducao.
+        // dado solto. Comeca em R (livres).
         estado: 'R',
       },
     })
@@ -403,7 +398,7 @@ async function main() {
         grupoFemea: papel.grupoFemea,
         identificacao: `${papel.grupoMacho}${papel.grupoFemea}`,
         dtFormacao: dia(ciclos[0]?.dtAcasalamento ?? hoje),
-        // `RN-04`: no 5o parto confirmado o casal encerra.
+        // No 5o parto confirmado o casal encerra.
         ativo: !(papel.fechados + 1 >= parametros.maxPartoCasal && papel.estagio === 'confirmado'),
         ...(papel.fechados + 1 >= parametros.maxPartoCasal && papel.estagio === 'confirmado'
           ? {
@@ -448,7 +443,7 @@ async function main() {
       const oferta = ofertaBruta(cicloCorrente, expectativa)
       const pedido = papel.comprometer === 'total' ? oferta : papel.comprometer
 
-      // Passa pelo trigger `compromisso_respeita_oferta` do `RN-09`. Se algum
+      // Passa pelo trigger `compromisso_respeita_oferta`. Se algum
       // dia esta linha estourar, e a massa pedindo mais do que a ninhada tem -
       // e o banco esta certo em recusar.
       await prisma.compromisso.create({

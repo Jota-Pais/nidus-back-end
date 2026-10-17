@@ -5,9 +5,9 @@ import { criarApp } from '../../app.ts'
 import type { Perfil } from '../../shared/traducao.ts'
 import { casalNovo } from './reproducao.routes.ts'
 
-// RF-ACS-02 e validacao de forma - o mesmo recorte de
-// 'infra.routes.test.ts'. Sucesso com dado real (RN-02, RN-03, RN-04, RN-05
-// encadeados) e teste de integracao, junto da massa de teste da colonia
+// Autorizacao e validacao de forma - o mesmo recorte de
+// 'infra.routes.test.ts'. Sucesso com dado real (as regras
+// encadeadas) e teste de integracao, junto da massa de teste da colonia
 
 const como = (perfil: Perfil): RequestHandler => (req, _res, next) => {
   req.usuario = { id: 1, nome: 'Teste', email: 'teste@ufsc.br', perfil }
@@ -25,7 +25,7 @@ const corpoValido = {
   dtFormacao: '2026-05-02',
 }
 
-describe('autorizacao das rotas de reproducao - RF-ACS-02', () => {
+describe('autorizacao das rotas de reproducao', () => {
   it('formar casal sem sessao devolve 401', async () => {
     const resposta = await request(app()).post('/api/casais').send(corpoValido)
 
@@ -33,7 +33,7 @@ describe('autorizacao das rotas de reproducao - RF-ACS-02', () => {
     expect(resposta.body.erro.codigo).toBe('NAO_AUTENTICADO')
   })
 
-  it('pesquisador nao forma casal - RF-ACS-03, ele nao enxerga a colonia', async () => {
+  it('pesquisador nao forma casal - ele nao enxerga a colonia', async () => {
     const resposta = await request(app('pesquisador')).post('/api/casais').send(corpoValido)
 
     expect(resposta.status).toBe(403)
@@ -108,7 +108,7 @@ describe('validacao de entrada - formacao de casal', () => {
 })
 
 describe('desmame aceita idCaixaRecria nulo, mas nao omitido', () => {
-  it('nulo explicito passa pela forma (D-03: destino em aberto)', async () => {
+  it('nulo explicito passa pela forma (destino em aberto)', async () => {
     // sem sessao de proposito: so confere que o Zod aceita a forma antes de chegar ao
     // servico (que devolveria 401 aqui, e nao e o que se testa).
     const resposta = await request(app())

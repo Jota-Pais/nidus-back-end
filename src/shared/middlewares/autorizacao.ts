@@ -1,4 +1,4 @@
-// RF-ACS-02: autorizacao decidida no servidor, sempre
+// Autorizacao decidida no servidor, sempre
 
 import type { RequestHandler } from 'express'
 import { naoAutenticado, semPermissao } from '../erros.ts'
@@ -47,8 +47,8 @@ export function usuarioDaRequisicao(req: { usuario?: UsuarioDaSessao }): Usuario
 
 /**
  * Perfis que operam a colonia. E a lista que quase toda rota de infraestrutura e de
- * reproducao repete no contrato ("tecnico, gestor"), e o pesquisador fica fora por
- * desenho: RF-ACS-03 diz que ele nao enxerga a colonia - recebe menos dados, nao os
+ * reproducao repete ("tecnico, gestor"), e o pesquisador fica fora por
+ * desenho: ele nao enxerga a colonia - recebe menos dados, nao os
  * mesmos dados filtrados no cliente.
  */
 export const OPERA_A_COLONIA: Perfil[] = ['tecnico', 'gestor']

@@ -20,7 +20,7 @@ export type CicloCalculado = {
   dtDesmamePrevisto: string
 }
 
-/** O primeiro ciclo do casal, a partir do acasalamento digitado (RF-REP-01) */
+/** O primeiro ciclo do casal, a partir do acasalamento digitado */
 export function calcularCicloInicial(
   dtFormacao: string,
   parametro: ParametroDoCiclo,
@@ -34,7 +34,7 @@ export function calcularCicloInicial(
   }
 }
 
-/** O ciclo seguinte, a partir do parto REAL do anterior (RF-REP-03). */
+/** O ciclo seguinte, a partir do parto REAL do anterior. */
 export function calcularProximoCiclo(
   dtPartoRealAnterior: string,
   parametro: ParametroDoCiclo,

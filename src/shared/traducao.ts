@@ -1,4 +1,4 @@
-// Secao 1.1 do contrato: o 'char(1)' do banco NUNCA cruza a rede.
+// O 'char(1)' do banco NUNCA cruza a rede.
 
 import { naoEncontrado } from './erros.ts'
 
@@ -72,14 +72,14 @@ export const finalidadeCaixa = dicionario({
   E: 'expedicao',
 } as const)
 
-/** reproducao.parto.grau_certeza - RN-08 */
+/** reproducao.parto.grau_certeza */
 export const grauCerteza = dicionario({
   C: 'confirmado',
   P: 'previsto',
   J: 'projetado',
 } as const)
 
-/** login.usuario.perfil - os tres perfis do 'RF-ACS-*'. */
+/** login.usuario.perfil - os tres perfis de acesso. */
 export const perfil = dicionario({
   P: 'pesquisador',
   T: 'tecnico',
@@ -107,7 +107,7 @@ export function codigoDaEspecie(nome: string): string {
     .replace(/[^a-z0-9]+/g, '-')
 }
 
-/** Data de calendario no formato do contrato: 'aaaa-mm-dd', nunca timestamp */
+/** Data de calendario no formato da API: 'aaaa-mm-dd', nunca timestamp */
 export function dataISO(data: Date): string {
   return data.toISOString().slice(0, 10)
 }

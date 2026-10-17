@@ -1,15 +1,10 @@
-// Carga inicial do Nidus - Anexo A dos requisitos.
+// Carga inicial do Nidus: grava os valores de `prisma/dados-iniciais.ts`.
 //
 //   npm run db:seed
 //
-// IDEMPOTENTE de proposito: roda quantas vezes quiser sem duplicar nada. E o
-// que permite chamar depois de cada `migrate reset` e no banco que os outros
-// tres integrantes compartilham, sem combinar horario.
-//
-// Onde ha unique natural o insert e `upsert`. Onde nao ha (parametro, tolerancia
-// e estante nao tem chave unica no schema do MVP), e busca-antes-de-criar pela
-// chave natural do dado - de proposito, para nao inventar constraint que a
-// modelagem nao decidiu.
+// IDEMPOTENTE: roda quantas vezes quiser sem duplicar nada. Onde ha unique
+// natural o insert e `upsert`; onde nao ha (parametro, tolerancia e estante),
+// busca pela chave natural do dado antes de criar.
 //
 // Carga inicial e dado real. Massa de demonstracao e ficcao e mora em
 // `prisma/massa-teste.ts`, separada.

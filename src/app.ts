@@ -42,7 +42,7 @@ export function criarApp({
   app.use(express.json())
   app.use(cookieParser())
 
-  // Healthcheck - contrato secao 9. Publico e a unica rota fora de /api: e por
+  // Healthcheck. Publico e a unica rota fora de /api: e por
   // ele que a Render sabe que a instancia subiu e o front sabe que ela acordou
   app.get('/saude', (_req, res) => {
     res.json({ status: 'ok', ambiente, versao })
@@ -52,7 +52,7 @@ export function criarApp({
   // req.usuario quando ha sessao e segue.
   app.use('/api', autenticacao)
 
-  // Os routers de cada modulo, todos sob /api (contrato secao 1)
+  // Os routers de cada modulo, todos sob /api
   app.use('/api/sessao', sessaoRoutes)
   app.use('/api/catalogo', catalogoRoutes)
   app.use('/api/estantes', estanteRoutes)

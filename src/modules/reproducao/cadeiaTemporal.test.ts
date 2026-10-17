@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { calcularCicloInicial, calcularProximoCiclo } from './cadeiaTemporal.ts'
 
-// Anexo A: gestacao 23d, aleitamento 22d, intervalo 6d
+// gestacao 23d, aleitamento 22d, intervalo 6d
 const parametro = { gestacaoDias: 23, aleitamentoDias: 22, intervaloCicloDias: 6 }
 
-describe('RN-05 - ciclo inicial, a partir do acasalamento digitado', () => {
+describe('ciclo inicial, a partir do acasalamento digitado', () => {
   it('deriva parto e desmame previstos, e o acasalamento e o proprio digitado', () => {
     const ciclo = calcularCicloInicial('2026-05-02', parametro)
 
@@ -23,7 +23,7 @@ describe('RN-05 - ciclo inicial, a partir do acasalamento digitado', () => {
   })
 })
 
-describe('RN-05 - proximo ciclo, a partir do parto REAL do anterior', () => {
+describe('proximo ciclo, a partir do parto REAL do anterior', () => {
   it('acasalamento do ciclo n+1 sai do parto real, nao do previsto', () => {
     // Parto real atrasou 3 dias em relacao ao previsto (25/05) - o proximo ciclo tem de
     // partir do que aconteceu, nao do que se esperava

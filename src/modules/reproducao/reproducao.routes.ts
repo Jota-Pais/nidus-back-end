@@ -14,9 +14,9 @@ import {
 } from './reproducao.service.ts'
 
 /**
- * Contrato secao 7. Dois routers porque a URL do contrato tem duas raizes -
+ * Dois routers porque a URL tem duas raizes -
  * '/api/casais' e /api/partos - e um 'parto' nao pertence a um casal na
- * rota (RF-CIC-02: quadro e ficha abrem pelo idCaixa/idParto, nunca
+ * rota (quadro e ficha abrem pelo idCaixa/idParto, nunca
  * navegando 'casal -> parto' na URL).
  */
 export const casalRoutes = Router()
@@ -24,7 +24,7 @@ export const partoRoutes = Router()
 
 const idNaRota = z.object({ id: z.coerce.number().int().positive() })
 
-/** contrato secao 1: 'aaaa-mm-dd', nunca timestamp para data de calendario. */
+/** 'aaaa-mm-dd', nunca timestamp para data de calendario. */
 const dataCalendario = z.iso.date('Data invalida. Use aaaa-mm-dd.')
 
 const grupoGenetico = z.enum(['A', 'B', 'C', 'D', 'E'])
@@ -99,7 +99,7 @@ partoRoutes.post('/:id/selecao', exigirPerfil(...OPERA_A_COLONIA), async (req, r
   res.json(await registrarSelecao(id, dados, usuarioDaRequisicao(req).id))
 })
 
-/** idCaixaRecria nulo e explicito, nunca omitido (contrato secao 1, D-03) */
+/** idCaixaRecria nulo e explicito, nunca omitido (destino em aberto) */
 const desmame = z.object({
   dtDesmameReal: dataCalendario,
   desmamadoM: z.number().int().min(0),

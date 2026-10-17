@@ -11,7 +11,7 @@ import {
   perfil,
 } from './traducao.ts'
 
-// A secao 1.1 do contrato e uma tabela de equivalencia. O que pode dar
+// Cada dicionario e uma tabela de equivalencia. O que pode dar
 // errado aqui e silencioso e caro: um termo diferente do que o front espera
 // nao quebra build nenhum dos dois lados - so aparece como tela vazia
 const dicionarios = [
@@ -22,7 +22,7 @@ const dicionarios = [
   { nome: 'face', dic: face, codigos: ['1', '2'] },
 ]
 
-describe('traducao do char(1) - contrato secao 1.1', () => {
+describe('traducao do char(1)', () => {
   it.each(dicionarios)('$nome traduz e volta sem perder nada', ({ dic, codigos }) => {
     for (const codigo of codigos) {
       expect(dic.paraBanco(dic.paraApi(codigo))).toBe(codigo)
@@ -51,7 +51,7 @@ describe('traducao do char(1) - contrato secao 1.1', () => {
     expect(estadoCaixa.paraBanco('em_ferias')).toBeUndefined()
   })
 
-  it('exigirCodigo vira 404 no envelope do contrato', () => {
+  it('exigirCodigo vira 404 no envelope de erro da API', () => {
     expect(exigirCodigo(estadoCaixa, 'livres', 'Estado')).toBe('R')
     expect(() => exigirCodigo(estadoCaixa, 'em_ferias', 'Estado')).toThrowError(
       expect.objectContaining({ status: 404, codigo: 'NAO_ENCONTRADO' }),

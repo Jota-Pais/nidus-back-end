@@ -5,13 +5,13 @@ import { exigirPerfil, usuarioDaRequisicao } from '../../shared/middlewares/auto
 import { autenticar } from './login.service.ts'
 import { NOME_COOKIE, revogarSessao } from './sessao.ts'
 
-/** Contrato secao 3. So esta rota fica fora de 'exigirPerfil': e como a sessao nasce */
+/** So esta rota fica fora de 'exigirPerfil': e como a sessao nasce */
 export const sessaoRoutes = Router()
 
 /**
  * 'SameSite=None; Secure' so em produção - em desenvolvimento ('http://') o
  * navegador descarta cookie Secure fora de HTTPS, e o login pararia de
- * funcionar em localhost (decisoes-de-stack.md §2.1, "o detalhe que morde")
+ * funcionar em localhost
  */
 const atributosCookie = {
   httpOnly: true,
@@ -22,7 +22,7 @@ const atributosCookie = {
 
 const opcoesCookie = {
   ...atributosCookie,
-  // 12h, um turno - o contrato nao fixa duracao, so o mecanismo (secao 1.2)
+  // 12h, um turno
   maxAge: 12 * 60 * 60_000,
 }
 

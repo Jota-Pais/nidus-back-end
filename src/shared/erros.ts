@@ -19,11 +19,11 @@ export type CodigoErro =
   | 'ERRO_INTERNO'
 
 export type ExtrasErro = {
-  /** ID do requisito violado. Preencher sempre que houver: RN-06, RF-CIC-03 */
+  /** ID do requisito violado, quando houver */
   requisito?: string
   /** Mensagem por campo. Obrigatorio em VALIDACAO. */
   campos?: Record<string, string>
-  /** dado extra que o contrato preveja para aquele codigo - dataMinima em PRAZO_INVIAVEL */
+  /** dado extra daquele codigo - dataMinima em PRAZO_INVIAVEL */
   [chave: string]: unknown
 }
 
@@ -44,7 +44,7 @@ export class ErroDeAplicacao extends Error {
 export const naoAutenticado = () =>
   new ErroDeAplicacao(401, 'NAO_AUTENTICADO', 'Faca login para continuar.')
 
-/** 403 - autenticado mas o perfil nao alcanca o recurso (RF-ACS-02). */
+/** 403 - autenticado mas o perfil nao alcanca o recurso. */
 export const semPermissao = () =>
   new ErroDeAplicacao(403, 'SEM_PERMISSAO', 'Seu perfil nao tem acesso a esta operacao.', {
     requisito: 'RF-ACS-02',
@@ -55,7 +55,7 @@ export const naoEncontrado = (oQue: string) =>
   new ErroDeAplicacao(404, 'NAO_ENCONTRADO', `${oQue} nao encontrado.`)
 
 /**
- * 409 - regra de negocio violada. No contrato todo 409 e regra: o front pode
+ * 409 - regra de negocio violada. Na API todo 409 e regra: o front pode
  * tratar qualquer um deles mostrando a mensagem, sem conhecer cada codigo.
  */
 export const erroDeRegra = (codigo: CodigoErro, mensagem: string, extras: ExtrasErro = {}) =>

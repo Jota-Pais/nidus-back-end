@@ -18,7 +18,7 @@ async function partosDoCasal(idCasal: number) {
     select: { id: true },
   })
 
-  // No maximo 5 (RN-04): N+1 aqui e uma ficha aberta por vez, nao uma lista
+  // No maximo 5 partos por casal: N+1 aqui e uma ficha aberta por vez, nao uma lista
   return Promise.all(partos.map((parto) => cicloFicha(parto.id)))
 }
 
@@ -93,7 +93,7 @@ export async function montarFicha(idCaixa: number) {
     include: {
       estante: { select: { id: true, numeroVisivel: true, sala: true, colunas: true } },
       especie: { select: { nome: true } },
-      // O casal mais recente, ativo ou nao: a ficha e historico (RF-REP-08)
+      // O casal mais recente, ativo ou nao: a ficha e historico
       casais: { orderBy: { dtFormacao: 'desc' }, take: 1, select: { id: true } },
     },
   })

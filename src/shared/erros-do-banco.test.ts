@@ -79,8 +79,8 @@ const trigger = (mensagem: string) => ({
   },
 })
 
-describe('invariante do banco vira o 409 do contrato', () => {
-  it('RN-09 - compromisso acima da oferta vira DISPONIBILIDADE_EXCEDIDA', () => {
+describe('invariante do banco vira 409', () => {
+  it('compromisso acima da oferta vira DISPONIBILIDADE_EXCEDIDA', () => {
     // A invariante que o sistema existe para garantir.
     const traduzido = traduzirErroDoBanco(
       trigger('RN-09: o parto 8 oferta 4 machos e ja teria 6 comprometidos'),
@@ -93,7 +93,7 @@ describe('invariante do banco vira o 409 do contrato', () => {
 
   it('preserva a mensagem do trigger, que traz os numeros do caso', () => {
     // O banco explica melhor que qualquer texto generico: diz o parto, a oferta e o
-    // total que ficaria. E mensagem para exibir ao usuario (contrato §2)
+    // total que ficaria. E mensagem para exibir ao usuario
     const traduzido = traduzirErroDoBanco(
       trigger('RN-09: o parto 8 oferta 4 machos e ja teria 6 comprometidos'),
     )
@@ -101,7 +101,7 @@ describe('invariante do banco vira o 409 do contrato', () => {
     expect(traduzido?.message).toBe('RN-09: o parto 8 oferta 4 machos e ja teria 6 comprometidos')
   })
 
-  it('RF-INF-05 - duas caixas na mesma posicao vira POSICAO_OCUPADA', () => {
+  it('duas caixas na mesma posicao vira POSICAO_OCUPADA', () => {
     const traduzido = traduzirErroDoBanco(unique('caixa_uma_por_posicao', 'caixa'))
 
     expect(traduzido?.status).toBe(409)
@@ -109,21 +109,21 @@ describe('invariante do banco vira o 409 do contrato', () => {
     expect(traduzido?.extras.requisito).toBe('RF-INF-05')
   })
 
-  it('RN-03 - segundo casal ativo na caixa vira CAIXA_JA_TEM_CASAL_ATIVO', () => {
+  it('segundo casal ativo na caixa vira CAIXA_JA_TEM_CASAL_ATIVO', () => {
     const traduzido = traduzirErroDoBanco(unique('casal_um_ativo_por_caixa', 'casal'))
 
     expect(traduzido?.codigo).toBe('CAIXA_JA_TEM_CASAL_ATIVO')
     expect(traduzido?.extras.requisito).toBe('RN-03')
   })
 
-  it('RN-04 - sexto parto vira LIMITE_PARTOS_ATINGIDO', () => {
+  it('sexto parto vira LIMITE_PARTOS_ATINGIDO', () => {
     const traduzido = traduzirErroDoBanco(check('parto_ordem_ciclo', 'parto'))
 
     expect(traduzido?.codigo).toBe('LIMITE_PARTOS_ATINGIDO')
     expect(traduzido?.extras.requisito).toBe('RN-04')
   })
 
-  it('RN-02 - FK composta recusada vira PAR_GENETICO_INVALIDO (rede de seguranca)', () => {
+  it('FK composta recusada vira PAR_GENETICO_INVALIDO (rede de seguranca)', () => {
     // O caminho normal e o pre-check em reproducao.service.ts, que da a mensagem rica com os
     // pares validos. Isto so cobre a corrida: par desativado entre o pre-check e o insert
     const traduzido = traduzirErroDoBanco(fk('casal_grupo_macho_grupo_femea_fkey', 'casal'))
@@ -151,7 +151,7 @@ describe('o que NAO deve virar 409', () => {
   })
 
   it('FK sem constraint mapeada continua sem traducao', () => {
-    // 23503 (FK) so traduz a unica composta que o contrato nomeia (RN-02,
+    // 23503 (FK) so traduz a unica composta mapeada (par genetico,
     // acima). Qualquer outra FK quebrada e bug de programacao, e 23502 (not
     // null) nem chega a ser considerado - nenhum dos dois deve virar 409.
     expect(traduzirErroDoBanco(fk('casal_id_caixa_fkey', 'casal'))).toBeUndefined()

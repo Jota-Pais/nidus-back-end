@@ -6,7 +6,7 @@ import type { Perfil } from '../../shared/traducao.ts'
 import { capacidadeDerivada } from './infra.service.ts'
 import { estanteNova } from './infra.routes.ts'
 
-// RF-ACS-02 - autorizacao decidida no servidor. E o que este arquivo cobra
+// Autorizacao decidida no servidor. E o que este arquivo cobra
 
 const como = (perfil: Perfil): RequestHandler => (req, _res, next) => {
   req.usuario = { id: 1, nome: 'Teste', email: 'teste@ufsc.br', perfil }
@@ -16,7 +16,7 @@ const como = (perfil: Perfil): RequestHandler => (req, _res, next) => {
 const app = (perfil?: Perfil) =>
   criarApp(perfil === undefined ? {} : { autenticacao: como(perfil) })
 
-describe('autorizacao das rotas de infraestrutura - RF-ACS-02', () => {
+describe('autorizacao das rotas de infraestrutura', () => {
   it('sem sessao devolve 401, nao 403', async () => {
     // A ordem importa: 403 aqui contaria a quem nem esta logado que o recurso existe
     const resposta = await request(app()).get('/api/estantes')
@@ -26,7 +26,7 @@ describe('autorizacao das rotas de infraestrutura - RF-ACS-02', () => {
   })
 
   it('pesquisador nao enxerga a colonia - 403 com o requisito no envelope', async () => {
-    // RF-ACS-03: ele recebe MENOS dados, nao os mesmos filtrados no cliente
+    // Ele recebe MENOS dados, nao os mesmos filtrados no cliente
     const resposta = await request(app('pesquisador')).get('/api/estantes')
 
     expect(resposta.status).toBe(403)
@@ -41,7 +41,7 @@ describe('autorizacao das rotas de infraestrutura - RF-ACS-02', () => {
   })
 
   it('cadastrar estante e so do gestor - tecnico recebe 403', async () => {
-    // RF-INF-01: cadastro de modelo novo e operacao de admin
+    // Cadastro de modelo novo e operacao de admin
     const resposta = await request(app('tecnico')).post('/api/estantes').send({
       sala: 'Sala 2',
       fabricante: 'ALESCO',
@@ -75,8 +75,8 @@ describe('validacao de entrada das rotas de infraestrutura', () => {
   })
 
   it('recusa topologia que estoura o alfabeto do endereco', async () => {
-    // 2 faces x 20 colunas = 40 letras e o alfabeto tem 26. RF-INF-02 ficaria
-    // sem endereco para gerar.
+    // 2 faces x 20 colunas = 40 letras e o alfabeto tem 26. Sobraria coluna
+    // sem letra no endereco.
     const resposta = await request(app('gestor')).post('/api/estantes').send({
       sala: 'Sala 2',
       fabricante: 'GENERICA',
@@ -121,7 +121,7 @@ describe('capacidade da estante e derivada, nunca do cliente', () => {
     expect(validado).toEqual(topologia)
   })
 
-  it('deriva faces x linhas x colunas, como os quatro modelos do Anexo A', () => {
+  it('deriva faces x linhas x colunas, como os quatro modelos de estante', () => {
     expect(capacidadeDerivada(2, 8, 8)).toBe(128)
     expect(capacidadeDerivada(2, 5, 5)).toBe(50)
     expect(capacidadeDerivada(2, 8, 7)).toBe(112)

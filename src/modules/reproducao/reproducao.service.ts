@@ -26,13 +26,13 @@ export type ParametroCompleto = ParametroVigente & {
 }
 
 /**
- * Todas as versoes do parametro de uma especie - RN-01 pede o historico inteiro, nao so o
+ * Todas as versoes do parametro de uma especie - o historico inteiro, nao so o
  * vigente hoje.
  */
 export async function parametrosDaEspecie(idEspecie: number): Promise<ParametroCompleto[]> {
   const parametros = await prisma.parametroBiologico.findMany({ where: { idEspecie } })
 
-  // parametroNaData compara vigencia como string ISO (contrato secao 1); o Prisma devolve
+  // parametroNaData compara vigencia como string ISO; o Prisma devolve
   // '@db.Date' como Date, entao a traducao entra aqui, uma vez so e nao em cada chamador
   return parametros.map((parametro) => ({
     ...parametro,
@@ -42,7 +42,7 @@ export async function parametrosDaEspecie(idEspecie: number): Promise<ParametroC
 }
 
 /**
- * RN-02 - valida o par ANTES do insert, para dar a mensagem rica que o contrato exemplifica
+ * Valida o par genetico ANTES do insert, para dar a mensagem rica
  * ("com macho do grupo A, so e valido o grupo B").
  */
 async function validarParGenetico(grupoMacho: string, grupoFemea: string): Promise<void> {
@@ -77,7 +77,7 @@ async function validarParGenetico(grupoMacho: string, grupoFemea: string): Promi
 }
 
 /**
- * O objeto casal da ficha (contrato secao 6), reaproveitado pelo cadastro, pelo
+ * O objeto casal da ficha, reaproveitado pelo cadastro, pelo
  * encerramento e pela ficha da posicao (infra/ficha.service.ts).
  */
 export async function casalFicha(idCasal: number) {
@@ -87,7 +87,7 @@ export async function casalFicha(idCasal: number) {
       linhagem: { select: { nome: true, idEspecie: true } },
       // O ciclo corrente e o de maior ordem - mesma leitura de montarGrade
       // ('infra.service.ts') porque so existe uma linha aberta por vez ('cadeiaTemporal.ts') e
-      // as duas telas nao podem divergir (RF-CIC-02)
+      // as duas telas nao podem divergir
       partos: { orderBy: { ordem: 'desc' }, take: 1, select: { ordem: true } },
     },
   })
@@ -119,7 +119,7 @@ export async function casalFicha(idCasal: number) {
 }
 
 /**
- * O objeto ciclo da ficha (contrato secao 6), com a disponibilidade liquida do RN-09.
+ * O objeto ciclo da ficha, com a disponibilidade liquida.
  * Reaproveitado pelos tres eventos e pela ficha da posicao
  */
 export async function cicloFicha(idParto: number) {
@@ -127,8 +127,8 @@ export async function cicloFicha(idParto: number) {
     where: { id: idParto },
     include: {
       casal: { select: { idLinhagem: true, linhagem: { select: { idEspecie: true } } } },
-      // So os ativos entram na soma - RNF-06 mantem o cancelado na tabela, mas
-      // ele nao pesa mais no comprometido (mesma regra do trigger RN-09)
+      // So os ativos entram na soma - o cancelado fica na tabela, mas
+      // ele nao pesa mais no comprometido (mesma regra do trigger do banco)
       compromissos: { where: { dtCancelamento: null }, select: { qtdM: true, qtdF: true } },
     },
   })
@@ -324,7 +324,7 @@ export type Nascimento = {
   nascidoF: number
 }
 
-/** POST /api/partos/:id/nascimento - RF-REP-03 */
+/** POST /api/partos/:id/nascimento */
 export async function registrarNascimento(idParto: number, dados: Nascimento, idUsuario: number) {
   const parto = await prisma.parto.findUnique({
     where: { id: idParto },
@@ -359,7 +359,7 @@ export async function registrarNascimento(idParto: number, dados: Nascimento, id
         dtPartoReal: paraData(dados.dtPartoReal),
         nascidoM: dados.nascidoM,
         nascidoF: dados.nascidoF,
-        // RF-REP-03: a oferta passa de projetada para prevista
+        // a oferta passa de projetada para prevista
         grauCerteza: 'P',
         idUsuarioParto: idUsuario,
         dtRegistroParto: new Date(),
@@ -367,7 +367,7 @@ export async function registrarNascimento(idParto: number, dados: Nascimento, id
     })
 
     if (parto.ordem >= parametro.maxPartoCasal) {
-      // RN-04: no ultimo parto confirmado o casal encerra sozinho.
+      // No ultimo parto confirmado o casal encerra sozinho.
       await tx.casal.update({
         where: { id: parto.idCasal },
         data: {
@@ -405,7 +405,7 @@ export type Selecao = {
   eutanasiadoF: number
 }
 
-/** POST /api/partos/:id/selecao - RF-REP-04 */
+/** POST /api/partos/:id/selecao */
 export async function registrarSelecao(idParto: number, dados: Selecao, idUsuario: number) {
   const parto = await prisma.parto.findUnique({ where: { id: idParto } })
 
@@ -446,7 +446,7 @@ export type Desmame = {
   idCaixaRecria: number | null
 }
 
-/** POST /api/partos/:id/desmame - RF-REP-05. A partir daqui o estoque e confirmado */
+/** POST /api/partos/:id/desmame. A partir daqui o estoque e confirmado */
 export async function registrarDesmame(idParto: number, dados: Desmame, idUsuario: number) {
   const parto = await prisma.parto.findUnique({ where: { id: idParto } })
 
@@ -487,7 +487,7 @@ export type Encerramento = {
   motivo: string
 }
 
-/** POST /api/casais/:id/encerramento - RF-REP-08. RNF-06: nada e apagado, so encerra */
+/** POST /api/casais/:id/encerramento - nada e apagado, so encerra */
 export async function encerrarCasal(idCasal: number, dados: Encerramento) {
   const casal = await prisma.casal.findUnique({ where: { id: idCasal } })
 

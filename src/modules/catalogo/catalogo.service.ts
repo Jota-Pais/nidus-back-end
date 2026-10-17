@@ -1,4 +1,4 @@
-// secao 4 do contrato: todo o dado de referencia numa chamada so
+// Catalogo: todo o dado de referencia numa chamada so
 
 import { prisma } from '../../shared/prisma.ts'
 import { codigoDaEspecie, dataISO } from '../../shared/traducao.ts'
@@ -33,7 +33,7 @@ export async function montarCatalogo() {
       select: { grupoMacho: true, grupoFemea: true },
     }),
 
-    // Vigente = sem data de fim (RN-01: o parametro e versionado e o passado continua no banco
+    // Vigente = sem data de fim (o parametro e versionado e o passado continua no banco
     // para o calculo antigo seguir reproduzivel)
     prisma.parametroBiologico.findMany({
       where: { dtVigenciaFim: null },
@@ -47,7 +47,7 @@ export async function montarCatalogo() {
     }),
 
     // modelo de estante tambem nao e tabela no MVP: os quatro modelos sao as topologias
-    // distintas ja cadastradas. RF-INF-01 - um quinto entra por cadastro, nao por deploy.
+    // distintas ja cadastradas. Um quinto entra por cadastro, nao por deploy.
     prisma.estante.findMany({
       distinct: ['fabricante', 'modelo'],
       orderBy: [{ fabricante: 'asc' }, { modelo: 'asc' }],
