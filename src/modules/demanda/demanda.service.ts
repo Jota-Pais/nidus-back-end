@@ -159,7 +159,12 @@ export async function alocarSolicitacao(
   }
 
   // so a enviada recebe caixas. O codigo so grava enviada e aprovada; os outros status do
-  // dicionario continuam aparecendo na lista, mas nenhum vira aprovada por aqui
+  // dicionario continuam aparecendo na lista, mas nenhum vira aprovada por aqui.
+  // A aprovada e o caso comum (dois tecnicos, ou dois cliques em Alocar) e diz o que houve
+  if (solicitacao.status === 'AP') {
+    throw erroDeRegra('SOLICITACAO_JA_ALOCADA', `A solicitacao #${idSolicitacao} ja foi alocada.`)
+  }
+
   if (solicitacao.status !== 'EN') {
     throw erroDeRegra(
       'SOLICITACAO_JA_ALOCADA',

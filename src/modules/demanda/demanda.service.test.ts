@@ -25,6 +25,18 @@ describe('alocacao so de solicitacao enviada', () => {
     )
   })
 
+  it('a aprovada diz que ja foi alocada; os outros status, que nao aguardam alocacao', async () => {
+    banco.solicitacao = { id: 7, status: 'AP', remessas: [] }
+    await expect(alocarSolicitacao(7, itens, tecnica)).rejects.toThrow(
+      'A solicitacao #7 ja foi alocada.',
+    )
+
+    banco.solicitacao = { id: 7, status: 'AT', remessas: [] }
+    await expect(alocarSolicitacao(7, itens, tecnica)).rejects.toThrow(
+      'A solicitacao #7 nao esta aguardando alocacao.',
+    )
+  })
+
   it('a enviada passa da conferencia do status', async () => {
     // Sem remessa, para no 404 da remessa, que vem depois da conferencia - e antes de
     // qualquer parto ser lido
