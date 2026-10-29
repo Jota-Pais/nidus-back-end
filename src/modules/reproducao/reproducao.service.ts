@@ -11,7 +11,6 @@ import { calcularCicloInicial, calcularProximoCiclo } from './cadeiaTemporal.ts'
 import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { dataISO } from '../../shared/traducao.ts'
-import { grauCerteza as dicGrauCerteza } from '../../shared/traducao.ts'
 
 /** 'aaaa-mm-dd' -> meia-noite UTC, como o resto do projeto grava data de calendario */
 function paraData(iso: string): Date {
@@ -82,25 +81,12 @@ async function validarParGenetico(grupoMacho: string, grupoFemea: string): Promi
 export async function casalFicha(idCasal: number) {
   const casal = await prisma.casal.findUnique({
     where: { id: idCasal },
-    include: {
-      linhagem: { select: { nome: true, idEspecie: true } },
-      // O ciclo corrente e o de maior ordem - mesma leitura de montarGrade
-      // ('infra.service.ts') porque so existe uma linha aberta por vez ('cadeiaTemporal.ts') e
-      // as duas telas nao podem divergir
-      partos: { orderBy: { ordem: 'desc' }, take: 1, select: { ordem: true } },
-    },
+    include: { linhagem: { select: { nome: true } } },
   })
 
   if (casal === null) {
     throw naoEncontrado('Casal')
   }
-
-  const parametros = await parametrosDaEspecie(casal.linhagem.idEspecie)
-  const maxCiclos =
-    parametroNaData(parametros, {
-      idLinhagem: casal.idLinhagem,
-      em: dataISO(casal.dtFormacao),
-    })?.maxPartoCasal ?? 5
 
   return {
     id: casal.id,
@@ -110,10 +96,7 @@ export async function casalFicha(idCasal: number) {
     linhagem: casal.linhagem.nome,
     dtFormacao: dataISO(casal.dtFormacao),
     ativo: casal.ativo,
-    cicloAtual: casal.partos[0]?.ordem ?? 0,
-    maxCiclos,
     dtEncerramento: casal.dtEncerramento === null ? null : dataISO(casal.dtEncerramento),
-    motivoEncerramento: casal.motivoEncerramento,
   }
 }
 
@@ -174,8 +157,6 @@ export async function cicloFicha(idParto: number) {
     dtDesmameReal: parto.dtDesmameReal === null ? null : dataISO(parto.dtDesmameReal),
     desmamadoM: parto.desmamadoM,
     desmamadoF: parto.desmamadoF,
-    idCaixaRecria: parto.idCaixaRecria,
-    grauCerteza: dicGrauCerteza.paraApi(parto.grauCerteza),
     disponivel: disponibilidade.disponivel,
     comprometido: disponibilidade.comprometido,
   }

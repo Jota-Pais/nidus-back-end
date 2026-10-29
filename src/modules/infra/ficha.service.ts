@@ -4,12 +4,7 @@ import { casalFicha, cicloFicha } from '../reproducao/reproducao.service.ts'
 import { naoEncontrado } from '../../shared/erros.ts'
 import { codigoDaPosicao } from './endereco.ts'
 import { prisma } from '../../shared/prisma.ts'
-import {
-  codigoDaEspecie,
-  estadoCaixa,
-  face as dicFace,
-  finalidadeCaixa,
-} from '../../shared/traducao.ts'
+import { codigoDaEspecie, estadoCaixa } from '../../shared/traducao.ts'
 
 async function partosDoCasal(idCasal: number) {
   const partos = await prisma.parto.findMany({
@@ -91,7 +86,7 @@ export async function montarFicha(idCaixa: number) {
   const caixa = await prisma.caixa.findUnique({
     where: { id: idCaixa },
     include: {
-      estante: { select: { id: true, numeroVisivel: true, sala: true, colunas: true } },
+      estante: { select: { numeroVisivel: true, sala: true, colunas: true } },
       especie: { select: { nome: true } },
       // O casal mais recente, ativo ou nao: a ficha e historico
       casais: { orderBy: { dtFormacao: 'desc' }, take: 1, select: { id: true } },
@@ -117,21 +112,15 @@ export async function montarFicha(idCaixa: number) {
     caixa: {
       id: caixa.id,
       endereco: {
-        idEstante: caixa.estante.id,
         numeroVisivel: caixa.estante.numeroVisivel,
         sala: caixa.estante.sala,
-        face: dicFace.paraApi(String(caixa.face)),
-        linha: caixa.linha,
-        coluna: caixa.coluna,
         codigo: codigoDaPosicao(caixa.face, caixa.linha, caixa.coluna, caixa.estante.colunas),
       },
       especie: codigoDaEspecie(caixa.especie.nome),
       // Vem do casal - infra.caixa nao tem linhagem no MVP (mesma leitura de montarGrade).
       // Mostra mesmo com o casal encerrado: a ficha e historico.
       linhagem: casal?.linhagem ?? null,
-      finalidade: finalidadeCaixa.paraApi(caixa.finalidade),
       estado: estadoCaixa.paraApi(caixa.estado),
-      ativa: caixa.ativa,
     },
     casal,
     partos,
