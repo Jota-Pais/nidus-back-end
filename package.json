@@ -5,7 +5,7 @@
   "description": "API e regras de negocio do Nidus - CPMR/UFSC",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
