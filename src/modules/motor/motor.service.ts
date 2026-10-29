@@ -39,7 +39,6 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
     where: {
       idEspecie,
       ativa: true,
-      finalidade: 'R',
       // reserva e enviado ja estao comprometidas: so livres, pre-reserva e estoque
       estado: { in: ['R', 'P', 'E'] },
       ...(pedido.excluir && pedido.excluir.length > 0 ? { id: { notIn: pedido.excluir } } : {}),

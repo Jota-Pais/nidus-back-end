@@ -6,7 +6,6 @@ import {
   estadoCaixa,
   exigirCodigo,
   face,
-  finalidadeCaixa,
   hojeISO,
   paraData,
   perfil,
@@ -17,7 +16,6 @@ import {
 // nao quebra build nenhum dos dois lados - so aparece como tela vazia
 const dicionarios = [
   { nome: 'estadoCaixa', dic: estadoCaixa, codigos: ['R', 'P', 'T', 'E', 'X'] },
-  { nome: 'finalidadeCaixa', dic: finalidadeCaixa, codigos: ['R', 'M', 'C', 'E'] },
   { nome: 'perfil', dic: perfil, codigos: ['P', 'T', 'G'] },
   { nome: 'face', dic: face, codigos: ['1', '2'] },
   { nome: 'cronograma', dic: cronograma, codigos: ['U', 'S', 'Q', 'M'] },
@@ -36,7 +34,6 @@ describe('traducao do char(1)', () => {
     // Renomear qualquer um destes quebra o front sem quebrar build. Estao escritos a mao
     // de proposito: e a copia que o teste compara. As colunas seguem a ordem do kanban
     expect(estadoCaixa.termos).toEqual(['livres', 'pre_reserva', 'estoque', 'reserva', 'enviado'])
-    expect(finalidadeCaixa.termos).toEqual(['reproducao', 'maternidade', 'recria', 'expedicao'])
     expect(perfil.termos).toEqual(['pesquisador', 'tecnico', 'gestor'])
     expect(face.termos).toEqual(['frontal', 'traseira'])
     // os quatro que a rota aceita e o formulario Solicitar animais oferece

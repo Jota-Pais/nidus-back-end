@@ -13,8 +13,8 @@ export async function montarQuadro(codigoEspecie: string) {
   const idEspecie = await idDaEspecie(codigoEspecie)
 
   const caixas = await prisma.caixa.findMany({
-    // so caixa de reproducao que ja teve casal - caixa vazia nao aparece no kanban
-    where: { idEspecie, ativa: true, finalidade: 'R', casais: { some: {} } },
+    // so caixa que ja teve casal - caixa vazia nao aparece no kanban
+    where: { idEspecie, ativa: true, casais: { some: {} } },
     orderBy: [{ idEstante: 'asc' }, { face: 'asc' }, { linha: 'asc' }, { coluna: 'asc' }],
     select: {
       id: true,

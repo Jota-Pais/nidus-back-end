@@ -63,14 +63,6 @@ export const cronograma = dicionario({
   M: 'mensal',
 } as const)
 
-/** infra.caixa.finalidade */
-export const finalidadeCaixa = dicionario({
-  R: 'reproducao',
-  M: 'maternidade',
-  C: 'recria',
-  E: 'expedicao',
-} as const)
-
 /** login.usuario.perfil - os tres perfis de acesso. */
 export const perfil = dicionario({
   P: 'pesquisador',
