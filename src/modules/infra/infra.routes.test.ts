@@ -25,13 +25,12 @@ describe('autorizacao das rotas de infraestrutura', () => {
     expect(resposta.body.erro.codigo).toBe('NAO_AUTENTICADO')
   })
 
-  it('pesquisador nao enxerga a colonia - 403 com o requisito no envelope', async () => {
+  it('pesquisador nao enxerga a colonia - 403', async () => {
     // Ele recebe MENOS dados, nao os mesmos filtrados no cliente
     const resposta = await request(app('pesquisador')).get('/api/estantes')
 
     expect(resposta.status).toBe(403)
     expect(resposta.body.erro.codigo).toBe('SEM_PERMISSAO')
-    expect(resposta.body.erro.requisito).toBe('RF-ACS-02')
   })
 
   it('pesquisador tambem nao alcanca a grade', async () => {

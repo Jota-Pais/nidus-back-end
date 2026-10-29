@@ -65,7 +65,6 @@ async function validarParGenetico(grupoMacho: string, grupoFemea: string): Promi
     'PAR_GENETICO_INVALIDO',
     `O par ${grupoMacho}${grupoFemea} nao esta na rotacao permitida.`,
     {
-      requisito: 'RN-02',
       campos: {
         grupoFemea:
           femeas.length > 0
@@ -338,7 +337,7 @@ export async function registrarNascimento(idParto: number, dados: Nascimento, id
   if (parto.dtPartoReal !== null) {
     throw erroDeRegra(
       'SEQUENCIA_INVALIDA',
-      'Este parto ja tem data real registrada. Correcao de registro (RF-REP-09) ainda nao esta disponivel.',
+      'Este parto ja tem data real registrada. Correcao de registro ainda nao esta disponivel.',
     )
   }
 
@@ -373,7 +372,7 @@ export async function registrarNascimento(idParto: number, dados: Nascimento, id
         data: {
           ativo: false,
           dtEncerramento: paraData(dados.dtPartoReal),
-          motivoEncerramento: `Limite de ${parametro.maxPartoCasal} partos atingido (RN-04)`,
+          motivoEncerramento: `Limite de ${parametro.maxPartoCasal} partos atingido`,
         },
       })
       return

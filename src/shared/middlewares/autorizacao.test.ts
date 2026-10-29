@@ -38,12 +38,11 @@ describe('exigirPerfil', () => {
     expect(erro?.codigo).toBe('NAO_AUTENTICADO')
   })
 
-  it('com sessao e perfil fora da lista recusa com 403 e cita o requisito', () => {
+  it('com sessao e perfil fora da lista recusa com 403', () => {
     const { erro } = rodar(exigirPerfil('gestor'), 'tecnico')
 
     expect(erro?.status).toBe(403)
     expect(erro?.codigo).toBe('SEM_PERMISSAO')
-    expect(erro?.extras.requisito).toBe('RF-ACS-02')
   })
 
   it('deixa passar o perfil que esta na lista', () => {

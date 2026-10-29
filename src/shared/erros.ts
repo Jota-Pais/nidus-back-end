@@ -19,8 +19,6 @@ export type CodigoErro =
   | 'ERRO_INTERNO'
 
 export type ExtrasErro = {
-  /** ID do requisito violado, quando houver */
-  requisito?: string
   /** Mensagem por campo. Obrigatorio em VALIDACAO. */
   campos?: Record<string, string>
   /** dado extra daquele codigo - dataMinima em PRAZO_INVIAVEL */
@@ -46,9 +44,7 @@ export const naoAutenticado = () =>
 
 /** 403 - autenticado mas o perfil nao alcanca o recurso. */
 export const semPermissao = () =>
-  new ErroDeAplicacao(403, 'SEM_PERMISSAO', 'Seu perfil nao tem acesso a esta operacao.', {
-    requisito: 'RF-ACS-02',
-  })
+  new ErroDeAplicacao(403, 'SEM_PERMISSAO', 'Seu perfil nao tem acesso a esta operacao.')
 
 /** 404 - inexistente ou fora do alcance do perfil */
 export const naoEncontrado = (oQue: string) =>

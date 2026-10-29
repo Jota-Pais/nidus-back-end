@@ -26,7 +26,6 @@ export function causaDoBanco(erro: unknown): CausaDoBanco | undefined {
 
 type Traducao = {
   codigo: CodigoErro
-  requisito: string
   mensagem: string
 }
 
@@ -35,32 +34,28 @@ const POR_INVARIANTE: Record<string, Traducao> = {
   // unicidade parcial
   caixa_uma_por_posicao: {
     codigo: 'POSICAO_OCUPADA',
-    requisito: 'RF-INF-05',
     mensagem: 'Esta posicao da estante ja tem uma caixa ativa.',
   },
   // unicidade parcial
   casal_um_ativo_por_caixa: {
     codigo: 'CAIXA_JA_TEM_CASAL_ATIVO',
-    requisito: 'RN-03',
     mensagem: 'Esta caixa ja tem um casal ativo. Encerre o casal atual antes de formar outro.',
   },
   // CHECK
   parto_ordem_ciclo: {
     codigo: 'LIMITE_PARTOS_ATINGIDO',
-    requisito: 'RN-04',
     mensagem: 'O casal ja atingiu o limite de 5 partos.',
   },
-  // trigger de disponibilidade, a invariante que o sistema existe para garantir
+  // trigger de disponibilidade, a invariante que o sistema existe para garantir. O RAISE nao
+  // informa o nome do trigger, entao a chave e o prefixo que ele poe na mensagem
   'RN-09': {
     codigo: 'DISPONIBILIDADE_EXCEDIDA',
-    requisito: 'RN-09',
     mensagem: 'A ninhada nao tem animais suficientes para este compromisso.',
   },
   // FK composta do par genetico. Rede de seguranca: a mensagem rica vem da pre-validacao em
   // 'reproducao.service.ts'
   casal_grupo_macho_grupo_femea_fkey: {
     codigo: 'PAR_GENETICO_INVALIDO',
-    requisito: 'RN-02',
     mensagem: 'Este par nao esta na rotacao genetica permitida.',
   },
 }
@@ -70,9 +65,16 @@ function constraintNaMensagem(mensagem: string): string | undefined {
   return /violates (?:check|unique|foreign key) constraint "([^"]+)"/.exec(mensagem)?.[1]
 }
 
-/** Acha o prefixo de requisito de uma mensagem levantada por trigger nosso */
-function requisitoNaMensagem(mensagem: string): string | undefined {
+/** Acha o prefixo ('RN-09') de uma mensagem levantada por trigger nosso */
+function prefixoDoTrigger(mensagem: string): string | undefined {
   return /^(R[NF]-[A-Z]*-?\d+):/.exec(mensagem)?.[1]
+}
+
+/** O texto do trigger sem o prefixo, que nao diz nada ao usuario */
+function semPrefixo(mensagem: string, prefixo: string): string {
+  const texto = mensagem.slice(prefixo.length + 1).trim()
+
+  return texto.charAt(0).toUpperCase() + texto.slice(1)
 }
 
 /**
@@ -97,11 +99,9 @@ export function traduzirErroDoBanco(erro: unknown): ErroDeAplicacao | undefined 
   }
 
   const mensagemDoBanco = causa.originalMessage ?? ''
+  const prefixo = prefixoDoTrigger(mensagemDoBanco)
 
-  const chave =
-    causa.constraint?.index ??
-    constraintNaMensagem(mensagemDoBanco) ??
-    requisitoNaMensagem(mensagemDoBanco)
+  const chave = causa.constraint?.index ?? constraintNaMensagem(mensagemDoBanco) ?? prefixo
 
   const traducao = chave === undefined ? undefined : POR_INVARIANTE[chave]
 
@@ -112,12 +112,9 @@ export function traduzirErroDoBanco(erro: unknown): ErroDeAplicacao | undefined 
   // Mensagem levantada por trigger nosso ja e em portugues e traz os numeros do caso;
   // mensagem gerada pelo Postgres ("duplicate key value violates...") e para log, nao para
   // usuario
-  const doTrigger = requisitoNaMensagem(mensagemDoBanco) !== undefined
-
   return new ErroDeAplicacao(
     409,
     traducao.codigo,
-    doTrigger ? mensagemDoBanco : traducao.mensagem,
-    { requisito: traducao.requisito },
+    prefixo === undefined ? traducao.mensagem : semPrefixo(mensagemDoBanco, prefixo),
   )
 }

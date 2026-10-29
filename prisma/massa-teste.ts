@@ -219,7 +219,7 @@ const elenco: CasalPlanejado[] = [
   },
   {
     // 5o parto: limite do casal. Animais ja sairam -> X (enviado), e sem proximo evento.
-    apelido: 'no 5o parto (RN-04), ja expedido',
+    apelido: 'no 5o parto (limite do casal), ja expedido',
     face: 1,
     linha: 5,
     coluna: 1,
@@ -403,7 +403,7 @@ async function main() {
         ...(papel.fechados + 1 >= parametros.maxPartoCasal && papel.estagio === 'confirmado'
           ? {
               dtEncerramento: dia(ciclos.at(-1)?.dtDesmameReal ?? hoje),
-              motivoEncerramento: 'Limite de 5 partos atingido (RN-04)',
+              motivoEncerramento: 'Limite de 5 partos atingido',
             }
           : {}),
       },

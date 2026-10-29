@@ -88,17 +88,16 @@ describe('invariante do banco vira 409', () => {
 
     expect(traduzido?.status).toBe(409)
     expect(traduzido?.codigo).toBe('DISPONIBILIDADE_EXCEDIDA')
-    expect(traduzido?.extras.requisito).toBe('RN-09')
   })
 
-  it('preserva a mensagem do trigger, que traz os numeros do caso', () => {
+  it('preserva a mensagem do trigger, que traz os numeros do caso, sem o prefixo', () => {
     // O banco explica melhor que qualquer texto generico: diz o parto, a oferta e o
     // total que ficaria. E mensagem para exibir ao usuario
     const traduzido = traduzirErroDoBanco(
       trigger('RN-09: o parto 8 oferta 4 machos e ja teria 6 comprometidos'),
     )
 
-    expect(traduzido?.message).toBe('RN-09: o parto 8 oferta 4 machos e ja teria 6 comprometidos')
+    expect(traduzido?.message).toBe('O parto 8 oferta 4 machos e ja teria 6 comprometidos')
   })
 
   it('duas caixas na mesma posicao vira POSICAO_OCUPADA', () => {
@@ -106,21 +105,18 @@ describe('invariante do banco vira 409', () => {
 
     expect(traduzido?.status).toBe(409)
     expect(traduzido?.codigo).toBe('POSICAO_OCUPADA')
-    expect(traduzido?.extras.requisito).toBe('RF-INF-05')
   })
 
   it('segundo casal ativo na caixa vira CAIXA_JA_TEM_CASAL_ATIVO', () => {
     const traduzido = traduzirErroDoBanco(unique('casal_um_ativo_por_caixa', 'casal'))
 
     expect(traduzido?.codigo).toBe('CAIXA_JA_TEM_CASAL_ATIVO')
-    expect(traduzido?.extras.requisito).toBe('RN-03')
   })
 
   it('sexto parto vira LIMITE_PARTOS_ATINGIDO', () => {
     const traduzido = traduzirErroDoBanco(check('parto_ordem_ciclo', 'parto'))
 
     expect(traduzido?.codigo).toBe('LIMITE_PARTOS_ATINGIDO')
-    expect(traduzido?.extras.requisito).toBe('RN-04')
   })
 
   it('FK composta recusada vira PAR_GENETICO_INVALIDO (rede de seguranca)', () => {
@@ -130,7 +126,6 @@ describe('invariante do banco vira 409', () => {
 
     expect(traduzido?.status).toBe(409)
     expect(traduzido?.codigo).toBe('PAR_GENETICO_INVALIDO')
-    expect(traduzido?.extras.requisito).toBe('RN-02')
   })
 
   it('nao usa a mensagem crua do Postgres como texto para o usuario', () => {
