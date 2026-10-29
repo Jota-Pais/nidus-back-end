@@ -158,8 +158,13 @@ export async function alocarSolicitacao(
     throw naoEncontrado('Solicitacao')
   }
 
-  if (solicitacao.status === 'AP') {
-    throw erroDeRegra('SOLICITACAO_JA_ALOCADA', `A solicitacao #${idSolicitacao} ja foi alocada.`)
+  // so a enviada recebe caixas. O codigo so grava enviada e aprovada; os outros status do
+  // dicionario continuam aparecendo na lista, mas nenhum vira aprovada por aqui
+  if (solicitacao.status !== 'EN') {
+    throw erroDeRegra(
+      'SOLICITACAO_JA_ALOCADA',
+      `A solicitacao #${idSolicitacao} nao esta aguardando alocacao.`,
+    )
   }
 
   const remessa = solicitacao.remessas[0]
