@@ -61,7 +61,6 @@ export const cronograma = dicionario({
   S: 'semanal',
   Q: 'quinzenal',
   M: 'mensal',
-  A: 'avulsas',
 } as const)
 
 /** infra.caixa.finalidade */
