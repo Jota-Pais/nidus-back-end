@@ -78,7 +78,7 @@ src/
     reproducao/        casais e partos
     demanda/           projetos CEUA, solicitações e alocação
     motor/             busca de atendimento
-    catalogo/          espécies, linhagens e parâmetros
+    catalogo/          espécies, linhagens e pares genéticos
     login/             sessão
 ```
 
