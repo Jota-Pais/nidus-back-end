@@ -26,8 +26,13 @@ const opcoesCookie = {
   maxAge: 12 * 60 * 60_000,
 }
 
-const credenciais = z.object({
-  email: z.string().trim().min(1),
+/**
+ * corpo do POST /api/sessao. O e-mail vai em minusculas: o indice unico de usuario.email
+ * diferencia maiusculas, e o e-mail e gravado em minusculas. O front do login ja manda
+ * assim, mas nao e a unica porta
+ */
+export const credenciais = z.object({
+  email: z.string().trim().toLowerCase().min(1),
   senha: z.string().min(1),
 })
 
