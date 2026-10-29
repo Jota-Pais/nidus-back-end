@@ -12,7 +12,7 @@ import {
   paraData,
   statusSolicitacao,
 } from '../../shared/traducao.ts'
-import { calcularDisponibilidade } from '../reproducao/disponibilidade.ts'
+import { compromissosAtivos, disponibilidadeDoParto } from '../reproducao/disponibilidade.ts'
 
 /** O pesquisador so ve os proprios projetos e pedidos; tecnico e gestor veem todos */
 const doPesquisador = (usuario: UsuarioDaSessao) => usuario.perfil === 'pesquisador'
@@ -168,7 +168,7 @@ export async function alocarSolicitacao(
     where: { id: { in: itens.map((item) => item.idParto) } },
     include: {
       casal: { select: { idCaixa: true, linhagem: { select: { idEspecie: true } } } },
-      compromissos: { where: { dtCancelamento: null }, select: { qtdM: true, qtdF: true } },
+      compromissos: compromissosAtivos,
     },
   })
 
@@ -180,11 +180,7 @@ export async function alocarSolicitacao(
       throw naoEncontrado(`Parto ${item.idParto} da especie pedida`)
     }
 
-    const comprometido = parto.compromissos.reduce(
-      (soma, c) => ({ m: soma.m + c.qtdM, f: soma.f + c.qtdF }),
-      { m: 0, f: 0 },
-    )
-    const { disponivel } = calcularDisponibilidade(parto, comprometido)
+    const { disponivel } = disponibilidadeDoParto(parto)
 
     if (item.machos > disponivel.m || item.femeas > disponivel.f) {
       throw erroDeRegra(

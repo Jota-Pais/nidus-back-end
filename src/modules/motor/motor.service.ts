@@ -8,7 +8,7 @@ import { dataISO, estadoCaixa, hojeISO } from '../../shared/traducao.ts'
 import { codigoDaPosicao } from '../infra/endereco.ts'
 import { idDaEspecie } from '../infra/infra.service.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
-import { calcularDisponibilidade } from '../reproducao/disponibilidade.ts'
+import { compromissosAtivos, disponibilidadeDoParto } from '../reproducao/disponibilidade.ts'
 import { casaisParaODeficit, faixaAceita, ordenar, sugerirAlocacao } from './motor.ts'
 import type { Origem } from './motor.ts'
 
@@ -73,7 +73,7 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
               eutanasiadoF: true,
               desmamadoM: true,
               desmamadoF: true,
-              compromissos: { where: { dtCancelamento: null }, select: { qtdM: true, qtdF: true } },
+              compromissos: compromissosAtivos,
             },
           },
         },
@@ -98,11 +98,7 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
         : somarDias(nascimento, ALEITAMENTO_DIAS)
       if (desmame > referencia) return []
 
-      const comprometido = parto.compromissos.reduce(
-        (soma, c) => ({ m: soma.m + c.qtdM, f: soma.f + c.qtdF }),
-        { m: 0, f: 0 },
-      )
-      const { disponivel } = calcularDisponibilidade(parto, comprometido)
+      const { disponivel } = disponibilidadeDoParto(parto)
       if (disponivel.m + disponivel.f === 0) return []
 
       const origem: Origem = parto.dtDesmameReal

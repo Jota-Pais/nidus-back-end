@@ -62,7 +62,7 @@ export type Disponibilidade = {
   disponivel: PorSexo
 }
 
-/** disponibilidade completa de um ciclo. É esta a função que a ficha, a alocação e a busca chamam */
+/** disponibilidade completa de um ciclo, com o comprometido já somado */
 export function calcularDisponibilidade(
   ciclo: ContagemDoCiclo,
   comprometido: PorSexo,
@@ -78,4 +78,28 @@ export function calcularDisponibilidade(
       f: Math.max(0, oferta.f - comprometido.f),
     },
   }
+}
+
+/**
+ * O 'include'/'select' do Prisma dos compromissos que pesam na conta. Só os ativos: o
+ * cancelado fica na tabela, mas não pesa mais no comprometido (mesma regra do trigger do banco)
+ */
+export const compromissosAtivos = {
+  where: { dtCancelamento: null },
+  select: { qtdM: true, qtdF: true },
+}
+
+/** Um parto lido com 'compromissos: compromissosAtivos' */
+export type PartoComCompromissos = ContagemDoCiclo & {
+  compromissos: { qtdM: number; qtdF: number }[]
+}
+
+/** O que um parto ainda tem livre. É esta a função que a ficha, a alocação e a busca chamam */
+export function disponibilidadeDoParto(parto: PartoComCompromissos): Disponibilidade {
+  const comprometido = parto.compromissos.reduce(
+    (soma, c) => ({ m: soma.m + c.qtdM, f: soma.f + c.qtdF }),
+    { m: 0, f: 0 },
+  )
+
+  return calcularDisponibilidade(parto, comprometido)
 }

@@ -3,6 +3,7 @@ import {
   type ContagemDoCiclo,
   calcularDisponibilidade,
   calcularGrauCerteza,
+  disponibilidadeDoParto,
   ofertaBruta,
 } from './disponibilidade.ts'
 
@@ -105,5 +106,18 @@ describe('disponibilidade liquida', () => {
 
   it('sem compromisso, disponivel e a oferta inteira', () => {
     expect(calcularDisponibilidade(projetado, nada).disponivel).toEqual({ m: 4, f: 4 })
+  })
+})
+
+describe('disponibilidade do parto lido do banco', () => {
+  it('soma os compromissos do parto e desconta da oferta', () => {
+    const parto = { ...projetado, compromissos: [{ qtdM: 2, qtdF: 1 }, { qtdM: 1, qtdF: 1 }] }
+
+    expect(disponibilidadeDoParto(parto).comprometido).toEqual({ m: 3, f: 2 })
+    expect(disponibilidadeDoParto(parto).disponivel).toEqual({ m: 1, f: 2 })
+  })
+
+  it('parto sem compromisso tem a oferta inteira livre', () => {
+    expect(disponibilidadeDoParto({ ...confirmado, compromissos: [] }).disponivel).toEqual({ m: 4, f: 4 })
   })
 })

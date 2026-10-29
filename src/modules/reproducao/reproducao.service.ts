@@ -1,7 +1,7 @@
 // Casais e o registro dos partos: nascimento, eutanasia de selecao e desmame
 
 import { codigoDaPosicao } from '../infra/endereco.ts'
-import { calcularDisponibilidade } from './disponibilidade.ts'
+import { compromissosAtivos, disponibilidadeDoParto } from './disponibilidade.ts'
 import { calcularCicloInicial, calcularProximoCiclo } from './cadeiaTemporal.ts'
 import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
@@ -75,33 +75,14 @@ export async function casalFicha(idCasal: number) {
 export async function cicloFicha(idParto: number) {
   const parto = await prisma.parto.findUnique({
     where: { id: idParto },
-    include: {
-      // So os ativos entram na soma - o cancelado fica na tabela, mas
-      // ele nao pesa mais no comprometido (mesma regra do trigger do banco)
-      compromissos: { where: { dtCancelamento: null }, select: { qtdM: true, qtdF: true } },
-    },
+    include: { compromissos: compromissosAtivos },
   })
 
   if (parto === null) {
     throw naoEncontrado('Parto')
   }
 
-  const comprometido = parto.compromissos.reduce(
-    (soma, c) => ({ m: soma.m + c.qtdM, f: soma.f + c.qtdF }),
-    { m: 0, f: 0 },
-  )
-
-  const disponibilidade = calcularDisponibilidade(
-    {
-      nascidoM: parto.nascidoM,
-      nascidoF: parto.nascidoF,
-      eutanasiadoM: parto.eutanasiadoM,
-      eutanasiadoF: parto.eutanasiadoF,
-      desmamadoM: parto.desmamadoM,
-      desmamadoF: parto.desmamadoF,
-    },
-    comprometido,
-  )
+  const disponibilidade = disponibilidadeDoParto(parto)
 
   return {
     id: parto.id,
