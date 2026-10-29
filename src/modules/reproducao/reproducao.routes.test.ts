@@ -7,7 +7,7 @@ import { casalNovo } from './reproducao.routes.ts'
 
 // Autorizacao e validacao de forma - o mesmo recorte de
 // 'infra.routes.test.ts'. Sucesso com dado real (as regras
-// encadeadas) e teste de integracao, junto da massa de teste da colonia
+// encadeadas) precisa de banco e fica fora desta suite
 
 const como = (perfil: Perfil): RequestHandler => (req, _res, next) => {
   req.usuario = { id: 1, nome: 'Teste', email: 'teste@ufsc.br', perfil }

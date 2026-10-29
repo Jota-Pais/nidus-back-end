@@ -6,8 +6,8 @@
 // natural o insert e `upsert`; onde nao ha (parametro, tolerancia e estante),
 // busca pela chave natural do dado antes de criar.
 //
-// Carga inicial e dado real. Massa de demonstracao e ficcao e mora em
-// `prisma/massa-teste.ts`, separada.
+// Usuarios e o projeto CEUA ficam fora daqui, em `prisma/criar-usuarios.ts`, que
+// roda depois deste.
 
 import {
   especies,

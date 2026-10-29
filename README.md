@@ -55,7 +55,9 @@ e o que você grava rodando local aparece para o cliente.
 | `npm run build` | Gera o Prisma Client e compila para `dist/` |
 | `npm start` | Roda o build, é o comando da Render |
 | `npm run db:deploy` | Aplica migrations pendentes. Nunca dropa nada |
-| `npm run db:massa` | Grava a massa de demonstração (não faz nada se ela já estiver no banco) |
+| `npm run db:seed` | Carga inicial: espécies, linhagens, parâmetros, pares genéticos e estantes (não duplica nada) |
+| `npm run db:usuarios` | Cria os três usuários e o projeto CEUA num banco novo (o que já existe fica como está) |
+| `npm run db:senha -- <email> "<senha>"` | Define a senha própria de um usuário |
 
 ## Stack
 

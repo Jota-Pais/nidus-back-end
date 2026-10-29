@@ -3,10 +3,10 @@
 //
 //   npm run db:senha -- tecnico@ufsc.br "a senha escolhida"
 //
-// Separado do seed e da massa de proposito: senha e segredo operacional, nao
-// dado de carga nem de demonstracao (`prisma/massa-teste.ts` deixou os tres
-// usuarios do semestre com `hashSenha` nulo exatamente para isto nao entrar
-// num script versionado).
+// Separado do seed e de `prisma/criar-usuarios.ts` de proposito: senha e segredo
+// operacional, nao dado de carga (`criar-usuarios.ts` cria os tres usuarios do
+// semestre com `hashSenha` nulo exatamente para isto nao entrar num script
+// versionado).
 
 import { hashSenha } from '../src/modules/login/senha.ts'
 import { prisma } from '../src/shared/prisma.ts'
