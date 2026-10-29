@@ -218,7 +218,6 @@ export async function formarCasal(dados: NovoCasal) {
         dtAcasalamento: paraData(parto1.dtAcasalamento),
         dtPartoPrevisto: paraData(parto1.dtPartoPrevisto),
         dtDesmamePrevisto: paraData(parto1.dtDesmamePrevisto),
-        grauCerteza: 'J',
       },
     })
 
@@ -256,8 +255,6 @@ export async function registrarNascimento(idParto: number, dados: Nascimento, id
         dtPartoReal: paraData(dados.dtPartoReal),
         nascidoM: dados.nascidoM,
         nascidoF: dados.nascidoF,
-        // a oferta passa de projetada para prevista
-        grauCerteza: 'P',
         idUsuarioParto: idUsuario,
         dtRegistroParto: new Date(),
       },
@@ -288,7 +285,6 @@ export async function registrarNascimento(idParto: number, dados: Nascimento, id
         dtAcasalamento: paraData(proximo.dtAcasalamento),
         dtPartoPrevisto: paraData(proximo.dtPartoPrevisto),
         dtDesmamePrevisto: paraData(proximo.dtDesmamePrevisto),
-        grauCerteza: 'J',
       },
     })
   })
@@ -370,7 +366,6 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
       desmamadoM: dados.desmamadoM,
       desmamadoF: dados.desmamadoF,
       idCaixaRecria: dados.idCaixaRecria,
-      grauCerteza: 'C',
       idUsuarioDesmame: idUsuario,
       dtRegistroDesmame: new Date(),
     },

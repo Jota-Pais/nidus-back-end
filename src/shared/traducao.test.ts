@@ -6,7 +6,6 @@ import {
   exigirCodigo,
   face,
   finalidadeCaixa,
-  grauCerteza,
   hojeISO,
   paraData,
   perfil,
@@ -18,7 +17,6 @@ import {
 const dicionarios = [
   { nome: 'estadoCaixa', dic: estadoCaixa, codigos: ['R', 'P', 'T', 'E', 'X'] },
   { nome: 'finalidadeCaixa', dic: finalidadeCaixa, codigos: ['R', 'M', 'C', 'E'] },
-  { nome: 'grauCerteza', dic: grauCerteza, codigos: ['C', 'P', 'J'] },
   { nome: 'perfil', dic: perfil, codigos: ['P', 'T', 'G'] },
   { nome: 'face', dic: face, codigos: ['1', '2'] },
 ]
@@ -37,7 +35,6 @@ describe('traducao do char(1)', () => {
     // de proposito: e a copia que o teste compara. As colunas seguem a ordem do kanban
     expect(estadoCaixa.termos).toEqual(['livres', 'pre_reserva', 'estoque', 'reserva', 'enviado'])
     expect(finalidadeCaixa.termos).toEqual(['reproducao', 'maternidade', 'recria', 'expedicao'])
-    expect(grauCerteza.termos).toEqual(['confirmado', 'previsto', 'projetado'])
     expect(perfil.termos).toEqual(['pesquisador', 'tecnico', 'gestor'])
     expect(face.termos).toEqual(['frontal', 'traseira'])
   })

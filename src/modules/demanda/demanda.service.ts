@@ -12,7 +12,11 @@ import {
   paraData,
   statusSolicitacao,
 } from '../../shared/traducao.ts'
-import { compromissosAtivos, disponibilidadeDoParto } from '../reproducao/disponibilidade.ts'
+import {
+  calcularGrauCerteza,
+  compromissosAtivos,
+  disponibilidadeDoParto,
+} from '../reproducao/disponibilidade.ts'
 
 /** O pesquisador so ve os proprios projetos e pedidos; tecnico e gestor veem todos */
 const doPesquisador = (usuario: UsuarioDaSessao) => usuario.perfil === 'pesquisador'
@@ -202,7 +206,8 @@ export async function alocarSolicitacao(
           idUsuarioCriacao: usuario.id,
           qtdM: item.machos,
           qtdF: item.femeas,
-          grauCerteza: parto.grauCerteza,
+          // a coluna ainda e NOT NULL: guarda o grau do parto no momento da reserva
+          grauCerteza: calcularGrauCerteza(parto),
         },
       })
     }

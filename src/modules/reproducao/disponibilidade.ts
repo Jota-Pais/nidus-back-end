@@ -1,7 +1,6 @@
 // Quanto um parto tem para oferecer, e com que confiança
 
 import { ESPERADOS_POR_CASAL } from '../../shared/parametros.ts'
-import type { GrauCerteza } from '../../shared/traducao.ts'
 
 /** Quantidade por sexo. É como a API conta animal em todo lugar. */
 export type PorSexo = {
@@ -19,17 +18,21 @@ export type ContagemDoCiclo = {
   desmamadoF: number | null
 }
 
-/** O grau de certeza sai da mesma cascata da oferta. */
-export function calcularGrauCerteza(ciclo: ContagemDoCiclo): GrauCerteza {
+/**
+ * O grau de certeza sai da mesma cascata da oferta: C confirmado (desmamou), P previsto
+ * (nasceu), J projetado (nem nasceu). Devolve o código da coluna
+ * demanda.compromisso.grau_certeza, que ainda é NOT NULL e é o único lugar que guarda o grau
+ */
+export function calcularGrauCerteza(ciclo: ContagemDoCiclo): 'C' | 'P' | 'J' {
   if (ciclo.desmamadoM !== null && ciclo.desmamadoF !== null) {
-    return 'confirmado'
+    return 'C'
   }
 
   if (ciclo.nascidoM !== null && ciclo.nascidoF !== null) {
-    return 'previsto'
+    return 'P'
   }
 
-  return 'projetado'
+  return 'J'
 }
 
 /**
@@ -53,16 +56,16 @@ export function ofertaBruta(ciclo: ContagemDoCiclo): PorSexo {
 }
 
 export type Disponibilidade = {
-  grauCerteza: GrauCerteza
-  /** Oferta bruta: o teto do que se pode comprometer */
-  oferta: PorSexo
   /** soma dos compromissos ativos */
   comprometido: PorSexo
   /** O que ainda dá para prometer - já líquido. */
   disponivel: PorSexo
 }
 
-/** disponibilidade completa de um ciclo, com o comprometido já somado */
+/**
+ * disponibilidade completa de um ciclo, com o comprometido já somado. O teto é a oferta
+ * BRUTA, e não o disponível: confundir os dois faz o limite valer metade
+ */
 export function calcularDisponibilidade(
   ciclo: ContagemDoCiclo,
   comprometido: PorSexo,
@@ -70,8 +73,6 @@ export function calcularDisponibilidade(
   const oferta = ofertaBruta(ciclo)
 
   return {
-    grauCerteza: calcularGrauCerteza(ciclo),
-    oferta,
     comprometido,
     disponivel: {
       m: Math.max(0, oferta.m - comprometido.m),

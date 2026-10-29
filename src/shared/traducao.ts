@@ -72,13 +72,6 @@ export const finalidadeCaixa = dicionario({
   E: 'expedicao',
 } as const)
 
-/** reproducao.parto.grau_certeza */
-export const grauCerteza = dicionario({
-  C: 'confirmado',
-  P: 'previsto',
-  J: 'projetado',
-} as const)
-
 /** login.usuario.perfil - os tres perfis de acesso. */
 export const perfil = dicionario({
   P: 'pesquisador',
@@ -93,7 +86,6 @@ export const face = dicionario({
 } as const)
 
 export type EstadoCaixa = (typeof estadoCaixa.termos)[number]
-export type GrauCerteza = (typeof grauCerteza.termos)[number]
 export type Perfil = (typeof perfil.termos)[number]
 
 /** Codigo da especie usado em rota e filtro (rato | camundongo) */
