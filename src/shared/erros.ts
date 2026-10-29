@@ -1,4 +1,4 @@
-// Erros de dominio, sempre no envelope { erro: { codigo, mensagem, ... } }
+// Erros de dominio, sempre no envelope { erro: { codigo, mensagem, campos? } }
 
 /** O front trata qualquer 409 mostrando a mensagem, sem precisar conhecer cada codigo */
 export type CodigoErro =
@@ -12,7 +12,6 @@ export type CodigoErro =
   | 'POSICAO_OCUPADA'
   | 'DISPONIBILIDADE_EXCEDIDA'
   | 'TRANSICAO_CONTRARIA_COMPROMISSO'
-  | 'PRAZO_INVIAVEL'
   | 'SEQUENCIA_INVALIDA'
   | 'PROJETO_INVALIDO'
   | 'SOLICITACAO_JA_ALOCADA'
@@ -21,8 +20,6 @@ export type CodigoErro =
 export type ExtrasErro = {
   /** Mensagem por campo. Obrigatorio em VALIDACAO. */
   campos?: Record<string, string>
-  /** dado extra daquele codigo - dataMinima em PRAZO_INVIAVEL */
-  [chave: string]: unknown
 }
 
 export class ErroDeAplicacao extends Error {
