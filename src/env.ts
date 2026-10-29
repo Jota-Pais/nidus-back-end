@@ -28,5 +28,3 @@ if (!resultado.success) {
 }
 
 export const env = resultado.data
-
-export type Env = typeof env

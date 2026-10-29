@@ -9,7 +9,7 @@ type CausaDoBanco = {
 }
 
 /** desembrulha a causa do Postgres, se o erro for de banco */
-export function causaDoBanco(erro: unknown): CausaDoBanco | undefined {
+function causaDoBanco(erro: unknown): CausaDoBanco | undefined {
   if (typeof erro !== 'object' || erro === null) {
     return undefined
   }

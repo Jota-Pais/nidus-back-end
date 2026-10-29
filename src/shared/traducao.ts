@@ -93,10 +93,8 @@ export const face = dicionario({
 } as const)
 
 export type EstadoCaixa = (typeof estadoCaixa.termos)[number]
-export type FinalidadeCaixa = (typeof finalidadeCaixa.termos)[number]
 export type GrauCerteza = (typeof grauCerteza.termos)[number]
 export type Perfil = (typeof perfil.termos)[number]
-export type Face = (typeof face.termos)[number]
 
 /** Codigo da especie usado em rota e filtro (rato | camundongo) */
 export function codigoDaEspecie(nome: string): string {
