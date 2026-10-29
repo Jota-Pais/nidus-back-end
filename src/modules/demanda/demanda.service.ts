@@ -28,16 +28,12 @@ export async function listarProjetos(usuario: UsuarioDaSessao, agora: Date = new
   const projetos = await prisma.projeto.findMany({
     where: doPesquisador(usuario) ? { idUsuarioResponsavel: usuario.id } : {},
     orderBy: { numero: 'asc' },
-    include: { usuarioResponsavel: { select: { nome: true } } },
   })
 
   return {
     projetos: projetos.map((projeto) => ({
       id: projeto.id,
       numero: projeto.numero,
-      titulo: projeto.titulo,
-      responsavel: projeto.usuarioResponsavel.nome,
-      vigenteAte: dataISO(projeto.dtVigenciaFim),
       vigente: projeto.situacao === 'V' && dataISO(projeto.dtVigenciaFim) >= hoje,
     })),
   }

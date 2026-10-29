@@ -15,7 +15,6 @@ type LinhaDeEstante = {
   faces: number
   linhas: number
   colunas: number
-  capacidade: number
 }
 
 function paraApi(estante: LinhaDeEstante) {
@@ -28,7 +27,6 @@ function paraApi(estante: LinhaDeEstante) {
     faces: estante.faces,
     linhas: estante.linhas,
     colunas: estante.colunas,
-    capacidade: estante.capacidade,
   }
 }
 
@@ -108,7 +106,7 @@ export async function montarGrade(id: number) {
     return { face: faceDic.paraApi(String(numeroDaFace)), posicoes }
   })
 
-  return { estante: paraApi(estante), faces }
+  return { faces }
 }
 
 export type NovaEstante = {

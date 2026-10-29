@@ -63,7 +63,6 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
           select: {
             identificacao: true,
             idLinhagem: true,
-            linhagem: { select: { nome: true } },
             partos: {
               orderBy: { ordem: 'asc' },
               select: {
@@ -133,7 +132,6 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
           codigo: codigoDaPosicao(caixa.face, caixa.linha, caixa.coluna, caixa.estante.colunas),
           numeroVisivel: caixa.estante.numeroVisivel,
           estado: estadoCaixa.paraApi(caixa.estado),
-          linhagem: casal.linhagem.nome,
           casal: casal.identificacao.trim(),
           parto: parto.ordem,
           origem,
@@ -155,7 +153,6 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
   const dataMinima = somarDias(hoje, (vigente?.gestacaoDias ?? 23) + pedido.idade)
 
   return {
-    referencia,
     faixa,
     candidatas: itens,
     deficit,

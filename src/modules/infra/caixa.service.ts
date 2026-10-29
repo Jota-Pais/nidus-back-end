@@ -22,7 +22,7 @@ export async function montarQuadro(codigoEspecie: string) {
       linha: true,
       coluna: true,
       estado: true,
-      estante: { select: { numeroVisivel: true, sala: true, colunas: true } },
+      estante: { select: { numeroVisivel: true, colunas: true } },
       casais: selecaoDoCasalNoCard,
     },
   })
@@ -40,13 +40,12 @@ export async function montarQuadro(codigoEspecie: string) {
       idCaixa: caixa.id,
       codigo: codigoDaPosicao(caixa.face, caixa.linha, caixa.coluna, caixa.estante.colunas),
       numeroVisivel: caixa.estante.numeroVisivel,
-      sala: caixa.estante.sala,
       linhagem: casal?.linhagem.nome ?? null,
       casal: casalNoCard(casal),
     })
   }
 
-  return { especie: codigoEspecie, colunas }
+  return { colunas }
 }
 
 export type PedidoDeTransicao = {
