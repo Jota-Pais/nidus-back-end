@@ -2,6 +2,7 @@
 // proximidade de idade, e o acasalamento novo como ultima alternativa. Aqui so a regra, sem
 // banco - quem le o banco e 'motor.service.ts'
 
+import { ESPERADOS_POR_CASAL, FAIXAS_IDADE } from '../../shared/parametros.ts'
 import type { PorSexo } from '../reproducao/disponibilidade.ts'
 
 /** De onde vem o animal: ja desmamado, ja nascido, ou parto ainda previsto */
@@ -9,10 +10,11 @@ export type Origem = 'de_fato' | 'previsao' | 'previsao_parto'
 
 const PRIORIDADE: Record<Origem, number> = { de_fato: 0, previsao: 1, previsao_parto: 2 }
 
-export type Faixa = { idadeMinDias: number; idadeMaxDias: number | null; variacaoDias: number }
+type Faixa = { idadeMinDias: number; idadeMaxDias: number | null; variacaoDias: number }
 
 /** A variacao aceita cresce com a idade pedida (secao 1.6). Fora da tabela, a maior faixa */
-export function faixaAceita(idade: number, faixas: Faixa[]): { min: number; max: number } {
+export function faixaAceita(idade: number): { min: number; max: number } {
+  const faixas: readonly Faixa[] = FAIXAS_IDADE
   const faixa =
     faixas.find((f) => f.idadeMinDias <= idade && (f.idadeMaxDias === null || idade <= f.idadeMaxDias)) ??
     faixas.reduce<Faixa | undefined>((maior, f) => (!maior || f.idadeMinDias > maior.idadeMinDias ? f : maior), undefined)
@@ -59,9 +61,9 @@ export function sugerirAlocacao<T extends Candidata>(
   return { itens, deficit: falta }
 }
 
-/** Casais a formar para cobrir o deficit, pela expectativa de cada casal (4M/4F na colonia) */
-export function casaisParaODeficit(deficit: PorSexo, expectativa: PorSexo): number {
-  const porMacho = expectativa.m > 0 ? Math.ceil(deficit.m / expectativa.m) : 0
-  const porFemea = expectativa.f > 0 ? Math.ceil(deficit.f / expectativa.f) : 0
+/** Casais a formar para cobrir o deficit, pelo esperado de cada casal (4M/4F na colonia) */
+export function casaisParaODeficit(deficit: PorSexo): number {
+  const porMacho = Math.ceil(deficit.m / ESPERADOS_POR_CASAL.m)
+  const porFemea = Math.ceil(deficit.f / ESPERADOS_POR_CASAL.f)
   return Math.max(porMacho, porFemea)
 }

@@ -12,8 +12,7 @@ import {
   paraData,
   statusSolicitacao,
 } from '../../shared/traducao.ts'
-import { calcularDisponibilidade, parametroNaData } from '../reproducao/disponibilidade.ts'
-import { parametrosDaEspecie } from '../reproducao/reproducao.service.ts'
+import { calcularDisponibilidade } from '../reproducao/disponibilidade.ts'
 
 /** O pesquisador so ve os proprios projetos e pedidos; tecnico e gestor veem todos */
 const doPesquisador = (usuario: UsuarioDaSessao) => usuario.perfil === 'pesquisador'
@@ -168,11 +167,10 @@ export async function alocarSolicitacao(
   const partos = await prisma.parto.findMany({
     where: { id: { in: itens.map((item) => item.idParto) } },
     include: {
-      casal: { select: { idCaixa: true, idLinhagem: true, linhagem: { select: { idEspecie: true } } } },
+      casal: { select: { idCaixa: true, linhagem: { select: { idEspecie: true } } } },
       compromissos: { where: { dtCancelamento: null }, select: { qtdM: true, qtdF: true } },
     },
   })
-  const parametros = await parametrosDaEspecie(solicitacao.idEspecie)
 
   // confere antes de gravar: nenhum item pode passar do que o parto ainda tem livre
   for (const item of itens) {
@@ -182,18 +180,11 @@ export async function alocarSolicitacao(
       throw naoEncontrado(`Parto ${item.idParto} da especie pedida`)
     }
 
-    const parametro = parametroNaData(parametros, {
-      idLinhagem: parto.casal.idLinhagem,
-      em: dataISO(parto.dtAcasalamento),
-    })
     const comprometido = parto.compromissos.reduce(
       (soma, c) => ({ m: soma.m + c.qtdM, f: soma.f + c.qtdF }),
       { m: 0, f: 0 },
     )
-    const { disponivel } = calcularDisponibilidade(parto, {
-      expectativa: { m: parametro?.expectativaM ?? 4, f: parametro?.expectativaF ?? 4 },
-      comprometido,
-    })
+    const { disponivel } = calcularDisponibilidade(parto, comprometido)
 
     if (item.machos > disponivel.m || item.femeas > disponivel.f) {
       throw erroDeRegra(

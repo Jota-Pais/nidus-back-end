@@ -1,4 +1,5 @@
-// Carga inicial do Nidus: grava os valores de `prisma/dados-iniciais.ts`.
+// Carga inicial do Nidus: grava os valores de `prisma/dados-iniciais.ts` e, nas
+// tabelas de parametro, as constantes de `src/shared/parametros.ts`.
 //
 //   npm run db:seed
 //
@@ -9,15 +10,29 @@
 // Usuarios e o projeto CEUA ficam fora daqui, em `prisma/criar-usuarios.ts`, que
 // roda depois deste.
 
+import { especies, estantes, inicioVigencia, paresGeneticos } from './dados-iniciais.ts'
 import {
-  especies,
-  estantes,
-  inicioVigencia,
-  paresGeneticos,
-  parametrosBiologicos,
-  toleranciasIdade,
-} from './dados-iniciais.ts'
+  ALEITAMENTO_DIAS,
+  ESPERADOS_POR_CASAL,
+  FAIXAS_IDADE,
+  GESTACAO_DIAS,
+  INTERVALO_ACASALAMENTO_DIAS,
+  MAX_PARTOS_POR_CASAL,
+} from '../src/shared/parametros.ts'
 import { prisma } from '../src/shared/prisma.ts'
+
+/**
+ * A linha de parametro_biologico de cada especie. O codigo usa as constantes; a tabela
+ * existe porque o trigger compromisso_respeita_oferta le a expectativa dela
+ */
+const parametrosBiologicos = {
+  gestacaoDias: GESTACAO_DIAS,
+  aleitamentoDias: ALEITAMENTO_DIAS,
+  intervaloCicloDias: INTERVALO_ACASALAMENTO_DIAS,
+  maxPartoCasal: MAX_PARTOS_POR_CASAL,
+  expectativaM: ESPERADOS_POR_CASAL.m,
+  expectativaF: ESPERADOS_POR_CASAL.f,
+}
 
 async function semearEspeciesELinhagens() {
   for (const especie of especies) {
@@ -58,8 +73,10 @@ async function semearEspeciesELinhagens() {
   }
 }
 
+// Nenhum codigo le esta tabela (a busca usa FAIXAS_IDADE); ela so fica igual as constantes
+// ate uma migration tirar
 async function semearToleranciaIdade() {
-  for (const faixa of toleranciasIdade) {
+  for (const faixa of FAIXAS_IDADE) {
     const jaTem = await prisma.toleranciaIdade.findFirst({
       where: { idadeMinDias: faixa.idadeMinDias, dtVigenciaInicio: inicioVigencia },
     })
@@ -130,7 +147,7 @@ async function conferir() {
       esperado: especies.reduce((total, e) => total + e.linhagens.length, 0),
     },
     { tabela: 'parametro_biologico', linhas: qtdParametro, esperado: especies.length },
-    { tabela: 'tolerancia_idade', linhas: qtdTolerancia, esperado: toleranciasIdade.length },
+    { tabela: 'tolerancia_idade', linhas: qtdTolerancia, esperado: FAIXAS_IDADE.length },
     { tabela: 'grupo_genetico_par', linhas: qtdPar, esperado: paresGeneticos.length },
     { tabela: 'estante', linhas: qtdEstante, esperado: estantes.length },
   ])

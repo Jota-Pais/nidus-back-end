@@ -1,5 +1,6 @@
 // Quanto um parto tem para oferecer, e com que confiança
 
+import { ESPERADOS_POR_CASAL } from '../../shared/parametros.ts'
 import type { GrauCerteza } from '../../shared/traducao.ts'
 
 /** Quantidade por sexo. É como a API conta animal em todo lugar. */
@@ -31,8 +32,11 @@ export function calcularGrauCerteza(ciclo: ContagemDoCiclo): GrauCerteza {
   return 'projetado'
 }
 
-/** A oferta BRUTA do parto - o COALESCE de três níveis, sem descontar nada. */
-export function ofertaBruta(ciclo: ContagemDoCiclo, expectativa: PorSexo): PorSexo {
+/**
+ * A oferta BRUTA do parto - o COALESCE de três níveis, sem descontar nada. Parto que ainda
+ * não nasceu oferece o esperado por casal (4M/4F)
+ */
+export function ofertaBruta(ciclo: ContagemDoCiclo): PorSexo {
   if (ciclo.desmamadoM !== null && ciclo.desmamadoF !== null) {
     return { m: ciclo.desmamadoM, f: ciclo.desmamadoF }
   }
@@ -45,7 +49,7 @@ export function ofertaBruta(ciclo: ContagemDoCiclo, expectativa: PorSexo): PorSe
     }
   }
 
-  return { m: expectativa.m, f: expectativa.f }
+  return { m: ESPERADOS_POR_CASAL.m, f: ESPERADOS_POR_CASAL.f }
 }
 
 export type Disponibilidade = {
@@ -61,9 +65,9 @@ export type Disponibilidade = {
 /** disponibilidade completa de um ciclo. É esta a função que a ficha, a alocação e a busca chamam */
 export function calcularDisponibilidade(
   ciclo: ContagemDoCiclo,
-  { expectativa, comprometido }: { expectativa: PorSexo; comprometido: PorSexo },
+  comprometido: PorSexo,
 ): Disponibilidade {
-  const oferta = ofertaBruta(ciclo, expectativa)
+  const oferta = ofertaBruta(ciclo)
 
   return {
     grauCerteza: calcularGrauCerteza(ciclo),
@@ -74,50 +78,4 @@ export function calcularDisponibilidade(
       f: Math.max(0, oferta.f - comprometido.f),
     },
   }
-}
-
-/** Um 'parametro_biologico' como o cálculo precisa ver. */
-export type ParametroVigente = {
-  /** Nulo vale para a espécie inteira; preenchido manda na linhagem dela */
-  idLinhagem: number | null
-  expectativaM: number
-  expectativaF: number
-  /** 'aaaa-mm-dd' */
-  dtVigenciaInicio: string
-  /** 'aaaa-mm-dd', ou nulo para vigência aberta. */
-  dtVigenciaFim: string | null
-}
-
-/** O parâmetro que vale para uma linhagem numa data. */
-export function parametroNaData<T extends ParametroVigente>(
-  parametros: T[],
-  { idLinhagem, em }: { idLinhagem: number | null; em: string },
-): T | undefined {
-  const candidatos = parametros.filter(
-    (parametro) =>
-      parametro.dtVigenciaInicio <= em &&
-      (parametro.dtVigenciaFim === null || em <= parametro.dtVigenciaFim) &&
-      (parametro.idLinhagem === null || parametro.idLinhagem === idLinhagem),
-  )
-
-  return (
-    candidatos.find((parametro) => parametro.idLinhagem === idLinhagem && idLinhagem !== null) ??
-    candidatos.find((parametro) => parametro.idLinhagem === null)
-  )
-}
-
-/** A expectativa que vale para uma linhagem numa data. */
-export function expectativaNaData(
-  parametros: ParametroVigente[],
-  alvo: { idLinhagem: number | null; em: string },
-): PorSexo {
-  const parametro = parametroNaData(parametros, alvo)
-
-  if (parametro === undefined) {
-    throw new Error(
-      `Sem parametro_biologico vigente em ${alvo.em} para a linhagem ${alvo.idLinhagem ?? '(especie)'}.`,
-    )
-  }
-
-  return { m: parametro.expectativaM, f: parametro.expectativaF }
 }

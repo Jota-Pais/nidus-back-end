@@ -2,24 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { casaisParaODeficit, faixaAceita, ordenar, sugerirAlocacao } from './motor.ts'
 import type { Candidata } from './motor.ts'
 
-// a tabela da secao 1.6 da spec do cliente
-const FAIXAS = [
-  { idadeMinDias: 21, idadeMaxDias: 22, variacaoDias: 1 },
-  { idadeMinDias: 23, idadeMaxDias: 25, variacaoDias: 2 },
-  { idadeMinDias: 26, idadeMaxDias: 30, variacaoDias: 3 },
-  { idadeMinDias: 31, idadeMaxDias: 40, variacaoDias: 4 },
-  { idadeMinDias: 41, idadeMaxDias: 50, variacaoDias: 5 },
-  { idadeMinDias: 51, idadeMaxDias: 60, variacaoDias: 7 },
-  { idadeMinDias: 61, idadeMaxDias: 90, variacaoDias: 10 },
-  { idadeMinDias: 91, idadeMaxDias: null, variacaoDias: 15 },
-]
-
 describe('faixa de idade aceita', () => {
   it('segue os exemplos da spec', () => {
-    expect(faixaAceita(21, FAIXAS)).toEqual({ min: 20, max: 22 })
-    expect(faixaAceita(28, FAIXAS)).toEqual({ min: 25, max: 31 })
-    expect(faixaAceita(55, FAIXAS)).toEqual({ min: 48, max: 62 })
-    expect(faixaAceita(120, FAIXAS)).toEqual({ min: 105, max: 135 })
+    expect(faixaAceita(21)).toEqual({ min: 20, max: 22 })
+    expect(faixaAceita(28)).toEqual({ min: 25, max: 31 })
+    expect(faixaAceita(55)).toEqual({ min: 48, max: 62 })
+    expect(faixaAceita(120)).toEqual({ min: 105, max: 135 })
   })
 })
 
@@ -70,8 +58,8 @@ describe('sugestao de alocacao', () => {
 
 describe('casais para cobrir o deficit', () => {
   it('arredonda para cima pela expectativa de 4M/4F por casal', () => {
-    expect(casaisParaODeficit({ m: 8, f: 2 }, { m: 4, f: 4 })).toBe(2)
-    expect(casaisParaODeficit({ m: 9, f: 0 }, { m: 4, f: 4 })).toBe(3)
-    expect(casaisParaODeficit({ m: 0, f: 0 }, { m: 4, f: 4 })).toBe(0)
+    expect(casaisParaODeficit({ m: 8, f: 2 })).toBe(2)
+    expect(casaisParaODeficit({ m: 9, f: 0 })).toBe(3)
+    expect(casaisParaODeficit({ m: 0, f: 0 })).toBe(0)
   })
 })

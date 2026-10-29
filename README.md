@@ -32,8 +32,12 @@ O que mora aqui:
 - **Alocação** - cada caixa aceita vira compromisso, e a soma dos compromissos de
   um parto nunca passa do que ele tem
 
-Os parâmetros biológicos (gestação, aleitamento, tolerância de idade, pares
-genéticos) estão no banco, não no código.
+Os parâmetros biológicos (gestação, aleitamento, intervalo, máximo de 5 partos,
+4 machos e 4 fêmeas esperados por casal, tolerância de idade) são constantes em
+`src/shared/parametros.ts`, como no `settings.py` do sistema do cliente. O seed
+grava os mesmos valores nas tabelas `parametro_biologico` e `tolerancia_idade`:
+o trigger que confere a oferta de cada parto ainda lê a expectativa da primeira.
+Os pares genéticos ficam no banco.
 
 ## Começar
 
@@ -74,7 +78,8 @@ prisma/schema.prisma   o banco: models e migrations
 src/
   app.ts               monta o Express (é o que o teste usa)
   server.ts            sobe a porta e encerra limpo no SIGTERM
-  shared/              prisma, erros, tradução dos códigos do banco, autorização
+  shared/              prisma, erros, tradução dos códigos do banco, autorização,
+                       parâmetros biológicos
   modules/
     infra/             estantes, grade, kanban e ficha
     reproducao/        casais e partos

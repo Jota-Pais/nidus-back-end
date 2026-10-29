@@ -1,39 +1,12 @@
 // Casais e o registro dos partos: nascimento, eutanasia de selecao e desmame
 
 import { codigoDaPosicao } from '../infra/endereco.ts'
-import {
-  calcularDisponibilidade,
-  expectativaNaData,
-  parametroNaData,
-} from './disponibilidade.ts'
-import type { ParametroVigente } from './disponibilidade.ts'
+import { calcularDisponibilidade } from './disponibilidade.ts'
 import { calcularCicloInicial, calcularProximoCiclo } from './cadeiaTemporal.ts'
 import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
+import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { dataISO, paraData } from '../../shared/traducao.ts'
-
-export type ParametroCompleto = ParametroVigente & {
-  gestacaoDias: number
-  aleitamentoDias: number
-  intervaloCicloDias: number
-  maxPartoCasal: number
-}
-
-/**
- * Todas as versoes do parametro de uma especie - o historico inteiro, nao so o
- * vigente hoje.
- */
-export async function parametrosDaEspecie(idEspecie: number): Promise<ParametroCompleto[]> {
-  const parametros = await prisma.parametroBiologico.findMany({ where: { idEspecie } })
-
-  // parametroNaData compara vigencia como string ISO; o Prisma devolve
-  // '@db.Date' como Date, entao a traducao entra aqui, uma vez so e nao em cada chamador
-  return parametros.map((parametro) => ({
-    ...parametro,
-    dtVigenciaInicio: dataISO(parametro.dtVigenciaInicio),
-    dtVigenciaFim: parametro.dtVigenciaFim === null ? null : dataISO(parametro.dtVigenciaFim),
-  }))
-}
 
 /**
  * Valida o par genetico ANTES do insert, para dar a mensagem rica
@@ -103,7 +76,6 @@ export async function cicloFicha(idParto: number) {
   const parto = await prisma.parto.findUnique({
     where: { id: idParto },
     include: {
-      casal: { select: { idLinhagem: true, linhagem: { select: { idEspecie: true } } } },
       // So os ativos entram na soma - o cancelado fica na tabela, mas
       // ele nao pesa mais no comprometido (mesma regra do trigger do banco)
       compromissos: { where: { dtCancelamento: null }, select: { qtdM: true, qtdF: true } },
@@ -113,12 +85,6 @@ export async function cicloFicha(idParto: number) {
   if (parto === null) {
     throw naoEncontrado('Parto')
   }
-
-  const parametros = await parametrosDaEspecie(parto.casal.linhagem.idEspecie)
-  const expectativa = expectativaNaData(parametros, {
-    idLinhagem: parto.casal.idLinhagem,
-    em: dataISO(parto.dtAcasalamento),
-  })
 
   const comprometido = parto.compromissos.reduce(
     (soma, c) => ({ m: soma.m + c.qtdM, f: soma.f + c.qtdF }),
@@ -134,7 +100,7 @@ export async function cicloFicha(idParto: number) {
       desmamadoM: parto.desmamadoM,
       desmamadoF: parto.desmamadoF,
     },
-    { expectativa, comprometido },
+    comprometido,
   )
 
   return {
@@ -223,19 +189,7 @@ export async function formarCasal(dados: NovoCasal) {
 
   await validarParGenetico(dados.grupoMacho, dados.grupoFemea)
 
-  const parametros = await parametrosDaEspecie(linhagem.idEspecie)
-  const parametro = parametroNaData(parametros, {
-    idLinhagem: linhagem.id,
-    em: dados.dtFormacao,
-  })
-
-  if (parametro === undefined) {
-    throw new Error(
-      `Sem parametro_biologico vigente em ${dados.dtFormacao} para a especie ${linhagem.idEspecie}.`,
-    )
-  }
-
-  const parto1 = calcularCicloInicial(dados.dtFormacao, parametro)
+  const parto1 = calcularCicloInicial(dados.dtFormacao)
 
   // um casal ativo por caixa fica por conta do indice parcial do banco. Se disparar,
   // 'erros-do-banco.ts' traduz
@@ -301,10 +255,7 @@ export type Nascimento = {
 
 /** POST /api/partos/:id/nascimento */
 export async function registrarNascimento(idParto: number, dados: Nascimento, idUsuario: number) {
-  const parto = await prisma.parto.findUnique({
-    where: { id: idParto },
-    include: { casal: { select: { id: true, idLinhagem: true, linhagem: true } } },
-  })
+  const parto = await prisma.parto.findUnique({ where: { id: idParto } })
 
   if (parto === null) {
     throw naoEncontrado('Parto')
@@ -315,16 +266,6 @@ export async function registrarNascimento(idParto: number, dados: Nascimento, id
       'SEQUENCIA_INVALIDA',
       'Este parto ja tem data real registrada. Correcao de registro ainda nao esta disponivel.',
     )
-  }
-
-  const parametros = await parametrosDaEspecie(parto.casal.linhagem.idEspecie)
-  const parametro = parametroNaData(parametros, {
-    idLinhagem: parto.casal.idLinhagem,
-    em: dados.dtPartoReal,
-  })
-
-  if (parametro === undefined) {
-    throw new Error(`Sem parametro_biologico vigente em ${dados.dtPartoReal}.`)
   }
 
   await prisma.$transaction(async (tx) => {
@@ -341,23 +282,23 @@ export async function registrarNascimento(idParto: number, dados: Nascimento, id
       },
     })
 
-    if (parto.ordem >= parametro.maxPartoCasal) {
+    if (parto.ordem >= MAX_PARTOS_POR_CASAL) {
       // No ultimo parto confirmado o casal encerra sozinho.
       await tx.casal.update({
         where: { id: parto.idCasal },
         data: {
           ativo: false,
           dtEncerramento: paraData(dados.dtPartoReal),
-          motivoEncerramento: `Limite de ${parametro.maxPartoCasal} partos atingido`,
+          motivoEncerramento: `Limite de ${MAX_PARTOS_POR_CASAL} partos atingido`,
         },
       })
       return
     }
 
-    const proximo = calcularProximoCiclo(dados.dtPartoReal, parametro)
+    const proximo = calcularProximoCiclo(dados.dtPartoReal)
 
     // CHECK parto_ordem_ciclo (1..5) e a rede de seguranca desta linha: se
-    // 'parametro.maxPartoCasal' algum dia divergir de 5 no banco, o Postgres recusa antes
+    // MAX_PARTOS_POR_CASAL mudar sem uma migration junto, o Postgres recusa antes
     // de gravar ordem invalida.
     await tx.parto.create({
       data: {

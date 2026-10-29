@@ -2,9 +2,8 @@
 // (secao 1.13): a identificacao, o parto atual (a bolinha colorida) e o proximo parto
 // previsto (o "P:dd/mm")
 
+import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { dataISO } from '../../shared/traducao.ts'
-
-const MAX_PARTOS = 5
 
 type PartoDoCard = { dtPartoPrevisto: Date; dtPartoReal: Date | null }
 
@@ -18,7 +17,7 @@ type CasalDoCard = {
 /** Partos com data real confirmada. Com 0 ou 1 confirmado e 1, e nunca passa de 5 */
 export function partoAtual(partos: PartoDoCard[]): number {
   const confirmados = partos.filter((parto) => parto.dtPartoReal !== null).length
-  return Math.max(1, Math.min(confirmados, MAX_PARTOS))
+  return Math.max(1, Math.min(confirmados, MAX_PARTOS_POR_CASAL))
 }
 
 /** A previsao do primeiro parto ainda sem data real, ou null quando nao ha pendente */
