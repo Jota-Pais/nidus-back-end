@@ -99,12 +99,11 @@ partoRoutes.post('/:id/selecao', exigirPerfil(...OPERA_A_COLONIA), async (req, r
   res.json(await registrarSelecao(id, dados, usuarioDaRequisicao(req).id))
 })
 
-/** idCaixaRecria nulo e explicito, nunca omitido (destino em aberto) */
-const desmame = z.object({
+/** Corpo de POST /api/partos/:id/desmame. Chave a mais que o front mande e descartada */
+export const desmame = z.object({
   dtDesmameReal: dataCalendario,
   desmamadoM: z.number().int().min(0),
   desmamadoF: z.number().int().min(0),
-  idCaixaRecria: z.number().int().positive().nullable(),
 })
 
 partoRoutes.post('/:id/desmame', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {

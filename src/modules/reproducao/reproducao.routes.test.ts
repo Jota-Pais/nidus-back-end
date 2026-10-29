@@ -3,7 +3,7 @@ import request from 'supertest'
 import { describe, expect, it } from 'vitest'
 import { criarApp } from '../../app.ts'
 import type { Perfil } from '../../shared/traducao.ts'
-import { casalNovo } from './reproducao.routes.ts'
+import { casalNovo, desmame } from './reproducao.routes.ts'
 
 // Autorizacao e validacao de forma - o mesmo recorte de
 // 'infra.routes.test.ts'. Sucesso com dado real (as regras
@@ -44,10 +44,7 @@ describe('autorizacao das rotas de reproducao', () => {
     const rotas = [
       ['/api/partos/1/nascimento', { dtPartoReal: '2026-05-25', nascidoM: 5, nascidoF: 6 }],
       ['/api/partos/1/selecao', { dtSelecao: '2026-05-25', eutanasiadoM: 1, eutanasiadoF: 1 }],
-      [
-        '/api/partos/1/desmame',
-        { dtDesmameReal: '2026-06-16', desmamadoM: 4, desmamadoF: 5, idCaixaRecria: null },
-      ],
+      ['/api/partos/1/desmame', { dtDesmameReal: '2026-06-16', desmamadoM: 4, desmamadoF: 5 }],
       ['/api/casais/1/encerramento', { dtEncerramento: '2026-05-25', motivo: 'Teste' }],
     ] as const
 
@@ -107,23 +104,27 @@ describe('validacao de entrada - formacao de casal', () => {
   })
 })
 
-describe('desmame aceita idCaixaRecria nulo, mas nao omitido', () => {
-  it('nulo explicito passa pela forma (destino em aberto)', async () => {
-    // sem sessao de proposito: so confere que o Zod aceita a forma antes de chegar ao
-    // servico (que devolveria 401 aqui, e nao e o que se testa).
-    const resposta = await request(app())
-      .post('/api/partos/1/desmame')
-      .send({ dtDesmameReal: '2026-06-16', desmamadoM: 4, desmamadoF: 5, idCaixaRecria: null })
+describe('validacao de entrada - desmame', () => {
+  it('descarta o idCaixaRecria que o front ainda manda', () => {
+    const resultado = desmame.safeParse({
+      dtDesmameReal: '2026-06-16',
+      desmamadoM: 4,
+      desmamadoF: 5,
+      idCaixaRecria: null,
+    })
 
-    expect(resposta.status).toBe(401)
+    expect(resultado.success).toBe(true)
+    expect(resultado.data).toEqual({ dtDesmameReal: '2026-06-16', desmamadoM: 4, desmamadoF: 5 })
   })
 
-  it('omitir o campo e VALIDACAO, nao um nulo implicito', async () => {
+  it('recusa desmame sem a contagem, campo a campo', async () => {
+    // a validacao barra antes do servico: nada chega ao banco
     const resposta = await request(app('tecnico'))
       .post('/api/partos/1/desmame')
-      .send({ dtDesmameReal: '2026-06-16', desmamadoM: 4, desmamadoF: 5 })
+      .send({ dtDesmameReal: '2026-06-16', desmamadoM: 4 })
 
     expect(resposta.status).toBe(400)
     expect(resposta.body.erro.codigo).toBe('VALIDACAO')
+    expect(Object.keys(resposta.body.erro.campos)).toContain('desmamadoF')
   })
 })

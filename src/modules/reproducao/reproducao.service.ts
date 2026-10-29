@@ -336,7 +336,6 @@ export type Desmame = {
   dtDesmameReal: string
   desmamadoM: number
   desmamadoF: number
-  idCaixaRecria: number | null
 }
 
 /** POST /api/partos/:id/desmame. A partir daqui o estoque e confirmado */
@@ -351,21 +350,12 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
     throw erroDeRegra('SEQUENCIA_INVALIDA', 'Registre o parto antes do desmame.')
   }
 
-  if (dados.idCaixaRecria !== null) {
-    const caixaRecria = await prisma.caixa.findUnique({ where: { id: dados.idCaixaRecria } })
-
-    if (caixaRecria === null) {
-      throw naoEncontrado('Caixa de recria')
-    }
-  }
-
   await prisma.parto.update({
     where: { id: idParto },
     data: {
       dtDesmameReal: paraData(dados.dtDesmameReal),
       desmamadoM: dados.desmamadoM,
       desmamadoF: dados.desmamadoF,
-      idCaixaRecria: dados.idCaixaRecria,
       idUsuarioDesmame: idUsuario,
       dtRegistroDesmame: new Date(),
     },
