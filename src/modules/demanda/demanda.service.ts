@@ -9,15 +9,11 @@ import {
   dataISO,
   exigirCodigo,
   hojeISO,
+  paraData,
   statusSolicitacao,
 } from '../../shared/traducao.ts'
 import { calcularDisponibilidade, parametroNaData } from '../reproducao/disponibilidade.ts'
 import { parametrosDaEspecie } from '../reproducao/reproducao.service.ts'
-
-/** 'aaaa-mm-dd' -> meia-noite UTC, como o resto do projeto grava data de calendario */
-function paraData(iso: string): Date {
-  return new Date(`${iso}T00:00:00.000Z`)
-}
 
 /** O pesquisador so ve os proprios projetos e pedidos; tecnico e gestor veem todos */
 const doPesquisador = (usuario: UsuarioDaSessao) => usuario.perfil === 'pesquisador'

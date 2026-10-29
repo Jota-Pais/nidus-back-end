@@ -10,12 +10,7 @@ import type { ParametroVigente } from './disponibilidade.ts'
 import { calcularCicloInicial, calcularProximoCiclo } from './cadeiaTemporal.ts'
 import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
-import { dataISO } from '../../shared/traducao.ts'
-
-/** 'aaaa-mm-dd' -> meia-noite UTC, como o resto do projeto grava data de calendario */
-function paraData(iso: string): Date {
-  return new Date(`${iso}T00:00:00.000Z`)
-}
+import { dataISO, paraData } from '../../shared/traducao.ts'
 
 export type ParametroCompleto = ParametroVigente & {
   gestacaoDias: number

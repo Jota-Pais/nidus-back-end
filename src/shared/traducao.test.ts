@@ -8,6 +8,7 @@ import {
   finalidadeCaixa,
   grauCerteza,
   hojeISO,
+  paraData,
   perfil,
 } from './traducao.ts'
 
@@ -83,5 +84,10 @@ describe('data de calendario', () => {
     // 24/05 para esta data
     expect(dataISO(new Date(Date.UTC(2026, 4, 25)))).toBe('2026-05-25')
     expect(hojeISO(new Date('2026-09-10T23:30:00.000Z'))).toBe('2026-09-10')
+  })
+
+  it('grava aaaa-mm-dd como meia-noite UTC, e a volta da a mesma data', () => {
+    expect(paraData('2026-05-25').toISOString()).toBe('2026-05-25T00:00:00.000Z')
+    expect(dataISO(paraData('2026-05-25'))).toBe('2026-05-25')
   })
 })

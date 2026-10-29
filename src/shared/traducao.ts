@@ -110,6 +110,11 @@ export function dataISO(data: Date): string {
   return data.toISOString().slice(0, 10)
 }
 
+/** 'aaaa-mm-dd' -> meia-noite UTC, como o projeto grava data de calendario */
+export function paraData(iso: string): Date {
+  return new Date(`${iso}T00:00:00.000Z`)
+}
+
 /** A data de hoje em UTC, para comparar com coluna '@db.Date' */
 export function hojeISO(agora: Date = new Date()): string {
   return dataISO(agora)

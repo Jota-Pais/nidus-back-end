@@ -5,7 +5,6 @@ import {
   exigirPerfil,
   usuarioDaRequisicao,
 } from '../../shared/middlewares/autorizacao.ts'
-import type { Perfil } from '../../shared/traducao.ts'
 import {
   alocarSolicitacao,
   criarSolicitacao,
@@ -16,13 +15,11 @@ import {
 export const projetoRoutes = Router()
 export const solicitacaoRoutes = Router()
 
-const TODOS: Perfil[] = ['pesquisador', 'tecnico', 'gestor']
-
-projetoRoutes.get('/', exigirPerfil(...TODOS), async (req, res) => {
+projetoRoutes.get('/', exigirPerfil(), async (req, res) => {
   res.json(await listarProjetos(usuarioDaRequisicao(req)))
 })
 
-solicitacaoRoutes.get('/', exigirPerfil(...TODOS), async (req, res) => {
+solicitacaoRoutes.get('/', exigirPerfil(), async (req, res) => {
   res.json(await listarSolicitacoes(usuarioDaRequisicao(req)))
 })
 
@@ -42,7 +39,7 @@ export const solicitacaoNova = z
     error: 'Peca ao menos um animal.',
   })
 
-solicitacaoRoutes.post('/', exigirPerfil(...TODOS), async (req, res) => {
+solicitacaoRoutes.post('/', exigirPerfil(), async (req, res) => {
   const dados = solicitacaoNova.parse(req.body)
 
   res.status(201).json(await criarSolicitacao(dados, usuarioDaRequisicao(req)))
