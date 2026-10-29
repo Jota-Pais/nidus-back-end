@@ -58,7 +58,7 @@ export type Disponibilidade = {
   disponivel: PorSexo
 }
 
-/** disponibilidade completa de um ciclo. É esta a função que a ficha, o quadro e o motor chamam */
+/** disponibilidade completa de um ciclo. É esta a função que a ficha, a alocação e a busca chamam */
 export function calcularDisponibilidade(
   ciclo: ContagemDoCiclo,
   { expectativa, comprometido }: { expectativa: PorSexo; comprometido: PorSexo },

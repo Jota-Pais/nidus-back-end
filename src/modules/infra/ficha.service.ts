@@ -117,7 +117,7 @@ export async function montarFicha(idCaixa: number) {
         codigo: codigoDaPosicao(caixa.face, caixa.linha, caixa.coluna, caixa.estante.colunas),
       },
       especie: codigoDaEspecie(caixa.especie.nome),
-      // Vem do casal - infra.caixa nao tem linhagem no MVP (mesma leitura de montarGrade).
+      // Vem do casal - infra.caixa nao tem linhagem (mesma leitura de montarGrade).
       // Mostra mesmo com o casal encerrado: a ficha e historico.
       linhagem: casal?.linhagem ?? null,
       estado: estadoCaixa.paraApi(caixa.estado),

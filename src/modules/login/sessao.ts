@@ -1,4 +1,4 @@
-// sessao em memoria - decisao de implementacao do card, registrada aqui.
+// sessao em memoria: quando o processo reinicia, todo mundo loga de novo.
 
 import { randomBytes } from 'node:crypto'
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'

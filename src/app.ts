@@ -42,8 +42,8 @@ export function criarApp({
   app.use(express.json())
   app.use(cookieParser())
 
-  // Healthcheck. Publico e a unica rota fora de /api: e por
-  // ele que a Render sabe que a instancia subiu e o front sabe que ela acordou
+  // Healthcheck. Publico e a unica rota fora de /api: e por ele que a Render sabe que a
+  // instancia subiu
   app.get('/saude', (_req, res) => {
     res.json({ status: 'ok', ambiente, versao })
   })

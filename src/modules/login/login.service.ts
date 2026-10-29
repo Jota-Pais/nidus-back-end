@@ -27,9 +27,9 @@ function paraUsuarioDaSessao(usuario: {
 }
 
 /**
- * A senha mestra ativa, se existir. login.senha_mestra nao e requisito do cliente
- * nem tabela do MVP - e decisao operacional do time,
- * guardada como hash (nunca texto puro, mesma regra de usuario.hash_senha)
+ * A senha mestra ativa, se existir. login.senha_mestra nao e requisito do cliente - e
+ * decisao operacional do time, guardada como hash (nunca texto puro, mesma regra de
+ * usuario.hash_senha)
  */
 async function senhaMestraConfere(senha: string): Promise<boolean> {
   const mestra = await prisma.senhaMestra.findFirst({ where: { ativa: true } })

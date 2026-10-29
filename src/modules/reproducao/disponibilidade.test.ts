@@ -75,7 +75,6 @@ describe('selecao ausente conta zero, nao nulo', () => {
 
 describe('disponibilidade liquida', () => {
   it('parto com 4M desmamados e 2M comprometidos devolve 2M e confirmado', () => {
-    // O caso escrito no card, palavra por palavra
     const resultado = calcularDisponibilidade(confirmado, {
       expectativa,
       comprometido: { m: 2, f: 0 },

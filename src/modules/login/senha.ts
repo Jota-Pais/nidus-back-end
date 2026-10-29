@@ -1,5 +1,4 @@
-// hash de senha - escolha do card, registrada aqui (o comentario de
-// 'prisma/massa-teste.ts' deixa explicito que ninguem decidiu isto antes).
+// hash de senha com bcrypt
 
 import bcrypt from 'bcryptjs'
 import { env } from '../../env.ts'
