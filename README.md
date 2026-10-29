@@ -39,7 +39,7 @@ genéticos) estão no banco, não no código.
 
 ```bash
 npm install
-cp .env.example .env     # preencha DATABASE_URL com a string da Neon
+cp .env.example .env     # preencha DATABASE_URL e DATABASE_URL_UNPOOLED com as strings da Neon
 npm run db:generate      # gera o Prisma Client
 npm run dev              # http://localhost:3333/saude
 ```

@@ -16,7 +16,7 @@ export default defineConfig({
   // A CLI usa a conexao DIRETA, sem -pooler: o PgBouncer da Neon quebra lock
   // consultivo e prepared statement, que o migrate precisa. No Prisma 7 o
   // datasource nao tem directUrl, entao a separacao e feita aqui. As duas
-  // variaveis sao mantidas pelo `neon link`/`neon deploy` - nao editar a mao.
+  // variaveis sao preenchidas a mao, no .env local e no painel da Render.
   datasource: {
     url: env('DATABASE_URL_UNPOOLED'),
   },
