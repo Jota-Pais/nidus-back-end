@@ -77,13 +77,15 @@ export async function moverCaixa(idCaixa: number, dados: PedidoDeTransicao) {
   const estadoNovo = exigirCodigo(estadoCaixa, dados.estado, 'Estado')
   const partoAtual = caixa.casais[0]?.partos[0]
 
-  const compromissos = partoAtual === undefined ? [] : await compromissosDoParto(partoAtual.id)
+  const compromissos =
+    partoAtual === undefined
+      ? 0
+      : await prisma.compromisso.count({ where: { idParto: partoAtual.id, dtCancelamento: null } })
 
-  if (compromissos.length > 0 && !dados.confirmar) {
+  if (compromissos > 0 && !dados.confirmar) {
     throw erroDeRegra(
       'TRANSICAO_CONTRARIA_COMPROMISSO',
       'Esta caixa tem animais comprometidos que esta mudanca pode afetar. Confirmar mesmo assim?',
-      { compromissosAfetados: compromissos },
     )
   }
 
@@ -93,24 +95,4 @@ export async function moverCaixa(idCaixa: number, dados: PedidoDeTransicao) {
   })
 
   return { idCaixa: atualizada.id, estado: estadoCaixa.paraApi(atualizada.estado) }
-}
-
-async function compromissosDoParto(idParto: number) {
-  const compromissos = await prisma.compromisso.findMany({
-    where: { idParto, dtCancelamento: null },
-    select: {
-      qtdM: true,
-      qtdF: true,
-      remessa: {
-        select: { id: true, solicitacao: { select: { projeto: { select: { numero: true } } } } },
-      },
-    },
-  })
-
-  return compromissos.map((compromisso) => ({
-    idRemessa: compromisso.remessa.id,
-    projeto: compromisso.remessa.solicitacao.projeto.numero,
-    qtdM: compromisso.qtdM,
-    qtdF: compromisso.qtdF,
-  }))
 }
