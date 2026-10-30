@@ -208,8 +208,9 @@ describe('lista de solicitacoes', () => {
     await listarSolicitacoes(pesquisadora)
     expect(banco.consultaDaLista).toMatchObject({ where: { idUsuarioSolicitante: pesquisadora.id } })
 
+    // 'toMatchObject({ where: {} })' passaria com qualquer filtro: o where do tecnico tem de ser vazio
     await listarSolicitacoes(tecnica)
-    expect(banco.consultaDaLista).toMatchObject({ where: {} })
+    expect((banco.consultaDaLista as { where: unknown }).where).toEqual({})
   })
 })
 
