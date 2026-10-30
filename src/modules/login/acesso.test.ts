@@ -1041,6 +1041,38 @@ describe('POST /api/acesso/senha', () => {
     expect((await entrar('gestor@ufsc.br', SENHA_NOVA)).status).toBe(200)
   })
 
+  it('o login que leu a senha antiga antes da troca nao abre sessao, mesmo com a leitura chegando depois', async () => {
+    await pedir('gestor@ufsc.br')
+    const codigo = codigoDe('gestor@ufsc.br')
+    const buscar = falso.prisma.usuario.findUnique
+
+    // O banco le a senha antiga antes do commit da troca, mas a resposta so chega ao login depois
+    // que a troca terminou e revogou as sessoes. Por isso o login marca o comeco antes de pedir a
+    // senha ao banco: marcado depois, ele ficaria mais novo que a revogacao e abriria a sessao
+    let soltarResposta = () => {}
+    const resposta = new Promise<void>((pronto) => {
+      soltarResposta = pronto
+    })
+    let lida: Linha | null | undefined
+    vi.spyOn(falso.prisma.usuario, 'findUnique').mockImplementationOnce(async (consulta) => {
+      const linha = await buscar(consulta)
+      lida = linha
+      await resposta
+      return linha
+    })
+
+    const loginEmAndamento = entrar('gestor@ufsc.br', SENHA_ANTIGA).then((r) => r)
+    await vi.waitFor(() => expect(lida?.hashSenha).toBe(hashAntigo))
+
+    expect((await definir({ email: 'gestor@ufsc.br', codigo, senha: SENHA_NOVA })).status).toBe(200)
+    soltarResposta()
+    const login = await loginEmAndamento
+
+    expect(login.status).toBe(401)
+    expect(login.body.erro.codigo).toBe('NAO_AUTENTICADO')
+    expect(login.headers['set-cookie']).toBeUndefined()
+  })
+
   it('so a conta que ja existia recebe o aviso de senha alterada, e so quando a troca passa', async () => {
     await pedir('gestor@ufsc.br')
     await pedir('novo@ufsc.br')
