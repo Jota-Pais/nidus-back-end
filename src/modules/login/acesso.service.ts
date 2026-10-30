@@ -46,7 +46,10 @@ export function novoCodigo(): string {
   return randomInt(0, 1_000_000).toString().padStart(6, '0')
 }
 
-/** 429 no primeiro limite que o pedido estoura. Roda antes de qualquer gravacao */
+/**
+ * 429 no primeiro limite que o pedido estoura. Roda antes de qualquer gravacao: uma vez so
+ * lendo, sem trava, e de novo dentro da transacao
+ */
 async function conferirLimites(tx: Prisma.TransactionClient, email: string, agora: Date) {
   const desde = (intervalo: number) => ({ gt: new Date(agora.getTime() - intervalo) })
   const doTotal = 'Muitos codigos pedidos agora. Tente de novo mais tarde.'
@@ -82,6 +85,11 @@ export async function pedirCodigo(
   email: string,
   agora = new Date(),
 ): Promise<{ validadeEmMinutos: number }> {
+  // Primeiro so lendo, sem trava: o pedido que ja estoura um limite volta 429 antes do hash do
+  // codigo, que e a parte cara (bcrypt). Sem isso, um script martelando a rota gasta a CPU do
+  // servidor mesmo levando 429, e a cada pedido pega uma conexao para a fila da trava
+  await conferirLimites(prisma, email, agora)
+
   const codigo = novoCodigo()
   const [usuario, hashCodigo] = await Promise.all([
     prisma.usuario.findUnique({ where: { email } }),
@@ -90,9 +98,9 @@ export async function pedirCodigo(
 
   await prisma.$transaction(async (tx) => {
     // Um pedido de cada vez daqui ate o commit: sem a fila, dois pedidos em paralelo contam as
-    // mesmas linhas e passam juntos do limite. A trava e da transacao (sai no commit) e por
-    // isso funciona atras do pooler da Neon. Pedido de codigo e raro, e a fila dura so as
-    // contagens e a gravacao
+    // mesmas linhas e passam juntos do limite, e por isso os limites sao conferidos de novo
+    // aqui dentro. A trava e da transacao (sai no commit) e por isso funciona atras do pooler
+    // da Neon. Pedido de codigo e raro, e a fila dura so as contagens e a gravacao
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('login.codigo_acesso'))`
     await conferirLimites(tx, email, agora)
 

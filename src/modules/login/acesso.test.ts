@@ -362,6 +362,18 @@ describe('POST /api/acesso/codigo', () => {
     expect(falso.tabelas.codigoAcesso).toHaveLength(teto)
   })
 
+  it('o 429 sai antes do hash do codigo, que e a parte cara do pedido', async () => {
+    await pedir('tecnico@ufsc.br')
+    falso.encher(LIMITES_DE_PEDIDO.totalPorDia, 120)
+    vi.mocked(hashSenha).mockClear()
+
+    const doEmail = await pedir('tecnico@ufsc.br')
+    const doTotal = await pedir('novo@ufsc.br')
+
+    expect([doEmail.status, doTotal.status]).toEqual([429, 429])
+    expect(hashSenha).not.toHaveBeenCalled()
+  })
+
   it('dois pedidos em paralelo nao passam juntos do limite do e-mail nem do teto total', async () => {
     const mesmoEmail = await Promise.all([pedir('novo@ufsc.br'), pedir('novo@ufsc.br')])
 
