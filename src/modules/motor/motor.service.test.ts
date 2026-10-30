@@ -53,13 +53,14 @@ vi.mock('../../shared/prisma.ts', () => ({
 const pedido = { especie: 'rato', machos: 0, femeas: 0, qualquer: 1, dataEntrega: ENTREGA }
 
 describe('faixa de idade na busca', () => {
-  it('a faixa 21 a 40 aceita de faixaAceita(21).min a faixaAceita(40).max, do mais velho para o mais novo', async () => {
-    banco.caixas = [caixa(1, 19), caixa(2, 20), caixa(3, 30), caixa(4, 44), caixa(5, 45)]
+  it('a faixa 21 a 40 aceita de faixaAceita(21).min a faixaAceita(40).max, a pedida antes da tolerancia', async () => {
+    banco.caixas = [caixa(1, 19), caixa(2, 20), caixa(3, 21), caixa(4, 30), caixa(5, 40), caixa(6, 44), caixa(7, 45)]
 
     const busca = await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
 
     expect(busca.faixa).toEqual({ min: 20, max: 44 })
-    expect(busca.candidatas.map((c) => c.idadeNaEntrega)).toEqual([44, 30, 20])
+    // de 21 a 40 do mais velho para o mais novo; depois 44 e 20, que so entram pela tolerancia
+    expect(busca.candidatas.map((c) => c.idadeNaEntrega)).toEqual([40, 30, 21, 44, 20])
   })
 
   it('a idade exata aceita o mesmo de antes, pela proximidade', async () => {

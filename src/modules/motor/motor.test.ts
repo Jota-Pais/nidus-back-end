@@ -64,6 +64,36 @@ describe('ordem das candidatas', () => {
     expect(ordem.map((c) => c.idCaixa)).toEqual([3, 4, 1, 2, 5])
   })
 
+  it('com faixa, o que esta dentro da faixa pedida vem antes do que so entra pela tolerancia', () => {
+    // pedido de 21 a 40: a faixa aceita vai de 20 a 44, mas 20 e 44 so entram pela tolerancia
+    const ordem = ordenar(
+      [
+        candidata(1, 'de_fato', 44, 4, 4),
+        candidata(2, 'de_fato', 21, 4, 4),
+        candidata(3, 'de_fato', 20, 4, 4),
+        candidata(4, 'de_fato', 40, 4, 4),
+        candidata(5, 'de_fato', 30, 4, 4),
+        candidata(6, 'de_fato', 42, 4, 4),
+      ],
+      { min: 21, max: 40 },
+    )
+    expect(ordem.map((c) => c.idadeNaEntrega)).toEqual([40, 30, 21, 44, 42, 20])
+  })
+
+  it('com faixa, a origem vem antes da faixa pedida', () => {
+    // a de fato so tolerada vem antes da previsao dentro do pedido
+    const ordem = ordenar(
+      [
+        candidata(1, 'previsao', 30, 4, 4),
+        candidata(2, 'de_fato', 44, 4, 4),
+        candidata(3, 'previsao', 20, 4, 4),
+        candidata(4, 'de_fato', 25, 4, 4),
+      ],
+      { min: 21, max: 40 },
+    )
+    expect(ordem.map((c) => c.idCaixa)).toEqual([4, 2, 1, 3])
+  })
+
   it('com faixa, na mesma idade fica a que tem mais animais', () => {
     const ordem = ordenar([candidata(1, 'de_fato', 30, 1, 1), candidata(2, 'de_fato', 30, 4, 4)], { min: 21, max: 40 })
     expect(ordem.map((c) => c.idCaixa)).toEqual([2, 1])

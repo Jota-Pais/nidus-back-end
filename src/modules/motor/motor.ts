@@ -46,14 +46,16 @@ export type Candidata = {
 }
 
 /**
- * de fato, depois previsao, depois previsao de parto. Dentro de cada grupo, com faixa, do mais
- * velho para o mais novo (secao 1.7, passo 5); com idade exata, a mais proxima da pedida. No
- * empate, a que tem mais animais
+ * de fato, depois previsao, depois previsao de parto. Dentro de cada grupo, com faixa, primeiro o
+ * que esta dentro da faixa pedida (idadeMin..idadeMax) e depois o que so entra pela tolerancia,
+ * cada parte do mais velho para o mais novo (secao 1.7, passo 5); com idade exata, a mais proxima
+ * da pedida. No empate, a que tem mais animais
  */
 export function ordenar<T extends Candidata>(candidatas: T[], idade: IdadePedida): T[] {
+  const soPelaTolerancia = (c: T) => (c.idadeNaEntrega < idade.min || c.idadeNaEntrega > idade.max ? 1 : 0)
   const pelaIdade =
     idade.min < idade.max
-      ? (a: T, b: T) => b.idadeNaEntrega - a.idadeNaEntrega
+      ? (a: T, b: T) => soPelaTolerancia(a) - soPelaTolerancia(b) || b.idadeNaEntrega - a.idadeNaEntrega
       : (a: T, b: T) => Math.abs(a.idadeNaEntrega - idade.min) - Math.abs(b.idadeNaEntrega - idade.min)
 
   return [...candidatas].sort(
