@@ -61,7 +61,7 @@ e o que você grava rodando local aparece para o cliente.
 | `npm run db:deploy` | Aplica migrations pendentes. Nunca dropa nada |
 | `npm run db:seed` | Carga inicial: espécies, linhagens, parâmetros, pares genéticos e estantes (não duplica nada) |
 | `npm run db:usuarios` | Cria os três usuários e o projeto CEUA num banco novo. Procura cada usuário pelo e-mail: o que acha fica como está, o que não acha é criado de novo |
-| `npm run db:senha -- <email> "<senha>"` | Define a senha de um usuário. É a reserva para quando o e-mail do primeiro acesso não chega, ou trava por código errado demais |
+| `npm run db:senha -- <email> "<senha>"` | Define a senha de um usuário que já existe. É a reserva de quem já tem conta, quando o e-mail com o código não chega ou trava por código errado demais. Não cria conta |
 
 ## Stack
 
@@ -125,8 +125,9 @@ esqueceu, pede o código pela tela `/definir-senha` do front.
   (`TETO_DE_ERROS_POR_EMAIL`). Passado o teto, o pedido de código dá `429
   MUITAS_TENTATIVAS` sem enviar nem gravar código, e a verificação e a senha dão
   `409 CODIGO_INVALIDO`, mesmo com o código certo, até a janela andar. Vale igual
-  com conta, sem conta e com conta inativa. Quem ficar travado recebe a senha pelo
-  `db:senha`.
+  com conta, sem conta e com conta inativa. Quem já tem conta e ficar travado
+  recebe a senha pelo `db:senha`, que só define a senha de usuário existente: o
+  primeiro acesso, de quem ainda não tem conta, espera a janela de 24 h.
 - O pedido de código responde igual com conta, sem conta e com conta inativa, e
   as rotas de `/api/acesso` só dizem se a conta existe depois do código certo.
   Conta inativa nunca recebe código, nunca troca a senha e nunca abre sessão.

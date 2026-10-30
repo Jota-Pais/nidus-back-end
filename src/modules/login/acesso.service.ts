@@ -45,8 +45,9 @@ const DIA = 24 * HORA
  * Quantos codigos errados um e-mail aguenta em 24 h, somando todos os codigos dele. As 5
  * tentativas valem por codigo e cada codigo novo comeca do zero: sem este teto, sao 25 palpites
  * por hora contra qualquer conta, gestor inclusive. Passado o teto, o e-mail nao recebe codigo
- * novo (429) e nenhum codigo dele passa (409) ate a janela andar; a reserva e o npm run db:senha.
- * Vale igual com conta, sem conta e com conta inativa: a conta nem e lida
+ * novo (429) e nenhum codigo dele passa (409) ate a janela andar. A reserva de quem ja tem conta e
+ * o npm run db:senha; o primeiro acesso, sem conta, espera a janela. Vale igual com conta, sem
+ * conta e com conta inativa: a conta nem e lida
  */
 export const TETO_DE_ERROS_POR_EMAIL = 20
 
