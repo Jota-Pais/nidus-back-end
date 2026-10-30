@@ -111,7 +111,7 @@ describe('forma da solicitacao', () => {
     expect(solicitacaoNova.safeParse({ ...pedido, dataEntrega: hojeEmBrasilia() }).success).toBe(true)
   })
 
-  describe('hoje e o dia de Brasilia, como no front', () => {
+  describe('hoje e o dia de Brasilia, nao o de UTC', () => {
     afterEach(() => {
       vi.useRealTimers()
     })

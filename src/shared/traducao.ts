@@ -104,9 +104,10 @@ export function hojeISO(agora: Date = new Date()): string {
 }
 
 /**
- * O dia de hoje em Brasilia, 'aaaa-mm-dd', o mesmo que o front calcula. So a regra "entrega a
- * partir de hoje" do pedido usa: das 21h a meia-noite o dia em UTC ja virou, e a entrega para
- * hoje seria recusada. O resto do back continua com 'hojeISO'
+ * O dia de hoje em Brasilia, 'aaaa-mm-dd'. So a regra "entrega a partir de hoje" do pedido usa:
+ * das 21h a meia-noite o dia em UTC ja virou, e a entrega para hoje seria recusada. O front usa
+ * o dia do navegador, que so e o mesmo com o navegador no horario de Brasilia. O resto do back
+ * continua com 'hojeISO'
  */
 export function hojeEmBrasilia(agora: Date = new Date()): string {
   // monta pelas partes, sem depender do padrao de data de um idioma, que muda com o ICU

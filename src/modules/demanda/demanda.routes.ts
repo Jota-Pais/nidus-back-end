@@ -63,7 +63,7 @@ export const solicitacaoNova = z
     path: ['idadeMax'],
     error: 'A idade maxima nao pode ser menor que a minima.',
   })
-  // hoje e o dia de Brasilia, o mesmo do front: em UTC, das 21h a meia-noite, hoje ja seria passado
+  // hoje e o dia de Brasilia: em UTC, das 21h a meia-noite, hoje ja seria passado
   .refine((dados) => dados.dataEntrega >= hojeEmBrasilia(), {
     path: ['dataEntrega'],
     error: 'A data de entrega ja passou.',

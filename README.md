@@ -50,8 +50,8 @@ Os pares genéticos ficam no banco.
   do biotério (por enquanto, pelo `db:usuarios`). O pedido traz machos, fêmeas e
   animais de qualquer sexo (até 9999 cada, ao menos um no total), a idade de 21 a
   300 dias como faixa `idadeMin..idadeMax` (a exata é `idadeMin = idadeMax`), a
-  data de entrega (a partir de hoje, pelo dia de Brasília, como no front), o
-  cronograma e observações opcionais (até 500 caracteres). Protocolo que não
+  data de entrega (a partir de hoje, pelo dia de Brasília), o cronograma e
+  observações opcionais (até 500 caracteres). Protocolo que não
   existe, de outra pessoa ou fora de vigência dá `409 PROJETO_INVALIDO` com
   `campos.protocoloCeua`
 - **Faixa aceita** (`GET /api/busca`, com `idadeMin`, `idadeMax` e `qualquer`) -
