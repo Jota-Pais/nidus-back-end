@@ -4,7 +4,7 @@ import { esquemaEnv } from './env.ts'
 // O esquema direto, sem o process.env: o que esta em jogo e quem sobe e quem cai no boot
 
 const base = { DATABASE_URL: 'postgresql://placeholder/nidus-testes' }
-const brevo = { BREVO_API_KEY: 'chave-de-mentira', EMAIL_REMETENTE: 'nidus@exemplo.ufsc.br' }
+const brevo = { BREVO_API_KEY: 'chave-de-mentira', EMAIL_REMETENTE: 'nidus@exemplo.com' }
 
 /** As variaveis que derrubaram o boot */
 const recusadas = (fonte: Record<string, string>) => {

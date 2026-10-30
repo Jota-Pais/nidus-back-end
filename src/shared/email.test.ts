@@ -10,7 +10,7 @@ import {
 // os valores a cada envio. A rede tambem: o fetch e trocado em todo teste, e nenhum sai da maquina
 
 const CHAVE = 'chave-de-mentira-0123'
-const REMETENTE = 'nidus@exemplo.ufsc.br'
+const REMETENTE = 'nidus@exemplo.com'
 
 const ambiente = vi.hoisted(() => ({
   NODE_ENV: 'production',

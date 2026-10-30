@@ -11,7 +11,7 @@ const URL_DA_BREVO = 'https://api.brevo.com/v3/smtp/email'
 export const TEMPO_LIMITE_DO_ENVIO_EM_MS = 10_000
 
 /** O nome que aparece como remetente. O endereco e o EMAIL_REMETENTE, validado na Brevo */
-export const NOME_DO_REMETENTE = 'Nidus - CPMR/UFSC'
+export const NOME_DO_REMETENTE = 'Nidus'
 
 type Mensagem = {
   /** UM destinatario, ja validado pela rota (e-mail da UFSC, sem lista) */
