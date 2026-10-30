@@ -152,7 +152,22 @@ describe('pedido gravado', () => {
       }),
     ])
     expect(banco.gravado.remessa).toEqual([
-      expect.objectContaining({ idSolicitacao: 42, sequencia: 1, qtdMPrevista: 5, qtdFPrevista: 0 }),
+      expect.objectContaining({
+        idSolicitacao: 42,
+        sequencia: 1,
+        qtdMPrevista: 5,
+        qtdFPrevista: 0,
+        qtdQualquerPrevista: 10,
+      }),
+    ])
+  })
+
+  it('pedido so de qualquer sexo nao grava a remessa com zero animais', async () => {
+    // o banco recusa remessa com machos + femeas + qualquer = 0
+    await criarSolicitacao({ ...pedido, machos: 0, femeas: 0, qualquer: 7 }, pesquisadora, agora)
+
+    expect(banco.gravado.remessa).toEqual([
+      expect.objectContaining({ qtdMPrevista: 0, qtdFPrevista: 0, qtdQualquerPrevista: 7 }),
     ])
   })
 })

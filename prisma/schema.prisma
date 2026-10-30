@@ -386,14 +386,16 @@ model Solicitacao {
 
 /// Uma entrega. Um pedido pode ter remessa unica ou cronograma.
 model Remessa {
-  id            Int      @id @default(autoincrement())
-  idSolicitacao Int      @map("id_solicitacao")
-  sequencia     Int      @db.SmallInt
-  dtPrevista    DateTime @map("dt_prevista") @db.Date
-  dtRealizada   DateTime? @map("dt_realizada") @db.Date
-  qtdMPrevista  Int      @map("qtd_m_prevista") @db.SmallInt
-  qtdFPrevista  Int      @map("qtd_f_prevista") @db.SmallInt
-  status        String   @default("P") @db.Char(1)
+  id                  Int       @id @default(autoincrement())
+  idSolicitacao       Int       @map("id_solicitacao")
+  sequencia           Int       @db.SmallInt
+  dtPrevista          DateTime  @map("dt_prevista") @db.Date
+  dtRealizada         DateTime? @map("dt_realizada") @db.Date
+  qtdMPrevista        Int       @map("qtd_m_prevista") @db.SmallInt
+  qtdFPrevista        Int       @map("qtd_f_prevista") @db.SmallInt
+  /// Animais de qualquer sexo previstos, como o qtd_qualquer da solicitacao.
+  qtdQualquerPrevista Int       @default(0) @map("qtd_qualquer_prevista") @db.SmallInt
+  status              String    @default("P") @db.Char(1)
 
   solicitacao  Solicitacao   @relation(fields: [idSolicitacao], references: [id], onDelete: NoAction, onUpdate: NoAction)
   compromissos Compromisso[]

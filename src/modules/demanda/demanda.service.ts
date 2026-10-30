@@ -128,7 +128,7 @@ export async function criarSolicitacao(
       },
     })
 
-    // a remessa so tem machos e femeas previstos: o "qualquer" fica na solicitacao
+    // a remessa preve o pedido inteiro: o "qualquer" vai junto, como machos e femeas
     await tx.remessa.create({
       data: {
         idSolicitacao: solicitacao.id,
@@ -136,6 +136,7 @@ export async function criarSolicitacao(
         dtPrevista: paraData(dados.dataEntrega),
         qtdMPrevista: dados.machos,
         qtdFPrevista: dados.femeas,
+        qtdQualquerPrevista: dados.qualquer,
       },
     })
 
