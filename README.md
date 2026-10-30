@@ -120,9 +120,9 @@ esqueceu, pede o código pela tela `/definir-senha` do front.
   código demais dá `429 MUITAS_TENTATIVAS`: 1 por minuto e 5 por hora por e-mail,
   e um teto total por hora e por dia, abaixo da cota do serviço de e-mail. Os
   números ficam em `LIMITES_DE_PEDIDO`, no `acesso.service.ts`.
-- O pedido de código responde igual com conta, sem conta e com conta inativa.
-  Só depois do código certo a API diz se a conta existe. Conta inativa nunca
-  recebe código, nunca troca a senha e nunca abre sessão.
+- O pedido de código responde igual com conta, sem conta e com conta inativa, e
+  as rotas de `/api/acesso` só dizem se a conta existe depois do código certo.
+  Conta inativa nunca recebe código, nunca troca a senha e nunca abre sessão.
 - O primeiro acesso só cria pesquisador. Quem já tem conta troca só a senha:
   perfil e nome ficam.
 - O código fica em `login.codigo_acesso`, só como hash. Linha nenhuma se apaga:
@@ -135,6 +135,14 @@ falha e o erro vai para o log, enquanto a tela diz que o código foi enviado. Po
 isso o primeiro acesso só vai para o `main` depois do serviço: conta criada, as
 variáveis dele na Render, no `render.yaml` e no `.env.example`, e o envio de
 verdade em `email.ts`.
+
+**Contas de exemplo.** Os três usuários do `db:usuarios` têm e-mails de exemplo
+(`gestor@ufsc.br`, `tecnico@ufsc.br` e `pesquisador@ufsc.br`), de caixas que a
+equipe não controla. Com o envio ligado, quem tiver uma dessas caixas na UFSC
+recebe o código, define a senha da conta e entra com o perfil dela, gestor
+inclusive. O primeiro acesso só serve a conta com o e-mail real da pessoa: antes
+de ligar o envio, as contas de exemplo que estiverem no banco passam para o
+e-mail real ou ficam inativas. Conta de exemplo recebe senha pelo `db:senha`.
 
 ## Deploy na Render
 

@@ -8,9 +8,12 @@
 // So cria o que falta: usuario que ja existe (pelo e-mail) e projeto que ja existe (pelo
 // numero) ficam como estao, senha inclusive. Rodar de novo nao muda nada.
 //
-// `hashSenha` nasce nulo: senha nunca vai em claro num script versionado. Cada um define a
-// propria senha pelo primeiro acesso, com o codigo que chega no e-mail; sem o e-mail,
-// `npm run db:senha -- <email> "<senha>"`.
+// `hashSenha` nasce nulo: senha nunca vai em claro num script versionado. Os e-mails abaixo
+// sao de exemplo, de caixas que a equipe nao controla, e o primeiro acesso so serve a conta
+// com o e-mail real da pessoa: o codigo vai para quem for dono da caixa, e quem tiver a
+// gestor@ufsc.br entraria como gestor. Nestas contas a senha vem de
+// `npm run db:senha -- <email> "<senha>"`, e antes de ligar o envio de e-mail elas passam
+// para o e-mail real ou ficam inativas.
 
 import { prisma } from '../src/shared/prisma.ts'
 
