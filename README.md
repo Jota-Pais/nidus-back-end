@@ -57,8 +57,9 @@ Os pares genéticos ficam no banco.
 - **Faixa aceita** (`GET /api/busca`, com `idadeMin`, `idadeMax` e `qualquer`) -
   a tolerância da seção 1.6 da spec vale nas pontas: de `faixaAceita(idadeMin).min`
   a `faixaAceita(idadeMax).max`. A idade exata aceita o mesmo de antes (28 aceita
-  de 25 a 31). Na ordem da busca, o que só entra pela tolerância (20 ou 44 num
-  pedido de 21 a 40) vem depois do que está dentro de `idadeMin..idadeMax`
+  de 25 a 31). Na ordem da busca, no mesmo grupo de origem, o que só entra pela
+  tolerância (20 ou 44 num pedido de 21 a 40) vem depois do que está dentro de
+  `idadeMin..idadeMax`
 - **Qualquer sexo** - machos e fêmeas saem primeiro, na ordem das caixas; o
   "qualquer" sai depois, do que sobrou em cada caixa (machos antes de fêmeas),
   sem tirar animal de quem pediu sexo. O `alocar` de cada caixa continua
