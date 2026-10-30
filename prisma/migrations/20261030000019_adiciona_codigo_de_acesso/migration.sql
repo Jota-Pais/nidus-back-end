@@ -13,3 +13,6 @@ CREATE TABLE "login"."codigo_acesso" (
 
 -- CreateIndex
 CREATE INDEX "codigo_acesso_email_dt_criacao_idx" ON "login"."codigo_acesso"("email", "dt_criacao");
+
+-- CreateIndex
+CREATE INDEX "codigo_acesso_dt_criacao_idx" ON "login"."codigo_acesso"("dt_criacao");
