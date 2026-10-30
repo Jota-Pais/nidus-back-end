@@ -25,10 +25,12 @@ O que mora aqui:
   com parto, eutanásia de seleção e desmame. As datas previstas saem sozinhas:
   parto = acasalamento + 23 dias, desmame = parto + 22, próximo acasalamento =
   parto real + 6
-- **Solicitações** - o pedido do pesquisador, sempre num projeto CEUA vigente
+- **Solicitações** - o pedido do pesquisador, sempre num projeto CEUA vigente:
+  machos, fêmeas e animais de qualquer sexo, com idade exata ou faixa de idade
 - **Busca de atendimento** - dado um pedido, quais caixas atendem: primeiro o que
-  já desmamou, depois o que já nasceu, por último o parto previsto, sempre pela
-  idade mais próxima. O que faltar vira casais novos a formar
+  já desmamou, depois o que já nasceu, por último o parto previsto. Dentro de
+  cada grupo, na faixa de idade, do mais velho para o mais novo; na idade exata,
+  a mais próxima. O que faltar vira casais novos a formar
 - **Alocação** - cada caixa aceita vira compromisso, e a soma dos compromissos de
   um parto nunca passa do que ele tem
 
@@ -38,6 +40,29 @@ Os parâmetros biológicos (gestação, aleitamento, intervalo, máximo de 5 par
 grava os mesmos valores nas tabelas `parametro_biologico` e `tolerancia_idade`:
 o trigger que confere a oferta de cada parto ainda lê a expectativa da primeira.
 Os pares genéticos ficam no banco.
+
+## Pedido de animais e busca de atendimento
+
+- **Pedido** (`POST /api/solicitacoes`) - o pesquisador digita o nome e o
+  protocolo CEUA (`23080.XXXXXX/AAAA-XX`); o e-mail é o da conta. O back procura
+  o protocolo em `etica.projeto` e não cria projeto: o projeto entra pela equipe
+  do biotério (por enquanto, pelo `db:usuarios`). O pedido traz machos, fêmeas e
+  animais de qualquer sexo (até 9999 cada, ao menos um no total), a idade de 21 a
+  300 dias como faixa `idadeMin..idadeMax` (a exata é `idadeMin = idadeMax`), a
+  data de entrega (a partir de hoje), o cronograma e observações opcionais (até
+  500 caracteres). Protocolo que não existe, de outra pessoa ou fora de vigência
+  dá `409 PROJETO_INVALIDO` com `campos.protocoloCeua`
+- **Faixa aceita** (`GET /api/busca`, com `idadeMin`, `idadeMax` e `qualquer`) -
+  a tolerância da seção 1.6 da spec vale nas pontas: de `faixaAceita(idadeMin).min`
+  a `faixaAceita(idadeMax).max`. A idade exata aceita o mesmo de antes (28 aceita
+  de 25 a 31)
+- **Qualquer sexo** - machos e fêmeas saem primeiro, na ordem das caixas; o
+  "qualquer" sai depois, do que sobrou em cada caixa (machos antes de fêmeas),
+  sem tirar animal de quem pediu sexo. O `alocar` de cada caixa continua
+  `{ m, f }`, e o `deficit` é `{ m, f, qualquer }`
+- **Casais a formar** - `max(⌈dm/4⌉, ⌈df/4⌉, ⌈(dm + df + dq)/8⌉)`, com os 4 machos
+  e 4 fêmeas esperados por casal. O acasalamento novo só atende entrega a partir
+  de hoje + 23 dias de gestação + `idadeMin`
 
 ## Começar
 
