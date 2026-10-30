@@ -1,5 +1,6 @@
-// Envio de e-mail. Em production vai pela API HTTP de envio transacional da Brevo; em development
-// e test vai para o console do servidor, sem chave e sem rede
+// Envio de e-mail: o codigo de acesso e o aviso de senha alterada. Em production vai pela API HTTP
+// de envio transacional da Brevo; em development e test vai para o console do servidor, sem chave
+// e sem rede
 
 import { env } from '../env.ts'
 
@@ -113,5 +114,43 @@ export async function enviarCodigoDeAcesso(
       NOME_DO_REMETENTE,
     ].join('\n'),
     segredos: [codigo],
+  })
+}
+
+/** O horario do aviso, como a pessoa le no relogio dela */
+const FUSO_DO_CPMR = 'America/Sao_Paulo'
+
+/**
+ * O aviso de que a senha mudou, so para a conta que ja existia. E o que da a quem nao fez a
+ * troca um jeito de reagir. Nao leva codigo nenhum
+ */
+export async function avisarSenhaAlterada(email: string, quando: Date): Promise<void> {
+  if (env.NODE_ENV !== 'production') {
+    console.log(`[acesso] aviso de senha alterada para ${email}`)
+    return
+  }
+
+  const dia = quando.toLocaleDateString('pt-BR', { timeZone: FUSO_DO_CPMR })
+  const hora = quando.toLocaleTimeString('pt-BR', {
+    timeZone: FUSO_DO_CPMR,
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+  await enviarPelaBrevo({
+    para: email,
+    assunto: 'Sua senha do Nidus foi alterada',
+    texto: [
+      'Olá!',
+      '',
+      `A senha da sua conta no Nidus foi alterada em ${dia}, às ${hora} (horário de Brasília), ` +
+        'com um código enviado para este e-mail. As sessões abertas antes disso foram encerradas.',
+      '',
+      'Se foi você, não precisa fazer nada.',
+      '',
+      'Se não foi você, troque a senha deste e-mail e avise a gestão do CPMR o quanto antes.',
+      '',
+      NOME_DO_REMETENTE,
+    ].join('\n'),
   })
 }

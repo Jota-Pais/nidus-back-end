@@ -1,7 +1,7 @@
 import request from 'supertest'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { criarApp } from '../../app.ts'
-import { enviarCodigoDeAcesso } from '../../shared/email.ts'
+import { avisarSenhaAlterada, enviarCodigoDeAcesso } from '../../shared/email.ts'
 import {
   LIMITES_DE_PEDIDO,
   TENTATIVAS_POR_CODIGO,
@@ -16,7 +16,8 @@ import { hashSenha, senhaCorresponde } from './senha.ts'
 // pausa no meio, como o UPDATE do Postgres. A trava do pedido de codigo vira uma fila. A
 // transacao que lanca erro desfaz o que ela mesma gravou, como o ROLLBACK: a senha da conta
 // desativada no meio grava o gasto do codigo antes de recusar.
-// O e-mail tambem e de mentira e guarda o codigo enviado, que o teste usa como a pessoa usaria
+// O e-mail tambem e de mentira e guarda o codigo enviado, que o teste usa como a pessoa usaria. O
+// aviso de senha alterada so e espiado
 
 type Linha = Record<string, unknown>
 
@@ -200,6 +201,7 @@ vi.mock('../../shared/email.ts', () => ({
   enviarCodigoDeAcesso: vi.fn(async (email: string, codigo: string) => {
     falso.enviados.push({ email, codigo })
   }),
+  avisarSenhaAlterada: vi.fn(async () => {}),
 }))
 
 // O hash e a conferencia de verdade, so espiados: para contar e para agir no meio do caminho
@@ -937,6 +939,51 @@ describe('POST /api/acesso/senha', () => {
     // a sessao desta troca nasce depois da revogacao, e a de outra pessoa fica
     expect(await quemSou(cookieDe(troca))).toBe(200)
     expect(await quemSou(tecnico)).toBe(200)
+  })
+
+  it('so a conta que ja existia recebe o aviso de senha alterada, e so quando a troca passa', async () => {
+    await pedir('gestor@ufsc.br')
+    await pedir('novo@ufsc.br')
+    const codigo = codigoDe('gestor@ufsc.br')
+
+    const recusada = await definir({ email: 'gestor@ufsc.br', codigo: outro(codigo), senha: SENHA_NOVA })
+    expect(recusada.status).toBe(409)
+    expect(avisarSenhaAlterada).not.toHaveBeenCalled()
+
+    const nova = await definir({
+      email: 'novo@ufsc.br',
+      codigo: codigoDe('novo@ufsc.br'),
+      senha: SENHA_NOVA,
+      nome: 'Fulano',
+    })
+    expect(nova.status).toBe(200)
+    expect(avisarSenhaAlterada).not.toHaveBeenCalled()
+
+    expect((await definir({ email: 'gestor@ufsc.br', codigo, senha: SENHA_NOVA })).status).toBe(200)
+    expect(vi.mocked(avisarSenhaAlterada).mock.calls).toEqual([['gestor@ufsc.br', expect.any(Date)]])
+  })
+
+  it('o aviso nao segura a resposta, e a falha dele fica no log sem desfazer a troca', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(avisarSenhaAlterada)
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockImplementationOnce(async () => {
+        throw new Error('servico fora do ar')
+      })
+
+    await pedir('tecnico@ufsc.br')
+    await pedir('gestor@ufsc.br')
+    const parado = await definir({ email: 'tecnico@ufsc.br', codigo: codigoDe('tecnico@ufsc.br'), senha: SENHA_NOVA })
+    const falhou = await definir({ email: 'gestor@ufsc.br', codigo: codigoDe('gestor@ufsc.br'), senha: SENHA_NOVA })
+
+    expect([parado.status, falhou.status]).toEqual([200, 200])
+    expect(falhou.headers['set-cookie']).toBeDefined()
+    await vi.waitFor(() =>
+      expect(log).toHaveBeenCalledWith(expect.stringContaining('gestor@ufsc.br'), expect.any(Error)),
+    )
+    // a senha nova vale nas duas contas
+    expect((await entrar('tecnico@ufsc.br', SENHA_NOVA)).status).toBe(200)
+    expect((await entrar('gestor@ufsc.br', SENHA_NOVA)).status).toBe(200)
   })
 })
 

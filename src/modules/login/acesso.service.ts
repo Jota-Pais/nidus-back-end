@@ -3,7 +3,7 @@
 
 import { randomInt } from 'node:crypto'
 import type { Prisma } from '@prisma/client'
-import { enviarCodigoDeAcesso } from '../../shared/email.ts'
+import { avisarSenhaAlterada, enviarCodigoDeAcesso } from '../../shared/email.ts'
 import { ErroDeAplicacao, erroDeRegra, muitasTentativas } from '../../shared/erros.ts'
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { prisma } from '../../shared/prisma.ts'
@@ -338,6 +338,13 @@ export async function definirSenha(
   // A senha mudou: as sessoes abertas antes, em qualquer aparelho, deixam de valer. Quem entrou
   // com a senha antiga, ou com uma sessao roubada, sai. So depois abre a sessao desta troca
   revogarSessoesDoUsuario(usuario.id)
+  const sessao = abrirSessao(usuario)
 
-  return abrirSessao(usuario)
+  // O aviso de senha alterada, so aqui: conta nova nao tem o que avisar. Sem 'await', como o
+  // codigo: o envio nao segura a resposta, e a falha dele vai para o log sem desfazer a troca
+  avisarSenhaAlterada(usuario.email, agora).catch((erro: unknown) => {
+    console.error(`[acesso] o aviso de senha alterada para ${usuario.email} nao foi enviado:`, erro)
+  })
+
+  return sessao
 }

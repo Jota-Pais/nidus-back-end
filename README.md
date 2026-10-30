@@ -134,19 +134,23 @@ esqueceu, pede o código pela tela `/definir-senha` do front.
 - Quando a senha de uma conta que já existia muda, todas as sessões abertas dela,
   em qualquer aparelho, deixam de valer, e só então abre a sessão nova. O
   `db:senha` roda fora da API e não derruba sessão nenhuma.
+- Nessa mesma troca, a pessoa recebe por e-mail o aviso de que a senha foi
+  alterada, com dia e hora e o que fazer se não foi ela. Conta nova não recebe
+  aviso. A resposta não espera o envio, e a falha do aviso vai para o log sem
+  desfazer a troca.
 - O código fica em `login.codigo_acesso`, só como hash. Linha nenhuma se apaga:
   os limites contam por elas.
 
-**E-mail.** O envio usa a API HTTP de envio transacional da Brevo, pelo `fetch`
-do Node, em `src/shared/email.ts`. Em production ele precisa de duas variáveis, e
-o boot cai sem elas:
+**E-mail.** O código de acesso e o aviso de senha alterada saem pela API HTTP de
+envio transacional da Brevo, com o `fetch` do Node, em `src/shared/email.ts`. Em
+production o envio precisa de duas variáveis, e o boot cai sem elas:
 
 - `BREVO_API_KEY`: a chave de API, criada no painel da Brevo;
 - `EMAIL_REMETENTE`: o endereço que aparece como remetente, validado na conta da
   Brevo.
 
-Em development e test, nenhum e-mail sai: o código aparece no console do
-servidor (`npm run dev`), e as duas variáveis podem ficar vazias. Nenhum teste
+Em development e test, nenhum e-mail sai: o código e o aviso aparecem no console
+do servidor (`npm run dev`), e as duas variáveis podem ficar vazias. Nenhum teste
 chama a Brevo.
 
 O envio não segura a resposta. Se a Brevo recusar ou não responder em 10 s, o

@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { NOME_DO_REMETENTE, TEMPO_LIMITE_DO_ENVIO_EM_MS, enviarCodigoDeAcesso } from './email.ts'
+import {
+  NOME_DO_REMETENTE,
+  TEMPO_LIMITE_DO_ENVIO_EM_MS,
+  avisarSenhaAlterada,
+  enviarCodigoDeAcesso,
+} from './email.ts'
 
 // O ambiente e de mentira para o teste trocar o NODE_ENV e as variaveis da Brevo: email.ts le
 // os valores a cada envio. A rede tambem: o fetch e trocado em todo teste, e nenhum sai da maquina
@@ -51,9 +56,19 @@ describe('fora de production', () => {
     expect(log).toHaveBeenCalledWith('[acesso] codigo para fulano@ufsc.br: 012345')
     expect(fetchFalso).not.toHaveBeenCalled()
   })
+
+  it.each(['development', 'test'])('em %s o aviso de senha alterada vai para o console', async (nodeEnv) => {
+    ambiente.NODE_ENV = nodeEnv
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await avisarSenhaAlterada('fulano@ufsc.br', new Date())
+
+    expect(log).toHaveBeenCalledWith('[acesso] aviso de senha alterada para fulano@ufsc.br')
+    expect(fetchFalso).not.toHaveBeenCalled()
+  })
 })
 
-describe('em production, pela Brevo', () => {
+describe('codigo de acesso, em production, pela Brevo', () => {
   it('manda o codigo a um destinatario so, com a chave no cabecalho', async () => {
     await enviarCodigoDeAcesso('fulano@ufsc.br', '012345', 15)
 
@@ -147,5 +162,43 @@ describe('em production, pela Brevo', () => {
     expect(String(erro)).not.toContain('012345')
     expect(fetchFalso).not.toHaveBeenCalled()
     expect(log).not.toHaveBeenCalled()
+  })
+})
+
+describe('aviso de senha alterada, em production', () => {
+  // 1h30 de 31/10 em UTC ainda e 30/10 em Brasilia, as 22h30
+  const quando = new Date('2026-10-31T01:30:00Z')
+
+  it('vai pela Brevo a um destinatario so, com o assunto do aviso', async () => {
+    await avisarSenhaAlterada('fulano@ufsc.br', quando)
+
+    const { url, opcoes, corpo } = chamadaUnica()
+    expect(url).toBe('https://api.brevo.com/v3/smtp/email')
+    expect(opcoes.headers).toMatchObject({ 'api-key': CHAVE })
+    expect(corpo).toEqual({
+      sender: { email: REMETENTE, name: NOME_DO_REMETENTE },
+      to: [{ email: 'fulano@ufsc.br' }],
+      subject: 'Sua senha do Nidus foi alterada',
+      textContent: expect.any(String),
+    })
+  })
+
+  it('o texto diz o que mudou, quando, e o que fazer se nao foi a pessoa', async () => {
+    await avisarSenhaAlterada('fulano@ufsc.br', quando)
+
+    const { textContent } = chamadaUnica().corpo
+    expect(textContent).toContain('foi alterada em 30/10/2026, às 22:30 (horário de Brasília)')
+    expect(textContent).toContain('As sessões abertas antes disso foram encerradas.')
+    expect(textContent).toContain('Se foi você, não precisa fazer nada.')
+    expect(textContent).toContain('Se não foi você, troque a senha deste e-mail e avise a gestão do CPMR')
+  })
+
+  it('a recusa da Brevo vira erro, sem a chave', async () => {
+    fetchFalso.mockResolvedValueOnce(respostaDaBrevo(400, { code: 'unauthorized', message: `chave ${CHAVE}` }))
+
+    const erro = await avisarSenhaAlterada('fulano@ufsc.br', quando).catch((e: unknown) => e)
+
+    expect(String(erro)).toContain('Envio pela Brevo recusado: 400 unauthorized')
+    expect(String(erro)).not.toContain(CHAVE)
   })
 })
