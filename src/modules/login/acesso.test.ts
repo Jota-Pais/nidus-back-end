@@ -600,6 +600,34 @@ describe('POST /api/acesso/senha', () => {
     expect((await conferir('novo@ufsc.br', codigo)).status).toBe(409)
   })
 
+  it('o login acha a conta criada aqui com o e-mail em maiuscula e com espaco', async () => {
+    await pedir('novo@ufsc.br')
+    await definir({ email: 'novo@ufsc.br', codigo: codigoDe('novo@ufsc.br'), senha: SENHA_NOVA, nome: 'Fulano' })
+
+    const login = await entrar('  NOVO@UFSC.br ', SENHA_NOVA)
+
+    expect(login.status).toBe(200)
+    expect(login.body.usuario.email).toBe('novo@ufsc.br')
+  })
+
+  it.each([
+    ['senha de 7 caracteres', { senha: '1234567' }, 'senha'],
+    ['nome de 121 caracteres', { nome: 'a'.repeat(121) }, 'nome'],
+  ])('%s da 400 no campo, sem tocar no codigo', async (_caso, fora, campo) => {
+    await pedir('novo@ufsc.br')
+    // no limite: 8 caracteres de senha e 120 de nome, o tamanho de usuario.nome
+    const noLimite = { email: 'novo@ufsc.br', codigo: codigoDe('novo@ufsc.br'), senha: '12345678', nome: 'a'.repeat(120) }
+
+    const recusada = await definir({ ...noLimite, ...fora })
+
+    expect(recusada.status).toBe(400)
+    expect(Object.keys(recusada.body.erro.campos)).toEqual([campo])
+    expect(linhaDe('novo@ufsc.br')).toMatchObject({ tentativas: 0, usadoEm: null })
+    expect(falso.tabelas.usuario).toHaveLength(3)
+
+    expect((await definir(noLimite)).status).toBe(200)
+  })
+
   it('conta que ja existe troca so a senha: perfil e nome ficam, e o codigo fica gasto', async () => {
     await pedir('gestor@ufsc.br')
     const codigo = codigoDe('gestor@ufsc.br')
