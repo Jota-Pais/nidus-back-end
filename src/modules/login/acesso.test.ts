@@ -894,6 +894,9 @@ describe('POST /api/acesso/senha', () => {
   })
 
   it('conta desativada entre a conferencia do codigo e a gravacao nao troca a senha', async () => {
+    // a sessao que o tecnico ja tinha: a troca recusada nao derruba nada nem avisa ninguem
+    const login = await entrar('tecnico@ufsc.br', SENHA_ANTIGA)
+    const sessaoAnterior = String(login.headers['set-cookie']).split(';')[0] ?? ''
     await pedir('tecnico@ufsc.br')
     const real = await vi.importActual<typeof import('./senha.ts')>('./senha.ts')
 
@@ -916,6 +919,11 @@ describe('POST /api/acesso/senha', () => {
     expect(usuarioDe('tecnico@ufsc.br').hashSenha).toBe(hashAntigo)
     // o gasto do codigo e a senha estao na mesma transacao: a recusa desfaz o gasto tambem
     expect(linhaDe('tecnico@ufsc.br')).toMatchObject({ usadoEm: null, tentativas: 0 })
+
+    // revogar as sessoes e avisar vem so depois da troca gravada, e esta nao gravou
+    expect(login.status).toBe(200)
+    expect((await request(servidor).get('/api/sessao').set('Cookie', sessaoAnterior)).status).toBe(200)
+    expect(avisarSenhaAlterada).not.toHaveBeenCalled()
   })
 
   it('o cookie da sessao sai igual ao do login', async () => {
@@ -963,6 +971,11 @@ describe('POST /api/acesso/senha', () => {
     const valeu = respostas[0]?.status === 200 ? 0 : 1
     expect((await entrar(email, senhas[valeu] ?? '')).status).toBe(200)
     expect((await entrar(email, senhas[1 - valeu] ?? '')).status).toBe(401)
+
+    // a recusada nao derruba a sessao de quem passou nem manda outro aviso
+    const cookie = String(respostas[valeu]?.headers['set-cookie']).split(';')[0] ?? ''
+    expect((await request(servidor).get('/api/sessao').set('Cookie', cookie)).status).toBe(200)
+    expect(avisarSenhaAlterada).toHaveBeenCalledTimes(email === 'novo@ufsc.br' ? 0 : 1)
   })
 
   it('a senha trocada derruba as outras sessoes da pessoa, e so as dela', async () => {
