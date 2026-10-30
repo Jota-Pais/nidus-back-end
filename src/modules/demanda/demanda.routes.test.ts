@@ -78,6 +78,13 @@ describe('forma da solicitacao', () => {
     expect(campos.machos).toBe('Peca ao menos um animal.')
   })
 
+  it('numero de animais negativo ou quebrado e VALIDACAO com mensagem em portugues', async () => {
+    const campos = await camposRecusados({ ...pedido, femeas: -1, qualquer: 2.5 })
+
+    expect(campos.femeas).toBe('O numero de animais nao pode ser negativo.')
+    expect(campos.qualquer).toBe('Use um numero inteiro de animais.')
+  })
+
   it('idade maxima menor que a minima e VALIDACAO no campo idadeMax', async () => {
     const campos = await camposRecusados({ ...pedido, idadeMin: 30, idadeMax: 25 })
 
@@ -114,8 +121,9 @@ describe('forma da solicitacao', () => {
     expect(solicitacaoNova.safeParse({ ...pedido, machos: 9999, femeas: 9999, qualquer: 9999, idadeMin: 300, idadeMax: 300 }).success).toBe(true)
   })
 
-  it('observacoes vazias ou ausentes viram null, e passam de 500 caracteres e VALIDACAO', () => {
+  it('observacoes vazias, ausentes ou null viram null, e passam de 500 caracteres e VALIDACAO', () => {
     expect(solicitacaoNova.parse(pedido).observacoes).toBeNull()
+    expect(solicitacaoNova.parse({ ...pedido, observacoes: null }).observacoes).toBeNull()
     expect(solicitacaoNova.parse({ ...pedido, observacoes: '   ' }).observacoes).toBeNull()
     expect(solicitacaoNova.parse({ ...pedido, observacoes: ' Machos do mesmo parto. ' }).observacoes).toBe('Machos do mesmo parto.')
     expect(solicitacaoNova.safeParse({ ...pedido, observacoes: 'a'.repeat(501) }).success).toBe(false)

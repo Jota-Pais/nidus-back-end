@@ -30,8 +30,8 @@ const IDADE = { minima: 21, maxima: 300 }
 
 const animais = z
   .number()
-  .int()
-  .min(0)
+  .int('Use um numero inteiro de animais.')
+  .min(0, 'O numero de animais nao pode ser negativo.')
   .max(MAXIMO_DE_ANIMAIS, `No maximo ${MAXIMO_DE_ANIMAIS} animais.`)
 
 /** corpo de POST /api/solicitacoes - o formulario "Solicitar animais". O e-mail vem da sessao */
@@ -57,12 +57,12 @@ export const solicitacaoNova = z
     idadeMax: z.number().int().max(IDADE.maxima, `A idade maxima e ${IDADE.maxima} dias.`),
     dataEntrega: z.iso.date('Data invalida. Use aaaa-mm-dd.'),
     cronograma: z.enum(['unica', 'semanal', 'quinzenal', 'mensal']),
-    /** vazia ou ausente vira null */
+    /** vazia, ausente ou null (o que o GET devolve sem observacoes) vira null */
     observacoes: z
       .string()
       .trim()
       .max(500, 'As observacoes passam de 500 caracteres.')
-      .optional()
+      .nullish()
       .transform((texto) => texto || null),
   })
   .refine((dados) => dados.machos + dados.femeas + dados.qualquer > 0, {
