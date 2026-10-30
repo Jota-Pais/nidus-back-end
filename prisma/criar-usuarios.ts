@@ -1,14 +1,16 @@
 // Os tres usuarios do semestre e o projeto CEUA da pesquisadora: o minimo para um banco
-// novo ter login e a tela Solicitar animais ter projeto. Nenhuma rota cria usuario nem
-// projeto, entao o caminho e este script, depois de `npm run db:seed`:
+// novo ter login e a tela Solicitar animais ter projeto. O primeiro acesso so cria
+// pesquisador, e nenhuma rota cria tecnico, gestor ou projeto, entao o caminho e este
+// script, depois de `npm run db:seed`:
 //
 //   npm run db:usuarios
 //
 // So cria o que falta: usuario que ja existe (pelo e-mail) e projeto que ja existe (pelo
 // numero) ficam como estao, senha inclusive. Rodar de novo nao muda nada.
 //
-// `hashSenha` nasce nulo: senha nunca vai em claro num script versionado. Para dar senha
-// a um destes usuarios: `npm run db:senha -- <email> "<senha>"`.
+// `hashSenha` nasce nulo: senha nunca vai em claro num script versionado. Cada um define a
+// propria senha pelo primeiro acesso, com o codigo que chega no e-mail; sem o e-mail,
+// `npm run db:senha -- <email> "<senha>"`.
 
 import { prisma } from '../src/shared/prisma.ts'
 

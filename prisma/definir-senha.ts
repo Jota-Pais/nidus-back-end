@@ -1,5 +1,7 @@
 // Define a senha de um usuario existente, ja como hash - nunca em claro num
-// arquivo. Uso interativo, uma vez por pessoa que precisar entrar:
+// arquivo. O caminho normal e a propria pessoa, pelo primeiro acesso ou pela senha
+// esquecida, com o codigo que chega no e-mail da UFSC. Este script fica para quando o
+// e-mail nao chega:
 //
 //   npm run db:senha -- tecnico@ufsc.br "a senha escolhida"
 //
