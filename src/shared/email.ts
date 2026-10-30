@@ -37,6 +37,18 @@ function resumoDoErro(corpo: string): string {
 }
 
 /**
+ * O erro do fetch com a causa: o do Node diz so 'fetch failed', e o motivo (endereco que nao
+ * resolve, redirecionamento recusado) vem na causa
+ */
+function descricaoDoErro(erro: unknown): string {
+  if (!(erro instanceof Error)) {
+    return String(erro)
+  }
+
+  return erro.cause instanceof Error ? `${erro.message}: ${erro.cause.message}` : erro.message
+}
+
+/**
  * Manda um e-mail de texto pela Brevo. O destinatario vai num campo proprio do JSON, nunca
  * montado num cabecalho de texto. Qualquer falha vira um Error para o log do servidor, sem a
  * chave e sem o codigo
@@ -54,6 +66,7 @@ async function enviarPelaBrevo({ para, assunto, texto, segredos = [] }: Mensagem
     [chave, ...segredos].reduce((limpa, segredo) => limpa.replaceAll(segredo, '***'), mensagem)
 
   let resposta: Response
+  let corpo: string
 
   try {
     resposta = await fetch(URL_DA_BREVO, {
@@ -65,19 +78,23 @@ async function enviarPelaBrevo({ para, assunto, texto, segredos = [] }: Mensagem
         subject: assunto,
         textContent: texto,
       }),
+      // Redirecionamento e erro, nunca seguido: o fetch do Node repassa a api-key, e o corpo com
+      // o codigo, a outra origem. A Brevo nao redireciona este POST
+      redirect: 'error',
       signal: AbortSignal.timeout(TEMPO_LIMITE_DO_ENVIO_EM_MS),
     })
+
+    // lido sempre, inclusive no sucesso: corpo largado prende a conexao. O tempo limite vale
+    // tambem para o corpo que para no meio
+    corpo = await resposta.text()
   } catch (erro) {
     const motivo =
       erro instanceof Error && erro.name === 'TimeoutError'
-        ? `nao respondeu em ${TEMPO_LIMITE_DO_ENVIO_EM_MS / 1000} s`
-        : `nao foi alcancada (${erro instanceof Error ? erro.message : String(erro)})`
+        ? `a API nao respondeu em ${TEMPO_LIMITE_DO_ENVIO_EM_MS / 1000} s`
+        : `a chamada a API nao terminou (${descricaoDoErro(erro)})`
 
-    throw new Error(semSegredos(`Envio pela Brevo falhou: a API ${motivo}.`))
+    throw new Error(semSegredos(`Envio pela Brevo falhou: ${motivo}.`))
   }
-
-  // lido sempre, inclusive no sucesso: corpo largado prende a conexao
-  const corpo = await resposta.text()
 
   if (!resposta.ok) {
     throw new Error(

@@ -158,8 +158,9 @@ chama a Brevo.
 
 O envio não segura a resposta. Se a Brevo recusar ou não responder em 10 s, o
 erro vai para o log do servidor, sem o código e sem a chave, e a tela segue
-dizendo que o código foi enviado. O plano grátis da Brevo manda 300 e-mails por
-dia.
+dizendo que o código foi enviado. O envio não segue redirecionamento: um 3xx vira
+erro, para a chave e o código não irem a outro endereço. O plano grátis da Brevo
+manda 300 e-mails por dia.
 
 Antes do merge no `main`, as duas variáveis entram no painel da Render. O
 `render.yaml` as declara, mas num serviço que já existe a Render não pede o valor.

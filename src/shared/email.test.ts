@@ -80,6 +80,8 @@ describe('codigo de acesso, em production, pela Brevo', () => {
       'content-type': 'application/json',
       accept: 'application/json',
     })
+    // seguir um 3xx levaria a chave e o codigo a outra origem
+    expect(opcoes.redirect).toBe('error')
     expect(corpo).toEqual({
       sender: { email: REMETENTE, name: NOME_DO_REMETENTE },
       to: [{ email: 'fulano@ufsc.br' }],
@@ -125,6 +127,32 @@ describe('codigo de acesso, em production, pela Brevo', () => {
     expect(String(erro)).toContain('a API nao respondeu em 10 s')
   })
 
+  it('o corpo da resposta que para no meio tambem vira o erro do tempo limite', async () => {
+    // o fetch ja voltou com o status; e a leitura do corpo que o sinal interrompe
+    const corpoParado = {
+      ok: true,
+      status: 201,
+      text: () => Promise.reject(new DOMException('The operation was aborted due to timeout', 'TimeoutError')),
+    }
+    fetchFalso.mockResolvedValueOnce(corpoParado as unknown as Response)
+
+    const erro = await enviarCodigoDeAcesso('fulano@ufsc.br', '012345', 15).catch((e: unknown) => e)
+
+    expect(String(erro)).toContain('Envio pela Brevo falhou: a API nao respondeu em 10 s')
+  })
+
+  it('o redirecionamento recusado vira erro com o motivo, sem o codigo e sem a chave', async () => {
+    // e como o fetch do Node recusa um 3xx com redirect 'error'
+    fetchFalso.mockRejectedValueOnce(new TypeError('fetch failed', { cause: new Error('unexpected redirect') }))
+
+    const erro = await enviarCodigoDeAcesso('fulano@ufsc.br', '012345', 15).catch((e: unknown) => e)
+
+    expect(String(erro)).toContain('Envio pela Brevo falhou: a chamada a API nao terminou')
+    expect(String(erro)).toContain('fetch failed: unexpected redirect')
+    expect(String(erro)).not.toContain('012345')
+    expect(String(erro)).not.toContain(CHAVE)
+  })
+
   it('a recusa da Brevo vira erro com o status e o motivo, sem o codigo e sem a chave', async () => {
     // a resposta devolve de proposito o codigo e a chave, para provar que o log nao os leva
     fetchFalso.mockResolvedValueOnce(
@@ -147,7 +175,7 @@ describe('codigo de acesso, em production, pela Brevo', () => {
 
     const erro = await enviarCodigoDeAcesso('fulano@ufsc.br', '012345', 15).catch((e: unknown) => e)
 
-    expect(String(erro)).toContain('a API nao foi alcancada')
+    expect(String(erro)).toContain('a chamada a API nao terminou (fetch failed')
     expect(String(erro)).not.toContain('012345')
     expect(String(erro)).not.toContain(CHAVE)
   })
