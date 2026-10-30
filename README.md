@@ -61,7 +61,7 @@ e o que você grava rodando local aparece para o cliente.
 | `npm run db:deploy` | Aplica migrations pendentes. Nunca dropa nada |
 | `npm run db:seed` | Carga inicial: espécies, linhagens, parâmetros, pares genéticos e estantes (não duplica nada) |
 | `npm run db:usuarios` | Cria os três usuários e o projeto CEUA num banco novo (o que já existe fica como está) |
-| `npm run db:senha -- <email> "<senha>"` | Define a senha própria de um usuário |
+| `npm run db:senha -- <email> "<senha>"` | Define a senha de um usuário. É a reserva para quando o e-mail do primeiro acesso não chega |
 
 ## Stack
 
@@ -79,14 +79,14 @@ src/
   app.ts               monta o Express (é o que o teste usa)
   server.ts            sobe a porta e encerra limpo no SIGTERM
   shared/              prisma, erros, tradução dos códigos do banco, autorização,
-                       parâmetros biológicos
+                       parâmetros biológicos, envio de e-mail
   modules/
     infra/             estantes, grade, kanban e ficha
     reproducao/        casais e partos
     demanda/           projetos CEUA, solicitações e alocação
     motor/             busca de atendimento
     catalogo/          espécies, linhagens e pares genéticos
-    login/             sessão
+    login/             sessão, primeiro acesso e senha esquecida
 ```
 
 Validação é `parse` do Zod direto na rota: `ZodError` vira `400 VALIDACAO`.
@@ -96,6 +96,45 @@ a rede: o banco guarda `R`, a API responde `livres` (`shared/traducao.ts`).
 
 Mudança de schema passa pelo responsável pelo banco. `prisma migrate dev` pode
 recriar o schema quando o histórico diverge, e o banco é o de produção.
+
+## Login e primeiro acesso
+
+| Rota | O que faz |
+|---|---|
+| `POST /api/sessao` | Login com `{ email, senha }`. Abre a sessão no cookie `nidus_sessao`, que dura 12 h |
+| `GET /api/sessao` | Quem está logado |
+| `DELETE /api/sessao` | Logout. A sessão some da memória |
+| `POST /api/acesso/codigo` | `{ email }`: manda um código de 6 números para o e-mail da UFSC. Vale 15 minutos e responde `{ validadeEmMinutos }` |
+| `POST /api/acesso/verificacao` | `{ email, codigo }`: confere o código sem gastar e responde `{ novo }`, `true` quando o e-mail ainda não tem conta |
+| `POST /api/acesso/senha` | `{ email, codigo, senha, nome? }`: gasta o código, grava a senha e abre a sessão como o login. Sem conta, cria um pesquisador, e o `nome` passa a ser obrigatório |
+
+O ID-UFSC entra depois dos testes práticos. Até lá, quem não tem senha, ou
+esqueceu, pede o código pela tela `/definir-senha` do front.
+
+- O login compara o e-mail em minúsculas e sem espaço nas pontas, que é como o
+  primeiro acesso grava. Quem tiver e-mail com maiúscula em `login.usuario` deixa
+  de entrar.
+- As rotas de `/api/acesso` ficam fora do login e nunca respondem 401: o front lê
+  qualquer 401 como senha errada. Código errado, vencido, já usado ou de conta
+  inativa dá `409 CODIGO_INVALIDO`, e cada código aceita 5 tentativas. Pedido de
+  código demais dá `429 MUITAS_TENTATIVAS`: 1 por minuto e 5 por hora por e-mail,
+  e um teto total por hora e por dia, abaixo da cota do serviço de e-mail. Os
+  números ficam em `LIMITES_DE_PEDIDO`, no `acesso.service.ts`.
+- O pedido de código responde igual com conta, sem conta e com conta inativa.
+  Só depois do código certo a API diz se a conta existe. Conta inativa nunca
+  recebe código, nunca troca a senha e nunca abre sessão.
+- O primeiro acesso só cria pesquisador. Quem já tem conta troca só a senha:
+  perfil e nome ficam.
+- O código fica em `login.codigo_acesso`, só como hash. Linha nenhuma se apaga:
+  os limites contam por elas.
+
+**E-mail.** O serviço de envio ainda não foi escolhido, e o envio fica atrás de
+uma função só, `enviarCodigoDeAcesso` em `src/shared/email.ts`. Em development e
+test, o código sai no console do servidor (`npm run dev`). Em production, o envio
+falha e o erro vai para o log, enquanto a tela diz que o código foi enviado. Por
+isso o primeiro acesso só vai para o `main` depois do serviço: conta criada, as
+variáveis dele na Render, no `render.yaml` e no `.env.example`, e o envio de
+verdade em `email.ts`.
 
 ## Deploy na Render
 
