@@ -1,4 +1,4 @@
-// Modelo fisico do Nidus - CPMR/UFSC. Fonte da verdade do banco: este arquivo
+// Modelo fisico do Nidus. Fonte da verdade do banco: este arquivo
 // gera as migrations, nunca o contrario.
 //
 // O que o Prisma nao expressa (CHECK, unique parcial, FK composta e triggers)
