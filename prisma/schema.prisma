@@ -322,7 +322,8 @@ model CodigoAcesso {
   email      String    @db.VarChar(160)
   hashCodigo String    @map("hash_codigo") @db.VarChar(255)
   expiraEm   DateTime  @map("expira_em") @db.Timestamptz(6)
-  /// Conferencias feitas, contando a que esta em andamento. O codigo aceita 5.
+  /// Conferencias erradas, mais a que esta em andamento: o acerto devolve a sua. O
+  /// codigo aceita 5, e o e-mail, 20 somando os codigos das ultimas 24 h.
   tentativas Int       @default(0) @db.SmallInt
   /// Quando o codigo deixou de valer: gasto na senha nova ou trocado por um codigo
   /// mais novo do mesmo e-mail.

@@ -1,7 +1,7 @@
 // Define a senha de um usuario existente, ja como hash - nunca em claro num
 // arquivo. O caminho normal e a propria pessoa, pelo primeiro acesso ou pela senha
 // esquecida, com o codigo que chega no e-mail da UFSC. Este script fica para quando o
-// e-mail nao chega:
+// e-mail nao chega, ou quando ele trava por codigo errado demais (20 em 24 h):
 //
 //   npm run db:senha -- tecnico@ufsc.br "a senha escolhida"
 //

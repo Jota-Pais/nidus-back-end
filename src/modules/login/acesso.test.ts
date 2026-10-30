@@ -2,12 +2,17 @@ import request from 'supertest'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { criarApp } from '../../app.ts'
 import { enviarCodigoDeAcesso } from '../../shared/email.ts'
-import { LIMITES_DE_PEDIDO, TENTATIVAS_POR_CODIGO, novoCodigo } from './acesso.service.ts'
+import {
+  LIMITES_DE_PEDIDO,
+  TENTATIVAS_POR_CODIGO,
+  TETO_DE_ERROS_POR_EMAIL,
+  novoCodigo,
+} from './acesso.service.ts'
 import { hashSenha, senhaCorresponde } from './senha.ts'
 
 // O banco aqui e de mentira, em memoria: so login.usuario, login.codigo_acesso e a senha mestra
 // (sempre vazia), com o filtro do Prisma reduzido ao que o servico usa (igualdade, null, gt e
-// lt). Cada consulta devolve copia, como o banco, e o update condicional confere e grava sem
+// lt) e a soma do aggregate. Cada consulta devolve copia, como o banco, e o update condicional confere e grava sem
 // pausa no meio, como o UPDATE do Postgres. A trava do pedido de codigo vira uma fila. A
 // transacao que lanca erro desfaz o que ela mesma gravou, como o ROLLBACK: a senha da conta
 // desativada no meio grava o gasto do codigo antes de recusar.
@@ -74,6 +79,14 @@ const falso = vi.hoisted(() => {
     count: async ({ where }: { where: Linha }) => {
       await rede()
       return tabelas[nome].filter((linha) => atende(linha, where)).length
+    },
+    // como o Prisma, a soma de nenhuma linha e null, nao 0
+    aggregate: async ({ where, _sum }: { where: Linha; _sum: Record<string, true> }) => {
+      await rede()
+      const linhas = tabelas[nome].filter((linha) => atende(linha, where))
+      const soma = (campo: string) =>
+        linhas.length === 0 ? null : linhas.reduce((total, linha) => total + Number(linha[campo]), 0)
+      return { _sum: Object.fromEntries(Object.keys(_sum).map((campo) => [campo, soma(campo)])) }
     },
     create: async ({ data }: { data: Linha }) => {
       await rede()
@@ -156,6 +169,28 @@ const falso = vi.hoisted(() => {
         })
       }
     },
+    /**
+     * Codigos ja fechados do e-mail, feitos ha tantos minutos, com tantos erros ao todo (5 por
+     * codigo, no maximo). Devolve as linhas, para o teste envelhece-las depois
+     */
+    errosAntigos(email: string, erros: number, minutosAtras: number) {
+      const criadoEm = Date.now() - minutosAtras * 60_000
+      const linhas: Linha[] = []
+      for (let resta = erros; resta > 0; resta -= 5) {
+        const linha = {
+          id: proximoId++,
+          email,
+          hashCodigo: 'x',
+          expiraEm: new Date(criadoEm + 15 * 60_000),
+          tentativas: Math.min(5, resta),
+          usadoEm: new Date(criadoEm + 5 * 60_000),
+          dtCriacao: new Date(criadoEm),
+        }
+        tabelas.codigoAcesso.push(linha)
+        linhas.push(linha)
+      }
+      return linhas
+    },
   }
 })
 
@@ -177,6 +212,8 @@ const SENHA_ANTIGA = 'antiga123'
 const SENHA_NOVA = 'nova-senha-1'
 const INVALIDO = 'Codigo invalido ou expirado.'
 const ESGOTADAS = 'Tentativas esgotadas. Peca um codigo novo.'
+const ERROS_DEMAIS =
+  'Muitos codigos errados para este e-mail nas ultimas 24 horas. Tente de novo mais tarde.'
 
 let hashAntigo = ''
 
@@ -220,6 +257,16 @@ function codigoDe(email: string): string {
 
 /** Um codigo de 6 digitos que nao e o certo */
 const outro = (codigo: string) => (codigo === '000000' ? '111111' : '000000')
+
+/** Um codigo que nao e o vigente do e-mail, mesmo sem envio (conta inativa): confere pelo hash */
+async function codigoErrado(email: string): Promise<string> {
+  const { hashCodigo } = linhaDe(email)
+
+  for (const candidato of ['000000', '111111']) {
+    if (!(await senhaCorresponde(candidato, String(hashCodigo)))) return candidato
+  }
+  throw new Error('os dois candidatos nao podem ser o mesmo codigo')
+}
 
 /** A linha mais nova de login.codigo_acesso do e-mail - a propria, nao copia */
 function linhaDe(email: string): Linha {
@@ -530,6 +577,109 @@ describe('POST /api/acesso/verificacao', () => {
 
     expect(desativada.status).toBe(409)
     expect(desativada.body).toEqual(errado.body)
+  })
+})
+
+describe('teto de codigos errados por e-mail', () => {
+  /** Erra ate o teto, como um script: um codigo novo a cada 5 erros */
+  async function errarAteOTeto(email: string) {
+    for (let erros = 0; erros < TETO_DE_ERROS_POR_EMAIL; ) {
+      passaUmMinuto()
+      expect((await pedir(email)).status).toBe(200)
+      const errado = await codigoErrado(email)
+
+      for (let i = 0; i < TENTATIVAS_POR_CODIGO; i++, erros++) {
+        expect((await conferir(email, errado)).status).toBe(409)
+      }
+    }
+  }
+
+  const travado = { codigo: 'CODIGO_INVALIDO', mensagem: ERROS_DEMAIS, campos: { codigo: ERROS_DEMAIS } }
+
+  it('20 erros em 24 h travam o e-mail, igual com conta, sem conta e com conta inativa', async () => {
+    // o teto decidido pela equipe
+    expect(TETO_DE_ERROS_POR_EMAIL).toBe(20)
+
+    const emails = ['tecnico@ufsc.br', 'novo@ufsc.br', 'inativo@ufsc.br']
+    for (const email of emails) await errarAteOTeto(email)
+
+    const enviados = falso.enviados.length
+    const linhas = falso.tabelas.codigoAcesso.length
+    passaUmMinuto()
+    vi.mocked(hashSenha).mockClear()
+
+    const pedidos = []
+    const conferencias = []
+    for (const email of emails) {
+      pedidos.push(await pedir(email))
+      conferencias.push(await conferir(email, '123456'))
+    }
+
+    for (const resposta of pedidos) {
+      expect(resposta.status).toBe(429)
+      expect(resposta.body).toEqual({ erro: { codigo: 'MUITAS_TENTATIVAS', mensagem: ERROS_DEMAIS } })
+    }
+    for (const resposta of conferencias) {
+      expect(resposta.status).toBe(409)
+      expect(resposta.body.erro).toEqual(travado)
+    }
+
+    // o 429 nao envia, nao grava codigo novo e nem chega ao hash
+    expect(falso.enviados).toHaveLength(enviados)
+    expect(falso.tabelas.codigoAcesso).toHaveLength(linhas)
+    expect(hashSenha).not.toHaveBeenCalled()
+  })
+
+  it('travado, nem o codigo certo passa na verificacao ou na senha, ate a janela andar', async () => {
+    const antigos = falso.errosAntigos('gestor@ufsc.br', TETO_DE_ERROS_POR_EMAIL - 1, 120)
+    expect((await pedir('gestor@ufsc.br')).status).toBe(200)
+    const certo = codigoDe('gestor@ufsc.br')
+
+    // o erro que chega ao teto ja avisa
+    const ultimoErro = await conferir('gestor@ufsc.br', outro(certo))
+    expect(ultimoErro.body.erro).toEqual(travado)
+
+    const verificacao = await conferir('gestor@ufsc.br', certo)
+    const senha = await definir({ email: 'gestor@ufsc.br', codigo: certo, senha: SENHA_NOVA })
+
+    for (const resposta of [verificacao, senha]) {
+      expect(resposta.status).toBe(409)
+      expect(resposta.body.erro).toEqual(travado)
+      expect(resposta.headers['set-cookie']).toBeUndefined()
+    }
+    expect(usuarioDe('gestor@ufsc.br').hashSenha).toBe(hashAntigo)
+    // o codigo ainda valeria por ele mesmo: um erro so, e nao foi gasto
+    expect(linhaDe('gestor@ufsc.br')).toMatchObject({ tentativas: 1, usadoEm: null })
+
+    // 24 h depois dos erros antigos, o mesmo codigo volta a servir
+    for (const linha of antigos) linha.dtCriacao = new Date(Date.now() - 25 * 60 * 60_000)
+
+    expect((await conferir('gestor@ufsc.br', certo)).body).toEqual({ novo: false })
+    expect((await definir({ email: 'gestor@ufsc.br', codigo: certo, senha: SENHA_NOVA })).status).toBe(200)
+  })
+
+  it('erros de mais de 24 h nao contam para o pedido de codigo', async () => {
+    falso.errosAntigos('tecnico@ufsc.br', TETO_DE_ERROS_POR_EMAIL, 25 * 60)
+
+    expect((await pedir('tecnico@ufsc.br')).status).toBe(200)
+    expect((await conferir('tecnico@ufsc.br', codigoDe('tecnico@ufsc.br'))).status).toBe(200)
+  })
+
+  it('palpites em paralelo nao passam do teto', async () => {
+    falso.errosAntigos('tecnico@ufsc.br', TETO_DE_ERROS_POR_EMAIL - 2, 120)
+    await pedir('tecnico@ufsc.br')
+    const certo = codigoDe('tecnico@ufsc.br')
+    vi.mocked(senhaCorresponde).mockClear()
+
+    // todos leem os mesmos 18 erros antes da primeira reserva: so o limite na reserva segura
+    const respostas = await Promise.all(
+      Array.from({ length: TENTATIVAS_POR_CODIGO }, () => conferir('tecnico@ufsc.br', outro(certo))),
+    )
+
+    expect(respostas.every((r) => r.status === 409)).toBe(true)
+    expect(senhaCorresponde).toHaveBeenCalledTimes(2)
+    expect(linhaDe('tecnico@ufsc.br').tentativas).toBe(2)
+    expect((await conferir('tecnico@ufsc.br', certo)).body.erro).toEqual(travado)
   })
 })
 

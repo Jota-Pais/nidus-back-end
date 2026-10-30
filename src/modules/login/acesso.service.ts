@@ -34,8 +34,19 @@ const MINUTO = 60_000
 const HORA = 60 * MINUTO
 const DIA = 24 * HORA
 
+/**
+ * Quantos codigos errados um e-mail aguenta em 24 h, somando todos os codigos dele. As 5
+ * tentativas valem por codigo e cada codigo novo comeca do zero: sem este teto, sao 25 palpites
+ * por hora contra qualquer conta, gestor inclusive. Passado o teto, o e-mail nao recebe codigo
+ * novo (429) e nenhum codigo dele passa (409) ate a janela andar; a reserva e o npm run db:senha.
+ * Vale igual com conta, sem conta e com conta inativa: a conta nem e lida
+ */
+export const TETO_DE_ERROS_POR_EMAIL = 20
+
 const CODIGO_INVALIDO = 'Codigo invalido ou expirado.'
 const TENTATIVAS_ESGOTADAS = 'Tentativas esgotadas. Peca um codigo novo.'
+const ERROS_DEMAIS =
+  'Muitos codigos errados para este e-mail nas ultimas 24 horas. Tente de novo mais tarde.'
 
 /** O mesmo 409 para todo codigo que nao serve, com a mensagem tambem no campo do codigo */
 const codigoInvalido = (mensagem = CODIGO_INVALIDO) =>
@@ -44,6 +55,30 @@ const codigoInvalido = (mensagem = CODIGO_INVALIDO) =>
 /** 6 digitos, com zero a esquerda: 000042 e um codigo como outro qualquer */
 export function novoCodigo(): string {
   return randomInt(0, 1_000_000).toString().padStart(6, '0')
+}
+
+/**
+ * Os codigos errados do e-mail nas ultimas 24 h, ou so os dos codigos anteriores a 'antesDe'. O
+ * acerto devolve a tentativa, entao 'tentativas' de cada linha sao os erros dela, mais a
+ * conferencia em andamento. A janela anda pela dt_criacao do codigo, que so aceita palpite nos
+ * 15 minutos em que vale
+ */
+async function errosDoEmail(
+  tx: Prisma.TransactionClient,
+  email: string,
+  agora: Date,
+  antesDe?: number,
+): Promise<number> {
+  const { _sum } = await tx.codigoAcesso.aggregate({
+    _sum: { tentativas: true },
+    where: {
+      email,
+      dtCriacao: { gt: new Date(agora.getTime() - DIA) },
+      ...(antesDe === undefined ? {} : { id: { lt: antesDe } }),
+    },
+  })
+
+  return _sum.tentativas ?? 0
 }
 
 /**
@@ -68,6 +103,11 @@ async function conferirLimites(tx: Prisma.TransactionClient, email: string, agor
     { onde: { dtCriacao: desde(HORA) }, maximo: LIMITES_DE_PEDIDO.totalPorHora, mensagem: doTotal },
     { onde: { dtCriacao: desde(DIA) }, maximo: LIMITES_DE_PEDIDO.totalPorDia, mensagem: doTotal },
   ]
+
+  // O e-mail travado por codigos errados nao ganha codigo novo: com ele, os palpites recomecariam
+  if ((await errosDoEmail(tx, email, agora)) >= TETO_DE_ERROS_POR_EMAIL) {
+    throw muitasTentativas(ERROS_DEMAIS)
+  }
 
   for (const { onde, maximo, mensagem } of limites) {
     if ((await tx.codigoAcesso.count({ where: onde })) >= maximo) {
@@ -130,10 +170,19 @@ export async function pedirCodigo(
  * A mensagem do 409 vem da linha relida depois da recusa, nao da lida antes da reserva: no
  * meio, outra tentativa em paralelo pode ter gastado a ultima, ou um codigo novo pode ter
  * tomado o lugar deste. "Esgotadas" e so o codigo que ainda valeria e ficou sem tentativa,
- * contando a que acabou de errar
+ * contando a que acabou de errar. O teto de erros do e-mail vem antes: com ele, nem um codigo
+ * novo serve
  */
-async function mensagemDaRecusa(id: number, agora: Date) {
-  const linha = await prisma.codigoAcesso.findUnique({ where: { id } })
+async function mensagemDaRecusa(id: number, email: string, agora: Date) {
+  const [linha, erros] = await Promise.all([
+    prisma.codigoAcesso.findUnique({ where: { id } }),
+    errosDoEmail(prisma, email, agora),
+  ])
+
+  if (erros >= TETO_DE_ERROS_POR_EMAIL) {
+    return ERROS_DEMAIS
+  }
+
   const esgotado =
     linha !== null &&
     linha.usadoEm === null &&
@@ -145,8 +194,8 @@ async function mensagemDaRecusa(id: number, agora: Date) {
 
 /**
  * Confere o codigo vigente do e-mail sem gasta-lo e devolve o usuario, null quando a conta
- * ainda nao existe. Codigo errado, vencido, ja usado, inexistente ou de conta inativa dao o
- * mesmo 409, e a conta so e lida depois do acerto
+ * ainda nao existe. Codigo errado, vencido, ja usado, inexistente, de conta inativa ou de e-mail
+ * que passou do teto de erros dao o mesmo 409, e a conta so e lida depois do acerto
  */
 async function conferirCodigo(email: string, codigo: string, agora: Date) {
   const vigente = await prisma.codigoAcesso.findFirst({ where: { email }, orderBy: { id: 'desc' } })
@@ -155,26 +204,36 @@ async function conferirCodigo(email: string, codigo: string, agora: Date) {
     throw codigoInvalido()
   }
 
+  // O teto de erros do e-mail entra no limite de tentativas deste codigo. Os codigos anteriores
+  // ja fecharam (o pedido do codigo novo marca o anterior), entao os erros deles so podem
+  // diminuir, e o que sobra do teto vale como limite aqui. Assim a reserva abaixo segura as duas
+  // contas de uma vez, inclusive com palpites em paralelo
+  const errosAnteriores = await errosDoEmail(prisma, email, agora, vigente.id)
+  const limite = Math.min(TENTATIVAS_POR_CODIGO, TETO_DE_ERROS_POR_EMAIL - errosAnteriores)
+
   // A tentativa e reservada antes de comparar, num update so com a condicao no 'where':
   // requisicoes em paralelo leem o mesmo 'tentativas' antes do primeiro incremento, e so o
   // banco poe uma depois da outra
-  const reserva = await prisma.codigoAcesso.updateMany({
-    where: {
-      id: vigente.id,
-      usadoEm: null,
-      expiraEm: { gt: agora },
-      tentativas: { lt: TENTATIVAS_POR_CODIGO },
-    },
-    data: { tentativas: { increment: 1 } },
-  })
+  const reserva =
+    limite > 0
+      ? await prisma.codigoAcesso.updateMany({
+          where: {
+            id: vigente.id,
+            usadoEm: null,
+            expiraEm: { gt: agora },
+            tentativas: { lt: limite },
+          },
+          data: { tentativas: { increment: 1 } },
+        })
+      : { count: 0 }
 
   if (reserva.count !== 1) {
-    throw codigoInvalido(await mensagemDaRecusa(vigente.id, agora))
+    throw codigoInvalido(await mensagemDaRecusa(vigente.id, email, agora))
   }
 
   if (!(await senhaCorresponde(codigo, vigente.hashCodigo))) {
     // a ultima tentativa ja avisa, para a pessoa nao gastar mais uma a toa
-    throw codigoInvalido(await mensagemDaRecusa(vigente.id, agora))
+    throw codigoInvalido(await mensagemDaRecusa(vigente.id, email, agora))
   }
 
   // O acerto devolve a tentativa: a verificacao e a senha nova conferem o mesmo codigo, e

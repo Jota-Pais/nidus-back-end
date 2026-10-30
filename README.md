@@ -61,7 +61,7 @@ e o que você grava rodando local aparece para o cliente.
 | `npm run db:deploy` | Aplica migrations pendentes. Nunca dropa nada |
 | `npm run db:seed` | Carga inicial: espécies, linhagens, parâmetros, pares genéticos e estantes (não duplica nada) |
 | `npm run db:usuarios` | Cria os três usuários e o projeto CEUA num banco novo (o que já existe fica como está) |
-| `npm run db:senha -- <email> "<senha>"` | Define a senha de um usuário. É a reserva para quando o e-mail do primeiro acesso não chega |
+| `npm run db:senha -- <email> "<senha>"` | Define a senha de um usuário. É a reserva para quando o e-mail do primeiro acesso não chega, ou trava por código errado demais |
 
 ## Stack
 
@@ -120,6 +120,12 @@ esqueceu, pede o código pela tela `/definir-senha` do front.
   código demais dá `429 MUITAS_TENTATIVAS`: 1 por minuto e 5 por hora por e-mail,
   e um teto total por hora e por dia, abaixo da cota do serviço de e-mail. Os
   números ficam em `LIMITES_DE_PEDIDO`, no `acesso.service.ts`.
+- Cada e-mail aguenta 20 códigos errados em 24 h, somando todos os códigos dele
+  (`TETO_DE_ERROS_POR_EMAIL`). Passado o teto, o pedido de código dá `429
+  MUITAS_TENTATIVAS` sem enviar nem gravar código, e a verificação e a senha dão
+  `409 CODIGO_INVALIDO`, mesmo com o código certo, até a janela andar. Vale igual
+  com conta, sem conta e com conta inativa. Quem ficar travado recebe a senha pelo
+  `db:senha`.
 - O pedido de código responde igual com conta, sem conta e com conta inativa, e
   as rotas de `/api/acesso` só dizem se a conta existe depois do código certo.
   Conta inativa nunca recebe código, nunca troca a senha e nunca abre sessão.
