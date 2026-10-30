@@ -6,7 +6,7 @@ import { projetoRoutes, solicitacaoRoutes } from './modules/demanda/demanda.rout
 import { caixaRoutes, quadroRoutes } from './modules/infra/caixa.routes.ts'
 import { estanteRoutes } from './modules/infra/infra.routes.ts'
 import { autenticacaoPorCookie } from './modules/login/autenticacao.ts'
-import { sessaoRoutes } from './modules/login/login.routes.ts'
+import { acessoRoutes, sessaoRoutes } from './modules/login/login.routes.ts'
 import { buscaRoutes } from './modules/motor/motor.routes.ts'
 import { casalRoutes, partoRoutes } from './modules/reproducao/reproducao.routes.ts'
 import { rotaNaoEncontrada, tratadorDeErros } from './shared/middlewares/erro.ts'
@@ -54,6 +54,7 @@ export function criarApp({
 
   // Os routers de cada modulo, todos sob /api
   app.use('/api/sessao', sessaoRoutes)
+  app.use('/api/acesso', acessoRoutes)
   app.use('/api/catalogo', catalogoRoutes)
   app.use('/api/estantes', estanteRoutes)
   app.use('/api/casais', casalRoutes)

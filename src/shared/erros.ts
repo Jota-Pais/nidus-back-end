@@ -15,6 +15,8 @@ export type CodigoErro =
   | 'SEQUENCIA_INVALIDA'
   | 'PROJETO_INVALIDO'
   | 'SOLICITACAO_JA_ALOCADA'
+  | 'CODIGO_INVALIDO'
+  | 'MUITAS_TENTATIVAS'
   | 'ERRO_INTERNO'
 
 export type ExtrasErro = {
@@ -53,3 +55,7 @@ export const naoEncontrado = (oQue: string) =>
  */
 export const erroDeRegra = (codigo: CodigoErro, mensagem: string, extras: ExtrasErro = {}) =>
   new ErroDeAplicacao(409, codigo, mensagem, extras)
+
+/** 429 - pedido demais no intervalo. Sem 'campos': o front mostra no aviso do alto */
+export const muitasTentativas = (mensagem: string) =>
+  new ErroDeAplicacao(429, 'MUITAS_TENTATIVAS', mensagem)

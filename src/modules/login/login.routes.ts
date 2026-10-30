@@ -2,10 +2,11 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { env } from '../../env.ts'
 import { exigirPerfil, usuarioDaRequisicao } from '../../shared/middlewares/autorizacao.ts'
+import { definirSenha, pedirCodigo, verificarCodigo } from './acesso.service.ts'
 import { autenticar } from './login.service.ts'
 import { NOME_COOKIE, revogarSessao } from './sessao.ts'
 
-/** So esta rota fica fora de 'exigirPerfil': e como a sessao nasce */
+/** O POST fica fora de 'exigirPerfil', como as rotas de /api/acesso: e como a sessao nasce */
 export const sessaoRoutes = Router()
 
 /**
@@ -62,4 +63,60 @@ sessaoRoutes.delete('/', exigirPerfil(), (req, res) => {
   // navegador
   res.clearCookie(NOME_COOKIE, atributosCookie)
   res.status(204).send()
+})
+
+/**
+ * Primeiro acesso e senha esquecida. Tudo fora de 'exigirPerfil', como o POST /api/sessao, e
+ * nenhuma resposta e 401: o front le qualquer 401 como "E-mail ou senha incorretos."
+ */
+export const acessoRoutes = Router()
+
+/** O e-mail da UFSC, com as regras da tela do front. O maximo e o da coluna usuario.email */
+const emailDaUfsc = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(160, 'O e-mail passa de 160 caracteres.')
+  // Obrigatorio junto da regex: ela sozinha aceita 'eu,voce@ufsc.br', que no envio vira uma
+  // lista de destinatarios
+  .email('E-mail invalido. Use o formato nome@ufsc.br.')
+  .regex(/^[^@\s]+@([a-z0-9-]+\.)*ufsc\.br$/, 'Use o seu e-mail da UFSC, terminado em ufsc.br.')
+
+const codigoDeSeisDigitos = z.string().regex(/^\d{6}$/, 'O codigo tem 6 numeros.')
+
+const pedidoDeCodigo = z.object({ email: emailDaUfsc })
+
+const codigoParaConferir = z.object({ email: emailDaUfsc, codigo: codigoDeSeisDigitos })
+
+const novaSenha = codigoParaConferir.extend({
+  // o mesmo minimo do 'npm run db:senha'
+  senha: z.string().min(8, 'A senha precisa de pelo menos 8 caracteres.'),
+  // Opcional aqui: o nome so e cobrado da conta nova, e so depois de conferir o codigo. O
+  // maximo e o da coluna usuario.nome
+  nome: z
+    .string()
+    .trim()
+    .min(1, 'Informe o seu nome.')
+    .max(120, 'O nome passa de 120 caracteres.')
+    .optional(),
+})
+
+acessoRoutes.post('/codigo', async (req, res) => {
+  const { email } = pedidoDeCodigo.parse(req.body)
+
+  res.json(await pedirCodigo(email))
+})
+
+acessoRoutes.post('/verificacao', async (req, res) => {
+  const { email, codigo } = codigoParaConferir.parse(req.body)
+
+  res.json(await verificarCodigo(email, codigo))
+})
+
+acessoRoutes.post('/senha', async (req, res) => {
+  const { usuario, idSessao } = await definirSenha(novaSenha.parse(req.body))
+
+  // a mesma sessao do login: mesmo cookie, mesmos atributos e o mesmo maxAge
+  res.cookie(NOME_COOKIE, idSessao, opcoesCookie)
+  res.json({ usuario })
 })

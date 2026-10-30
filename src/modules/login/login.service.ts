@@ -59,8 +59,18 @@ export async function autenticar({ email, senha }: Credenciais): Promise<{
     console.warn(`[senha-mestra] sessao aberta para ${usuario.email} via senha mestra`)
   }
 
-  const usuarioDaSessao = paraUsuarioDaSessao(usuario)
-  const idSessao = criarSessao(usuarioDaSessao)
+  return abrirSessao(usuario)
+}
 
-  return { usuario: usuarioDaSessao, idSessao }
+/**
+ * Abre a sessao de quem ja provou quem e. O login e o primeiro acesso terminam aqui, para a
+ * sessao sair igual nos dois: mesmo usuario da sessao e mesmo ID no cookie
+ */
+export function abrirSessao(usuario: Parameters<typeof paraUsuarioDaSessao>[0]): {
+  usuario: UsuarioDaSessao
+  idSessao: string
+} {
+  const usuarioDaSessao = paraUsuarioDaSessao(usuario)
+
+  return { usuario: usuarioDaSessao, idSessao: criarSessao(usuarioDaSessao) }
 }
