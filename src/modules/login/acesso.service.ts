@@ -17,18 +17,24 @@ export const VALIDADE_DO_CODIGO_EM_MINUTOS = 15
 /** Quantas vezes um codigo pode ser conferido. O codigo novo comeca do zero */
 export const TENTATIVAS_POR_CODIGO = 5
 
+/** Quantos e-mails a Brevo manda por dia no plano gratis */
+export const COTA_DIARIA_DE_EMAIL = 300
+
 /**
  * Quantos codigos podem ser pedidos, contados nas linhas de login.codigo_acesso. Por e-mail,
- * para ninguem lotar a caixa de outra pessoa. No total, para ficar abaixo da cota do servico
- * de e-mail: sem esse teto, um script que varia o endereco esgota a cota e ninguem mais
- * recebe codigo. O servico ainda nao foi escolhido, entao o teto total e conservador (50 por
- * hora, 200 por dia) e se ajusta aqui quando a cota dele for conhecida
+ * para ninguem lotar a caixa de outra pessoa. No total, para caber na cota da Brevo: sem esse
+ * teto, um script que varia o endereco esgota a cota e ninguem mais recebe codigo.
+ *
+ * Cada pedido aceito manda ate dois e-mails: o codigo e, se ele trocar a senha de uma conta que
+ * ja existia, o aviso, que sai ate 15 minutos depois. Num dia saem entao os codigos pedidos nele
+ * (no maximo 130) e os avisos desses pedidos e dos ultimos 15 minutos do dia anterior (no
+ * maximo 130 + 30, o teto por hora): 290, abaixo dos 300
  */
 export const LIMITES_DE_PEDIDO = {
   porEmailPorMinuto: 1,
   porEmailPorHora: 5,
-  totalPorHora: 50,
-  totalPorDia: 200,
+  totalPorHora: 30,
+  totalPorDia: 130,
 }
 
 const MINUTO = 60_000

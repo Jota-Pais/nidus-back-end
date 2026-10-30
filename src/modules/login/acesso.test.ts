@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { criarApp } from '../../app.ts'
 import { avisarSenhaAlterada, enviarCodigoDeAcesso } from '../../shared/email.ts'
 import {
+  COTA_DIARIA_DE_EMAIL,
   LIMITES_DE_PEDIDO,
   TENTATIVAS_POR_CODIGO,
   TETO_DE_ERROS_POR_EMAIL,
@@ -414,6 +415,16 @@ describe('POST /api/acesso/codigo', () => {
     })
     expect(vi.mocked(enviarCodigoDeAcesso).mock.calls.map(([email]) => email)).toEqual(['novo@ufsc.br'])
     expect(falso.tabelas.codigoAcesso).toHaveLength(teto)
+  })
+
+  it('o teto total cabe na cota diaria da Brevo, contando o aviso de senha alterada', () => {
+    const { totalPorDia, totalPorHora } = LIMITES_DE_PEDIDO
+
+    // o plano gratis da Brevo
+    expect(COTA_DIARIA_DE_EMAIL).toBe(300)
+    // cada pedido manda o codigo e no maximo um aviso, que pode cair no dia seguinte: o codigo
+    // vale 15 minutos, e em 15 minutos nao cabem mais pedidos que o teto por hora
+    expect(totalPorDia + (totalPorDia + totalPorHora)).toBeLessThanOrEqual(COTA_DIARIA_DE_EMAIL)
   })
 
   it('o 429 sai antes do hash do codigo, que e a parte cara do pedido', async () => {

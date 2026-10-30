@@ -118,8 +118,9 @@ esqueceu, pede o código pela tela `/definir-senha` do front.
   qualquer 401 como senha errada. Código errado, vencido, já usado ou de conta
   inativa dá `409 CODIGO_INVALIDO`, e cada código aceita 5 tentativas. Pedido de
   código demais dá `429 MUITAS_TENTATIVAS`: 1 por minuto e 5 por hora por e-mail,
-  e um teto total por hora e por dia, abaixo da cota do serviço de e-mail. Os
-  números ficam em `LIMITES_DE_PEDIDO`, no `acesso.service.ts`.
+  e no total 30 por hora e 130 por dia. O teto total cabe na cota de 300 e-mails
+  por dia da Brevo contando o aviso de senha alterada, que cada pedido pode gerar
+  além do código. Os números ficam em `LIMITES_DE_PEDIDO`, no `acesso.service.ts`.
 - Cada e-mail aguenta 20 códigos errados em 24 h, somando todos os códigos dele
   (`TETO_DE_ERROS_POR_EMAIL`). Passado o teto, o pedido de código dá `429
   MUITAS_TENTATIVAS` sem enviar nem gravar código, e a verificação e a senha dão
