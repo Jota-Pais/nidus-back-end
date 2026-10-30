@@ -468,6 +468,38 @@ describe('POST /api/acesso/verificacao', () => {
     expect(linhaDe('tecnico@ufsc.br').tentativas).toBe(TENTATIVAS_POR_CODIGO)
   })
 
+  it('a ultima de varias erradas em paralelo tambem avisa que as tentativas acabaram', async () => {
+    await pedir('tecnico@ufsc.br')
+    const certo = codigoDe('tecnico@ufsc.br')
+
+    const respostas = await Promise.all(
+      Array.from({ length: TENTATIVAS_POR_CODIGO }, () => conferir('tecnico@ufsc.br', outro(certo))),
+    )
+
+    // todas leem 'tentativas' 0 antes da primeira reserva: o aviso vem da linha relida
+    expect(respostas.map((r) => r.body.erro.mensagem)).toContain(ESGOTADAS)
+    expect(linhaDe('tecnico@ufsc.br').tentativas).toBe(TENTATIVAS_POR_CODIGO)
+  })
+
+  it('o codigo trocado no meio da conferencia da invalido, nao tentativas esgotadas', async () => {
+    await pedir('tecnico@ufsc.br')
+    const antigo = codigoDe('tecnico@ufsc.br')
+    const buscar = falso.prisma.codigoAcesso.findFirst
+
+    // entre ler o codigo vigente e reservar a tentativa, outra aba pede um codigo novo
+    vi.spyOn(falso.prisma.codigoAcesso, 'findFirst').mockImplementationOnce(async (consulta) => {
+      const lida = await buscar(consulta)
+      passaUmMinuto()
+      expect((await pedir('tecnico@ufsc.br')).status).toBe(200)
+      return lida
+    })
+
+    const resposta = await conferir('tecnico@ufsc.br', antigo)
+
+    expect(resposta.status).toBe(409)
+    expect(resposta.body.erro.campos).toEqual({ codigo: INVALIDO })
+  })
+
   it('20 tentativas erradas em paralelo nao passam de 5 conferencias', async () => {
     await pedir('tecnico@ufsc.br')
     const certo = codigoDe('tecnico@ufsc.br')

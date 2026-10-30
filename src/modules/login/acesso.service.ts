@@ -127,6 +127,23 @@ export async function pedirCodigo(
 }
 
 /**
+ * A mensagem do 409 vem da linha relida depois da recusa, nao da lida antes da reserva: no
+ * meio, outra tentativa em paralelo pode ter gastado a ultima, ou um codigo novo pode ter
+ * tomado o lugar deste. "Esgotadas" e so o codigo que ainda valeria e ficou sem tentativa,
+ * contando a que acabou de errar
+ */
+async function mensagemDaRecusa(id: number, agora: Date) {
+  const linha = await prisma.codigoAcesso.findUnique({ where: { id } })
+  const esgotado =
+    linha !== null &&
+    linha.usadoEm === null &&
+    linha.expiraEm > agora &&
+    linha.tentativas >= TENTATIVAS_POR_CODIGO
+
+  return esgotado ? TENTATIVAS_ESGOTADAS : CODIGO_INVALIDO
+}
+
+/**
  * Confere o codigo vigente do e-mail sem gasta-lo e devolve o usuario, null quando a conta
  * ainda nao existe. Codigo errado, vencido, ja usado, inexistente ou de conta inativa dao o
  * mesmo 409, e a conta so e lida depois do acerto
@@ -152,14 +169,12 @@ async function conferirCodigo(email: string, codigo: string, agora: Date) {
   })
 
   if (reserva.count !== 1) {
-    const aindaValia = vigente.usadoEm === null && vigente.expiraEm > agora
-    throw codigoInvalido(aindaValia ? TENTATIVAS_ESGOTADAS : CODIGO_INVALIDO)
+    throw codigoInvalido(await mensagemDaRecusa(vigente.id, agora))
   }
 
   if (!(await senhaCorresponde(codigo, vigente.hashCodigo))) {
     // a ultima tentativa ja avisa, para a pessoa nao gastar mais uma a toa
-    const ultima = vigente.tentativas + 1 >= TENTATIVAS_POR_CODIGO
-    throw codigoInvalido(ultima ? TENTATIVAS_ESGOTADAS : CODIGO_INVALIDO)
+    throw codigoInvalido(await mensagemDaRecusa(vigente.id, agora))
   }
 
   // O acerto devolve a tentativa: a verificacao e a senha nova conferem o mesmo codigo, e
