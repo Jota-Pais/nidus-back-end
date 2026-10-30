@@ -60,6 +60,16 @@ describe('autorizacao', () => {
   })
 })
 
+describe('lista de projetos', () => {
+  it('nao existe mais: o protocolo CEUA e digitado no pedido', async () => {
+    // com a rota no lugar, sem sessao daria 401; sem a rota, e rota inexistente
+    const resposta = await request(app()).get('/api/projetos')
+
+    expect(resposta.status).toBe(404)
+    expect(resposta.body.erro.codigo).toBe('NAO_ENCONTRADO')
+  })
+})
+
 describe('forma da solicitacao', () => {
   it('aceita o pedido completo', () => {
     expect(solicitacaoNova.safeParse(pedido).success).toBe(true)

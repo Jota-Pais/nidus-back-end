@@ -18,25 +18,11 @@ import {
   disponibilidadeDoParto,
 } from '../reproducao/disponibilidade.ts'
 
-/** O pesquisador so ve os proprios projetos e pedidos; tecnico e gestor veem todos */
+/**
+ * O pesquisador so ve os proprios pedidos e so pede no projeto que esta no nome dele; tecnico e
+ * gestor veem todos e pedem em qualquer projeto
+ */
 const doPesquisador = (usuario: UsuarioDaSessao) => usuario.perfil === 'pesquisador'
-
-/** GET /api/projetos */
-export async function listarProjetos(usuario: UsuarioDaSessao, agora: Date = new Date()) {
-  const hoje = hojeISO(agora)
-  const projetos = await prisma.projeto.findMany({
-    where: doPesquisador(usuario) ? { idUsuarioResponsavel: usuario.id } : {},
-    orderBy: { numero: 'asc' },
-  })
-
-  return {
-    projetos: projetos.map((projeto) => ({
-      id: projeto.id,
-      numero: projeto.numero,
-      vigente: projeto.situacao === 'V' && dataISO(projeto.dtVigenciaFim) >= hoje,
-    })),
-  }
-}
 
 /** GET /api/solicitacoes */
 export async function listarSolicitacoes(usuario: UsuarioDaSessao) {

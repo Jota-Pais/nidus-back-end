@@ -6,19 +6,9 @@ import {
   usuarioDaRequisicao,
 } from '../../shared/middlewares/autorizacao.ts'
 import { hojeEmBrasilia } from '../../shared/traducao.ts'
-import {
-  alocarSolicitacao,
-  criarSolicitacao,
-  listarProjetos,
-  listarSolicitacoes,
-} from './demanda.service.ts'
+import { alocarSolicitacao, criarSolicitacao, listarSolicitacoes } from './demanda.service.ts'
 
-export const projetoRoutes = Router()
 export const solicitacaoRoutes = Router()
-
-projetoRoutes.get('/', exigirPerfil(), async (req, res) => {
-  res.json(await listarProjetos(usuarioDaRequisicao(req)))
-})
 
 solicitacaoRoutes.get('/', exigirPerfil(), async (req, res) => {
   res.json(await listarSolicitacoes(usuarioDaRequisicao(req)))
