@@ -542,12 +542,13 @@ describe('POST /api/acesso/senha', () => {
     expect((await conferir('novo@ufsc.br', codigo)).status).toBe(409)
   })
 
-  it('conta que ja existe troca so a senha: perfil e nome ficam', async () => {
+  it('conta que ja existe troca so a senha: perfil e nome ficam, e o codigo fica gasto', async () => {
     await pedir('gestor@ufsc.br')
+    const codigo = codigoDe('gestor@ufsc.br')
 
     const resposta = await definir({
       email: 'gestor@ufsc.br',
-      codigo: codigoDe('gestor@ufsc.br'),
+      codigo,
       senha: SENHA_NOVA,
       nome: 'Outro Nome',
     })
@@ -562,6 +563,16 @@ describe('POST /api/acesso/senha', () => {
     expect(usuarioDe('gestor@ufsc.br')).toMatchObject({ nome: 'Carlos Mendes', perfil: 'G' })
     expect((await entrar('gestor@ufsc.br', SENHA_NOVA)).status).toBe(200)
     expect((await entrar('gestor@ufsc.br', SENHA_ANTIGA)).status).toBe(401)
+
+    // a senha esquecida e o caminho que chega ao tecnico e ao gestor: o mesmo codigo nao troca
+    // a senha de novo nem abre outra sessao nos 15 minutos que ainda faltam
+    expect(linhaDe('gestor@ufsc.br').usadoEm).toBeInstanceOf(Date)
+    const deNovo = await definir({ email: 'gestor@ufsc.br', codigo, senha: 'outra-senha-2' })
+
+    expect(deNovo.status).toBe(409)
+    expect(deNovo.body.erro.codigo).toBe('CODIGO_INVALIDO')
+    expect(deNovo.headers['set-cookie']).toBeUndefined()
+    expect((await entrar('gestor@ufsc.br', SENHA_NOVA)).status).toBe(200)
   })
 
   it('conta inativa nao troca a senha nem ganha sessao', async () => {
@@ -635,14 +646,24 @@ describe('POST /api/acesso/senha', () => {
     expect(quemSou.body.usuario).toEqual(acesso.body.usuario)
   })
 
-  it('duas senhas em paralelo com o mesmo codigo: so uma passa', async () => {
-    await pedir('novo@ufsc.br')
-    const corpo = { email: 'novo@ufsc.br', codigo: codigoDe('novo@ufsc.br'), senha: SENHA_NOVA, nome: 'Fulano' }
+  it.each([
+    ['conta nova', 'novo@ufsc.br'],
+    ['conta que ja existe', 'gestor@ufsc.br'],
+  ])('%s: duas senhas em paralelo com o mesmo codigo, so uma passa', async (_conta, email) => {
+    await pedir(email)
+    const corpo = { email, codigo: codigoDe(email), nome: 'Fulano' }
+    const senhas = ['primeira-senha-1', 'segunda-senha-2']
 
-    const respostas = await Promise.all([definir(corpo), definir(corpo)])
+    const respostas = await Promise.all(senhas.map((senha) => definir({ ...corpo, senha })))
 
     expect(statusEmOrdem(respostas)).toEqual([200, 409])
-    expect(falso.tabelas.usuario.filter((u) => u.email === 'novo@ufsc.br')).toHaveLength(1)
+    expect(respostas.filter((r) => r.headers['set-cookie'] !== undefined)).toHaveLength(1)
+    expect(falso.tabelas.usuario.filter((u) => u.email === email)).toHaveLength(1)
+
+    // a senha que vale e a da resposta que passou
+    const valeu = respostas[0]?.status === 200 ? 0 : 1
+    expect((await entrar(email, senhas[valeu] ?? '')).status).toBe(200)
+    expect((await entrar(email, senhas[1 - valeu] ?? '')).status).toBe(401)
   })
 })
 
