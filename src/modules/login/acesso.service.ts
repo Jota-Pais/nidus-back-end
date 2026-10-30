@@ -348,8 +348,9 @@ export async function definirSenha(
   })
 
   // A senha mudou: as sessoes abertas antes, em qualquer aparelho, deixam de valer. Quem entrou
-  // com a senha antiga, ou com uma sessao roubada, sai, e o login que ainda conferia a senha
-  // antiga nao abre a dele. So depois abre a sessao desta troca
+  // com a senha antiga, ou com uma sessao roubada, sai. O login que ainda conferia a senha antiga
+  // nao fica com sessao: leva 401 ou, se terminar entre a gravacao e esta linha, sai com uma
+  // sessao que esta linha derruba. So depois abre a sessao desta troca
   revogarSessoesDoUsuario(usuario.id)
   const sessao = abrirSessao(usuario)
 
