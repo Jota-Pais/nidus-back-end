@@ -36,7 +36,7 @@ describe('casal em caixa de maternidade ou recria', () => {
 
   it('aparece na busca de atendimento: a consulta nao filtra a finalidade da caixa', async () => {
     await buscarAtendimento(
-      { especie: 'rato', machos: 2, femeas: 2, idade: 28 },
+      { especie: 'rato', machos: 2, femeas: 2, qualquer: 0, idadeMin: 28, idadeMax: 28 },
       new Date('2026-10-29T12:00:00.000Z'),
     )
 

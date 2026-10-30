@@ -35,7 +35,7 @@ describe('autorizacao', () => {
   it('o pesquisador nao usa a busca de atendimento nem aloca caixa', async () => {
     const busca = await request(app('pesquisador'))
       .get('/api/busca')
-      .query({ especie: 'rato', machos: 1, femeas: 1, idade: 28 })
+      .query({ especie: 'rato', machos: 1, femeas: 1, qualquer: 0, idadeMin: 28, idadeMax: 28 })
     const alocacao = await request(app('pesquisador'))
       .post('/api/solicitacoes/1/alocacao')
       .send({ itens: [{ idParto: 1, machos: 1, femeas: 0 }] })
@@ -64,15 +64,26 @@ describe('forma da solicitacao', () => {
 })
 
 describe('forma da busca', () => {
-  it('converte a query string e separa as caixas excluidas', () => {
-    const filtro = filtroDaBusca.parse({ especie: 'rato', machos: '10', femeas: '5', idade: '28', excluir: '3,7' })
+  const busca = { especie: 'rato', machos: '10', femeas: '5', qualquer: '3', idadeMin: '20', idadeMax: '40' }
 
-    expect(filtro).toMatchObject({ machos: 10, femeas: 5, idade: 28, excluir: [3, 7] })
+  it('converte a query string e separa as caixas excluidas', () => {
+    const filtro = filtroDaBusca.parse({ ...busca, excluir: '3,7' })
+
+    expect(filtro).toMatchObject({ machos: 10, femeas: 5, qualquer: 3, idadeMin: 20, idadeMax: 40, excluir: [3, 7] })
   })
 
   it('busca sem especie e VALIDACAO', async () => {
-    const resposta = await request(app('tecnico')).get('/api/busca').query({ machos: 1, femeas: 1, idade: 28 })
+    const resposta = await request(app('tecnico'))
+      .get('/api/busca')
+      .query({ machos: 1, femeas: 1, qualquer: 0, idadeMin: 28, idadeMax: 28 })
 
     expect(resposta.status).toBe(400)
+  })
+
+  it('idade maxima menor que a minima e VALIDACAO no campo idadeMax', async () => {
+    const resposta = await request(app('tecnico')).get('/api/busca').query({ ...busca, idadeMax: '19' })
+
+    expect(resposta.status).toBe(400)
+    expect(resposta.body.erro.campos).toHaveProperty('idadeMax')
   })
 })
