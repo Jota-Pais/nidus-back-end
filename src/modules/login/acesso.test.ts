@@ -1,5 +1,5 @@
 import request from 'supertest'
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { criarApp } from '../../app.ts'
 import { enviarCodigoDeAcesso } from '../../shared/email.ts'
 import { LIMITES_DE_PEDIDO, TENTATIVAS_POR_CODIGO, novoCodigo } from './acesso.service.ts'
@@ -197,14 +197,19 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-const app = criarApp()
+// Um servidor so para o arquivo, numa porta livre. Com o app, o supertest abre e fecha um
+// servidor a cada requisicao, e no Windows essa troca derrubava o processo do teste de vez em
+// quando, sem mensagem (saida 0xC0000409)
+const servidor = criarApp().listen(0)
 
-const pedir = (email: string) => request(app).post('/api/acesso/codigo').send({ email })
+afterAll(() => new Promise<void>((pronto) => servidor.close(() => pronto())))
+
+const pedir = (email: string) => request(servidor).post('/api/acesso/codigo').send({ email })
 const conferir = (email: string, codigo: string) =>
-  request(app).post('/api/acesso/verificacao').send({ email, codigo })
-const definir = (corpo: object) => request(app).post('/api/acesso/senha').send(corpo)
+  request(servidor).post('/api/acesso/verificacao').send({ email, codigo })
+const definir = (corpo: object) => request(servidor).post('/api/acesso/senha').send(corpo)
 const entrar = (email: string, senha: string) =>
-  request(app).post('/api/sessao').send({ email, senha })
+  request(servidor).post('/api/sessao').send({ email, senha })
 
 /** O ultimo codigo que chegou ao e-mail */
 function codigoDe(email: string): string {
@@ -728,7 +733,7 @@ describe('POST /api/acesso/senha', () => {
     expect(atributos(login)).toContain('HttpOnly')
 
     // e e uma sessao de verdade: o GET /api/sessao reconhece quem entrou
-    const quemSou = await request(app)
+    const quemSou = await request(servidor)
       .get('/api/sessao')
       .set('Cookie', cookie(acesso).split(';')[0] ?? '')
     expect(quemSou.body.usuario).toEqual(acesso.body.usuario)
