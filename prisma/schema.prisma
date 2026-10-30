@@ -348,20 +348,29 @@ model Solicitacao {
   idUsuarioSolicitante Int @map("id_usuario_solicitante")
   idEspecie            Int @map("id_especie")
   idLinhagem           Int @map("id_linhagem")
+  /// O nome que a pessoa digitou no pedido. O e-mail e o da conta que pediu.
+  nomePesquisador      String @map("nome_pesquisador") @db.VarChar(120)
 
   qtdM           Int      @map("qtd_m") @db.SmallInt
   qtdF           Int      @map("qtd_f") @db.SmallInt
-  idadeAlvoDias  Int      @map("idade_alvo_dias") @db.SmallInt
+  /// Animais de qualquer sexo, alem dos machos e das femeas.
+  qtdQualquer    Int      @default(0) @map("qtd_qualquer") @db.SmallInt
+  /// Faixa de idade na entrega, em dias. A idade exata e min = max.
+  idadeMinDias   Int      @map("idade_min_dias") @db.SmallInt
+  idadeMaxDias   Int      @map("idade_max_dias") @db.SmallInt
   dtDesejada     DateTime @map("dt_desejada") @db.Date
   /// U unica | S semanal | Q quinzenal | M mensal | A avulsas
   regime         String   @default("U") @db.Char(1)
   /// RA rascunho | EN enviada | AN em analise | AP aprovada |
   /// RE recusada | AJ ajustada | AT em atendimento | CO concluida | CA cancelada
   status         String   @default("RA") @db.Char(2)
+  /// Texto livre do pesquisador. Nulo quando nao escreveu nada.
+  observacoes    String?  @db.VarChar(500)
 
   dtCriacao    DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
   dtManutencao DateTime? @map("dt_manutencao") @db.Timestamptz(6)
 
+  /// O protocolo CEUA digitado no pedido so resolve este id: o projeto ja existe.
   projeto            Projeto  @relation(fields: [idProjeto], references: [id], onDelete: NoAction, onUpdate: NoAction)
   usuarioSolicitante Usuario  @relation(fields: [idUsuarioSolicitante], references: [id], onDelete: NoAction, onUpdate: NoAction)
   especie            Especie  @relation(fields: [idEspecie], references: [id], onDelete: NoAction, onUpdate: NoAction)

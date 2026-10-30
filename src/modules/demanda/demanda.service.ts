@@ -45,7 +45,7 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
     orderBy: { id: 'desc' },
     include: {
       projeto: { select: { numero: true } },
-      usuarioSolicitante: { select: { nome: true } },
+      usuarioSolicitante: { select: { email: true } },
       especie: { select: { nome: true } },
       linhagem: { select: { id: true, nome: true } },
     },
@@ -54,30 +54,45 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
   return {
     solicitacoes: solicitacoes.map((s) => ({
       id: s.id,
-      projeto: s.projeto.numero,
-      solicitante: s.usuarioSolicitante.nome,
+      protocoloCeua: s.projeto.numero,
+      // o nome e o que a pessoa digitou no pedido; o e-mail e o da conta que pediu
+      pesquisador: s.nomePesquisador,
+      email: s.usuarioSolicitante.email,
       especie: codigoDaEspecie(s.especie.nome),
       idLinhagem: s.linhagem.id,
       linhagem: s.linhagem.nome,
       machos: s.qtdM,
       femeas: s.qtdF,
-      idade: s.idadeAlvoDias,
+      qualquer: s.qtdQualquer,
+      idadeMin: s.idadeMinDias,
+      idadeMax: s.idadeMaxDias,
       dataEntrega: dataISO(s.dtDesejada),
       cronograma: cronograma.paraApi(s.regime),
+      observacoes: s.observacoes,
       status: statusSolicitacao.paraApi(s.status),
     })),
   }
 }
 
 export type NovaSolicitacao = {
-  idProjeto: number
+  nomePesquisador: string
+  /** o numero do projeto em etica.projeto, no formato 23080.XXXXXX/AAAA-XX */
+  protocoloCeua: string
   idLinhagem: number
   machos: number
   femeas: number
-  idade: number
+  qualquer: number
+  /** a idade exata vem com idadeMin = idadeMax */
+  idadeMin: number
+  idadeMax: number
   dataEntrega: string
   cronograma: string
+  observacoes: string | null
 }
+
+/** 409 do protocolo, com o campo, para o front mostrar a mensagem embaixo dele */
+const protocoloInvalido = (mensagem: string) =>
+  erroDeRegra('PROJETO_INVALIDO', mensagem, { campos: { protocoloCeua: mensagem } })
 
 /** POST /api/solicitacoes - o pedido do pesquisador, com a primeira remessa */
 export async function criarSolicitacao(
@@ -85,19 +100,20 @@ export async function criarSolicitacao(
   usuario: UsuarioDaSessao,
   agora: Date = new Date(),
 ) {
-  const projeto = await prisma.projeto.findUnique({ where: { id: dados.idProjeto } })
+  // esta rota nao cria projeto: procura pelo numero o que ja esta no banco
+  const projeto = await prisma.projeto.findUnique({ where: { numero: dados.protocoloCeua } })
 
   if (projeto === null) {
-    throw naoEncontrado('Projeto')
+    throw protocoloInvalido('Protocolo CEUA nao encontrado. Confira o numero ou fale com o bioterio.')
   }
 
   // a cota da CEUA e liberacao por pessoa e projeto, nao saldo (combinado com o cliente em 20/09)
   if (doPesquisador(usuario) && projeto.idUsuarioResponsavel !== usuario.id) {
-    throw erroDeRegra('PROJETO_INVALIDO', 'Este projeto CEUA nao esta no seu nome.')
+    throw protocoloInvalido('Este projeto CEUA nao esta no seu nome.')
   }
 
   if (projeto.situacao !== 'V' || dataISO(projeto.dtVigenciaFim) < hojeISO(agora)) {
-    throw erroDeRegra('PROJETO_INVALIDO', `O projeto ${projeto.numero} nao esta vigente.`)
+    throw protocoloInvalido(`O projeto ${projeto.numero} nao esta vigente.`)
   }
 
   const linhagem = await prisma.linhagem.findUnique({ where: { id: dados.idLinhagem } })
@@ -111,17 +127,22 @@ export async function criarSolicitacao(
       data: {
         idProjeto: projeto.id,
         idUsuarioSolicitante: usuario.id,
+        nomePesquisador: dados.nomePesquisador,
         idEspecie: linhagem.idEspecie,
         idLinhagem: linhagem.id,
         qtdM: dados.machos,
         qtdF: dados.femeas,
-        idadeAlvoDias: dados.idade,
+        qtdQualquer: dados.qualquer,
+        idadeMinDias: dados.idadeMin,
+        idadeMaxDias: dados.idadeMax,
         dtDesejada: paraData(dados.dataEntrega),
         regime: exigirCodigo(cronograma, dados.cronograma, 'Cronograma'),
         status: 'EN',
+        observacoes: dados.observacoes,
       },
     })
 
+    // a remessa so tem machos e femeas previstos: o "qualquer" fica na solicitacao
     await tx.remessa.create({
       data: {
         idSolicitacao: solicitacao.id,
