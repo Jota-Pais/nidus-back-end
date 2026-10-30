@@ -60,7 +60,7 @@ e o que você grava rodando local aparece para o cliente.
 | `npm start` | Roda o build, é o comando da Render |
 | `npm run db:deploy` | Aplica migrations pendentes. Nunca dropa nada |
 | `npm run db:seed` | Carga inicial: espécies, linhagens, parâmetros, pares genéticos e estantes (não duplica nada) |
-| `npm run db:usuarios` | Cria os três usuários e o projeto CEUA num banco novo (o que já existe fica como está) |
+| `npm run db:usuarios` | Cria os três usuários e o projeto CEUA num banco novo. Procura cada usuário pelo e-mail: o que acha fica como está, o que não acha é criado de novo |
 | `npm run db:senha -- <email> "<senha>"` | Define a senha de um usuário. É a reserva para quando o e-mail do primeiro acesso não chega, ou trava por código errado demais |
 
 ## Stack
@@ -168,9 +168,14 @@ deploy anterior, e todo push seguinte falha.
 (`gestor@ufsc.br`, `tecnico@ufsc.br` e `pesquisador@ufsc.br`), de caixas que a
 equipe não controla. Com o envio ligado, quem tiver uma dessas caixas na UFSC
 recebe o código, define a senha da conta e entra com o perfil dela, gestor
-inclusive. O primeiro acesso só serve a conta com o e-mail real da pessoa: antes
-de ligar o envio, as contas de exemplo que estiverem no banco passam para o
-e-mail real ou ficam inativas. Conta de exemplo recebe senha pelo `db:senha`.
+inclusive. O primeiro acesso só serve a conta com o e-mail real da pessoa, e
+conta de exemplo recebe senha pelo `db:senha`.
+
+Antes de ligar o envio, a saída segura é desativar as contas de exemplo que
+estiverem no banco (`ativo = false`): a linha fica, e o `db:usuarios` a acha pelo
+e-mail e a deixa como está. Trocar o e-mail delas pelo real não basta: o script
+procura pelo e-mail, e rodar o `db:usuarios` de novo naquele banco recria a
+conta de exemplo, ativa e com o e-mail genérico.
 
 ## Deploy na Render
 
