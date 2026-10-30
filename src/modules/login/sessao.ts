@@ -24,3 +24,20 @@ export function sessaoValida(id: string): UsuarioDaSessao | undefined {
 export function revogarSessao(id: string): void {
   sessoes.delete(id)
 }
+
+/**
+ * Revoga todas as sessoes do usuario, em qualquer aparelho, e devolve quantas eram. E o que a
+ * troca de senha faz antes de abrir a sessao nova: quem entrou com a senha antiga sai
+ */
+export function revogarSessoesDoUsuario(idUsuario: number): number {
+  let revogadas = 0
+
+  for (const [id, usuario] of sessoes) {
+    if (usuario.id === idUsuario) {
+      sessoes.delete(id)
+      revogadas++
+    }
+  }
+
+  return revogadas
+}

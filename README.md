@@ -131,6 +131,9 @@ esqueceu, pede o código pela tela `/definir-senha` do front.
   Conta inativa nunca recebe código, nunca troca a senha e nunca abre sessão.
 - O primeiro acesso só cria pesquisador. Quem já tem conta troca só a senha:
   perfil e nome ficam.
+- Quando a senha de uma conta que já existia muda, todas as sessões abertas dela,
+  em qualquer aparelho, deixam de valer, e só então abre a sessão nova. O
+  `db:senha` roda fora da API e não derruba sessão nenhuma.
 - O código fica em `login.codigo_acesso`, só como hash. Linha nenhuma se apaga:
   os limites contam por elas.
 

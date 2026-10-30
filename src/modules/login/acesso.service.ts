@@ -9,6 +9,7 @@ import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { abrirSessao } from './login.service.ts'
 import { hashSenha, senhaCorresponde } from './senha.ts'
+import { revogarSessoesDoUsuario } from './sessao.ts'
 
 /** Por quanto tempo o codigo vale */
 export const VALIDADE_DO_CODIGO_EM_MINUTOS = 15
@@ -333,6 +334,10 @@ export async function definirSenha(
       throw codigoInvalido()
     }
   })
+
+  // A senha mudou: as sessoes abertas antes, em qualquer aparelho, deixam de valer. Quem entrou
+  // com a senha antiga, ou com uma sessao roubada, sai. So depois abre a sessao desta troca
+  revogarSessoesDoUsuario(usuario.id)
 
   return abrirSessao(usuario)
 }

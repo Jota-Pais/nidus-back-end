@@ -908,6 +908,36 @@ describe('POST /api/acesso/senha', () => {
     expect((await entrar(email, senhas[valeu] ?? '')).status).toBe(200)
     expect((await entrar(email, senhas[1 - valeu] ?? '')).status).toBe(401)
   })
+
+  it('a senha trocada derruba as outras sessoes da pessoa, e so as dela', async () => {
+    const cookieDe = (resposta: { headers: Record<string, unknown> }) =>
+      String(resposta.headers['set-cookie']).split(';')[0] ?? ''
+    const quemSou = async (cookie: string) =>
+      (await request(servidor).get('/api/sessao').set('Cookie', cookie)).status
+
+    // o gestor entrou em dois aparelhos, e o tecnico no dele
+    const gestor = []
+    for (let aparelho = 0; aparelho < 2; aparelho++) {
+      gestor.push(cookieDe(await entrar('gestor@ufsc.br', SENHA_ANTIGA)))
+    }
+    const tecnico = cookieDe(await entrar('tecnico@ufsc.br', SENHA_ANTIGA))
+
+    await pedir('gestor@ufsc.br')
+    const codigo = codigoDe('gestor@ufsc.br')
+
+    // a troca recusada nao derruba nada
+    const recusada = await definir({ email: 'gestor@ufsc.br', codigo: outro(codigo), senha: SENHA_NOVA })
+    expect(recusada.status).toBe(409)
+    expect(await Promise.all(gestor.map(quemSou))).toEqual([200, 200])
+
+    const troca = await definir({ email: 'gestor@ufsc.br', codigo, senha: SENHA_NOVA })
+
+    expect(troca.status).toBe(200)
+    expect(await Promise.all(gestor.map(quemSou))).toEqual([401, 401])
+    // a sessao desta troca nasce depois da revogacao, e a de outra pessoa fica
+    expect(await quemSou(cookieDe(troca))).toBe(200)
+    expect(await quemSou(tecnico)).toBe(200)
+  })
 })
 
 it('nenhuma resposta das rotas de acesso e 401', async () => {
