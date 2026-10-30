@@ -50,6 +50,12 @@ describe('ordem das candidatas', () => {
     expect(ordem.map((c) => c.idCaixa)).toEqual([2, 1])
   })
 
+  it('na idade exata, a mais proxima vem primeiro, mesmo sendo a mais nova', () => {
+    // 28 aceita de 25 a 31: 26 esta a 2 dias da pedida e 31 a 3, entao 26 vem antes
+    const ordem = ordenar([candidata(1, 'de_fato', 31, 4, 4), candidata(2, 'de_fato', 26, 4, 4)], exata(28))
+    expect(ordem.map((c) => c.idadeNaEntrega)).toEqual([26, 31])
+  })
+
   it('com faixa, vai do mais velho para o mais novo, sem passar por cima da origem', () => {
     const ordem = ordenar(
       [
