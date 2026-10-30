@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   codigoDaEspecie,
   cronograma,
@@ -98,5 +98,21 @@ describe('data de calendario', () => {
 
     expect(hojeEmBrasilia(new Date('2026-10-31T03:00:00.000Z'))).toBe('2026-10-31')
     expect(hojeEmBrasilia(new Date('2026-01-05T12:00:00.000Z'))).toBe('2026-01-05')
+  })
+
+  it('o dia de Brasilia nao depende do padrao de data do idioma', () => {
+    // um ICU que passasse a escrever a data como 10/30/2026: a comparacao de texto com
+    // 'aaaa-mm-dd' aceitaria data passada sem aviso
+    class OutroPadrao extends Intl.DateTimeFormat {
+      override format() {
+        return '10/30/2026'
+      }
+    }
+    vi.stubGlobal('Intl', Object.create(Intl, { DateTimeFormat: { value: OutroPadrao } }))
+    try {
+      expect(hojeEmBrasilia(new Date('2026-10-31T02:30:00.000Z'))).toBe('2026-10-30')
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

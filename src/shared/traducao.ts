@@ -109,8 +109,15 @@ export function hojeISO(agora: Date = new Date()): string {
  * hoje seria recusada. O resto do back continua com 'hojeISO'
  */
 export function hojeEmBrasilia(agora: Date = new Date()): string {
-  // en-CA escreve a data como aaaa-mm-dd
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(agora)
+  // monta pelas partes, sem depender do padrao de data de um idioma, que muda com o ICU
+  const partes = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(agora)
+  const parte = (tipo: Intl.DateTimeFormatPartTypes) => partes.find((p) => p.type === tipo)?.value
+  return `${parte('year')}-${parte('month')}-${parte('day')}`
 }
 
 /** Traduz um termo de API para 'char(1)', ou 404 se nao existe */
