@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { criarSessao, revogarSessao, revogarSessoesDoUsuario, sessaoValida } from './sessao.ts'
+import {
+  criarSessao,
+  novaMarca,
+  revogadasDesde,
+  revogarSessao,
+  revogarSessoesDoUsuario,
+  sessaoValida,
+} from './sessao.ts'
 
 const usuario = { id: 1, nome: 'Ana Souza', email: 'tecnico@ufsc.br', perfil: 'tecnico' as const }
 // So o ultimo teste usa estes dois: as sessoes dos testes de cima continuam no 'Map'
@@ -48,5 +55,15 @@ describe('sessao em memoria', () => {
     for (const id of doGestor) expect(sessaoValida(id)).toBeUndefined()
     expect(sessaoValida(doOutro)).toEqual(pesquisador)
     expect(revogarSessoesDoUsuario(gestor.id)).toBe(0)
+  })
+
+  it('a revogacao alcanca o que comecou antes dela, e so o que e do usuario', () => {
+    const antes = novaMarca()
+    revogarSessoesDoUsuario(gestor.id)
+    const depois = novaMarca()
+
+    expect(revogadasDesde(gestor.id, antes)).toBe(true)
+    expect(revogadasDesde(gestor.id, depois)).toBe(false)
+    expect(revogadasDesde(pesquisador.id, antes)).toBe(false)
   })
 })

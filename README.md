@@ -133,8 +133,10 @@ esqueceu, pede o código pela tela `/definir-senha` do front.
 - O primeiro acesso só cria pesquisador. Quem já tem conta troca só a senha:
   perfil e nome ficam.
 - Quando a senha de uma conta que já existia muda, todas as sessões abertas dela,
-  em qualquer aparelho, deixam de valer, e só então abre a sessão nova. O
-  `db:senha` roda fora da API e não derruba sessão nenhuma.
+  em qualquer aparelho, deixam de valer, e só então abre a sessão nova. O login
+  com a senha antiga que ainda estava em andamento na hora da troca também não
+  abre sessão: dá o 401 da senha errada. O `db:senha` roda fora da API e não
+  derruba sessão nenhuma.
 - Nessa mesma troca, a pessoa recebe por e-mail o aviso de que a senha foi
   alterada, com dia e hora e o que fazer se não foi ela. Conta nova não recebe
   aviso. A resposta não espera o envio, e a falha do aviso vai para o log sem

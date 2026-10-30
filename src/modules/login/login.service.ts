@@ -5,7 +5,7 @@ import { prisma } from '../../shared/prisma.ts'
 import { perfil as dicPerfil } from '../../shared/traducao.ts'
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { senhaCorresponde } from './senha.ts'
-import { criarSessao } from './sessao.ts'
+import { criarSessao, novaMarca, revogadasDesde } from './sessao.ts'
 
 export type Credenciais = {
   email: string
@@ -42,6 +42,8 @@ export async function autenticar({ email, senha }: Credenciais): Promise<{
   usuario: UsuarioDaSessao
   idSessao: string
 }> {
+  // marcado antes de ler a senha: ver o fim da funcao
+  const inicio = novaMarca()
   const usuario = await prisma.usuario.findUnique({ where: { email } })
 
   if (usuario === null || !usuario.ativo) {
@@ -57,6 +59,13 @@ export async function autenticar({ email, senha }: Credenciais): Promise<{
     }
 
     console.warn(`[senha-mestra] sessao aberta para ${usuario.email} via senha mestra`)
+  }
+
+  // A senha foi lida no comeco, e o bcrypt leva segundos. Se nesse meio tempo ela mudou pela
+  // senha esquecida, o que conferiu aqui pode ser a senha antiga, e esta sessao nasceria depois
+  // da revogacao das outras, a salvo dela. Recusa como senha errada: a senha certa agora e outra
+  if (revogadasDesde(usuario.id, inicio)) {
+    throw new ErroDeAplicacao(401, 'NAO_AUTENTICADO', 'E-mail ou senha invalidos.')
   }
 
   return abrirSessao(usuario)

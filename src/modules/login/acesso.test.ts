@@ -952,6 +952,39 @@ describe('POST /api/acesso/senha', () => {
     expect(await quemSou(tecnico)).toBe(200)
   })
 
+  it('o login com a senha antiga que ainda conferia quando a senha mudou nao abre sessao', async () => {
+    await pedir('gestor@ufsc.br')
+    const codigo = codigoDe('gestor@ufsc.br')
+    const real = await vi.importActual<typeof import('./senha.ts')>('./senha.ts')
+
+    // O login ja leu a senha antiga e esta no bcrypt, que na Render leva segundos: aqui ele so
+    // termina depois da troca. E o que sobra a quem roubou a senha e deixa um login em laco
+    let soltarBcrypt = () => {}
+    const bcrypt = new Promise<void>((pronto) => {
+      soltarBcrypt = pronto
+    })
+    vi.mocked(senhaCorresponde).mockImplementationOnce(async (senha, hash) => {
+      await bcrypt
+      return real.senhaCorresponde(senha, hash)
+    })
+
+    const loginEmAndamento = entrar('gestor@ufsc.br', SENHA_ANTIGA).then((resposta) => resposta)
+    await vi.waitFor(() => expect(senhaCorresponde).toHaveBeenCalledTimes(1))
+
+    expect((await definir({ email: 'gestor@ufsc.br', codigo, senha: SENHA_NOVA })).status).toBe(200)
+    soltarBcrypt()
+    const login = await loginEmAndamento
+
+    // a senha antiga conferiu, mas ja nao e a senha: o mesmo 401 da senha errada, sem sessao
+    expect(login.status).toBe(401)
+    expect(login.body.erro.codigo).toBe('NAO_AUTENTICADO')
+    expect(login.headers['set-cookie']).toBeUndefined()
+
+    // e o login que comeca depois da troca segue a regra de sempre
+    expect((await entrar('gestor@ufsc.br', SENHA_ANTIGA)).status).toBe(401)
+    expect((await entrar('gestor@ufsc.br', SENHA_NOVA)).status).toBe(200)
+  })
+
   it('so a conta que ja existia recebe o aviso de senha alterada, e so quando a troca passa', async () => {
     await pedir('gestor@ufsc.br')
     await pedir('novo@ufsc.br')
