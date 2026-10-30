@@ -5,8 +5,9 @@
 # preencher campo a campo no painel. Criar pelo painel continua valendo: os
 # valores sao os mesmos.
 #
-# Os tres segredos (sync: false) sao pedidos pelo painel na criacao e nunca
-# ficam neste arquivo.
+# As variaveis com sync: false sao pedidas pelo painel na criacao e nunca ficam
+# neste arquivo. Num servico que ja existe, variavel nova com sync: false entra a
+# mao no painel antes do merge que passa a exigi-la: sem ela o boot cai.
 services:
   - type: web
     # `nidus-api` ja esta em uso por outro servico na Render (18/09/2026), e um
@@ -37,4 +38,11 @@ services:
         sync: false
       # URL de producao do front na Vercel, sem barra no final.
       - key: CORS_ORIGEM
+        sync: false
+      # Envio de e-mail pela API da Brevo: a chave de API do painel dela e o
+      # remetente validado na conta. Obrigatorias em production: o env.ts derruba
+      # o boot sem elas.
+      - key: BREVO_API_KEY
+        sync: false
+      - key: EMAIL_REMETENTE
         sync: false

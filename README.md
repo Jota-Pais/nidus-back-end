@@ -128,13 +128,27 @@ esqueceu, pede o código pela tela `/definir-senha` do front.
 - O código fica em `login.codigo_acesso`, só como hash. Linha nenhuma se apaga:
   os limites contam por elas.
 
-**E-mail.** O serviço de envio ainda não foi escolhido, e o envio fica atrás de
-uma função só, `enviarCodigoDeAcesso` em `src/shared/email.ts`. Em development e
-test, o código sai no console do servidor (`npm run dev`). Em production, o envio
-falha e o erro vai para o log, enquanto a tela diz que o código foi enviado. Por
-isso o primeiro acesso só vai para o `main` depois do serviço: conta criada, as
-variáveis dele na Render, no `render.yaml` e no `.env.example`, e o envio de
-verdade em `email.ts`.
+**E-mail.** O envio usa a API HTTP de envio transacional da Brevo, pelo `fetch`
+do Node, em `src/shared/email.ts`. Em production ele precisa de duas variáveis, e
+o boot cai sem elas:
+
+- `BREVO_API_KEY`: a chave de API, criada no painel da Brevo;
+- `EMAIL_REMETENTE`: o endereço que aparece como remetente, validado na conta da
+  Brevo.
+
+Em development e test, nenhum e-mail sai: o código aparece no console do
+servidor (`npm run dev`), e as duas variáveis podem ficar vazias. Nenhum teste
+chama a Brevo.
+
+O envio não segura a resposta. Se a Brevo recusar ou não responder em 10 s, o
+erro vai para o log do servidor, sem o código e sem a chave, e a tela segue
+dizendo que o código foi enviado. O plano grátis da Brevo manda 300 e-mails por
+dia.
+
+Antes do merge no `main`, as duas variáveis entram no painel da Render. O
+`render.yaml` as declara, mas num serviço que já existe a Render não pede o valor.
+Sem elas, o build aplica a migration e o serviço novo não sobe: a Render mantém o
+deploy anterior, e todo push seguinte falha.
 
 **Contas de exemplo.** Os três usuários do `db:usuarios` têm e-mails de exemplo
 (`gestor@ufsc.br`, `tecnico@ufsc.br` e `pesquisador@ufsc.br`), de caixas que a
@@ -156,7 +170,7 @@ Web Service no plano free, a partir do GitHub, descrito no `render.yaml`. Push e
 | Build | `npm ci --include=dev && npm run build && npm run db:deploy` |
 | Start | `npm start` |
 | Health check | `/saude` |
-| Variáveis | `NODE_ENV=production`, `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `CORS_ORIGEM` |
+| Variáveis | `NODE_ENV=production`, `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `CORS_ORIGEM`, `BREVO_API_KEY`, `EMAIL_REMETENTE` |
 
 - `--include=dev` é obrigatório: sem ele faltam os `@types/*` e o `tsc` para.
 - O free tier dorme depois de uns 15 minutos parado e leva até um minuto para

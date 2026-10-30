@@ -118,7 +118,7 @@ export async function pedirCodigo(
   // Sem 'await': o envio nao segura a resposta. Assim quem recebe o e-mail e a conta inativa,
   // que nao recebe, esperam o mesmo tempo, e uma falha do servico de e-mail fica so no log
   if (usuario === null || usuario.ativo) {
-    enviarCodigoDeAcesso(email, codigo).catch((erro: unknown) => {
+    enviarCodigoDeAcesso(email, codigo, VALIDADE_DO_CODIGO_EM_MINUTOS).catch((erro: unknown) => {
       console.error(`[acesso] o codigo para ${email} nao foi enviado:`, erro)
     })
   }
