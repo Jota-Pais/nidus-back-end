@@ -14,11 +14,13 @@
 --
 --   ALTER TABLE "demanda"."remessa" ADD COLUMN "qtd_qualquer_prevista" SMALLINT NOT NULL DEFAULT 0;
 --
--- Do jeito que sai, apagaria a idade dos pedidos que existem e falharia na
--- primeira linha da tabela (NOT NULL sem DEFAULT). Por isso esta escrito a mao e
--- chega no mesmo banco que o diff descreve: a idade alvo muda de nome, as colunas
--- NOT NULL novas entram nulas, sao preenchidas e so depois viram NOT NULL. Os
--- CHECKs o Prisma nao modela.
+-- O ALTER da remessa funciona do jeito que sai, porque a coluna nova tem DEFAULT 0,
+-- e entra aqui igual. O da solicitacao, do jeito que sai, apagaria a idade dos
+-- pedidos que existem e falharia na primeira linha da tabela (NOT NULL sem
+-- DEFAULT). Por isso esta escrito a mao e chega no mesmo banco que o diff
+-- descreve: a idade alvo muda de nome, as colunas NOT NULL sem DEFAULT entram
+-- nulas, sao preenchidas e so depois viram NOT NULL. Os CHECKs o Prisma nao
+-- modela.
 --
 -- Mexe em demanda.solicitacao e demanda.remessa, e nenhuma das duas tem trigger.
 -- Os dois UPDATEs daqui sao de demanda.solicitacao. O compromisso_respeita_oferta e
