@@ -11,8 +11,14 @@ describe('faixa de idade aceita', () => {
   })
 
   it('a faixa do pedido tem a tolerancia nas pontas', () => {
-    expect(faixaDoPedido({ min: 20, max: 40 })).toEqual({ min: faixaAceita(20).min, max: faixaAceita(40).max })
     expect(faixaDoPedido({ min: 21, max: 40 })).toEqual({ min: 20, max: 44 })
+    expect(faixaDoPedido({ min: 45, max: 100 })).toEqual({ min: 40, max: 115 })
+  })
+
+  it('abaixo de 21 dias a idade fica fora da tabela e usa a maior variacao', () => {
+    // o caso 20..40 do combinado. So a busca do tecnico aceita idade abaixo de 21
+    expect(faixaAceita(20)).toEqual({ min: 5, max: 35 })
+    expect(faixaDoPedido({ min: 20, max: 40 })).toEqual({ min: 5, max: 44 })
   })
 
   it('a idade exata aceita o mesmo de antes', () => {
