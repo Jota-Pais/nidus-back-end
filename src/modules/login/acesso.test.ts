@@ -9,7 +9,8 @@ import { hashSenha, senhaCorresponde } from './senha.ts'
 // (sempre vazia), com o filtro do Prisma reduzido ao que o servico usa (igualdade, null, gt e
 // lt). Cada consulta devolve copia, como o banco, e o update condicional confere e grava sem
 // pausa no meio, como o UPDATE do Postgres. A trava do pedido de codigo vira uma fila. A
-// transacao nao desfaz nada: nenhum caminho aqui grava antes de recusar.
+// transacao que lanca erro desfaz o que ela mesma gravou, como o ROLLBACK: a senha da conta
+// desativada no meio grava o gasto do codigo antes de recusar.
 // O e-mail tambem e de mentira e guarda o codigo enviado, que o teste usa como a pessoa usaria
 
 type Linha = Record<string, unknown>
@@ -57,7 +58,8 @@ const falso = vi.hoisted(() => {
   // duas requisicoes em paralelo se intercalarem entre uma leitura e uma gravacao
   const rede = () => new Promise((resolve) => setImmediate(resolve))
 
-  const tabela = (nome: keyof typeof tabelas) => ({
+  // 'desfazer' so existe dentro da transacao: cada gravacao deixa ali como volta atras
+  const tabela = (nome: keyof typeof tabelas, desfazer?: (() => void)[]) => ({
     findUnique: async ({ where }: { where: Linha }) => {
       await rede()
       return copia(tabelas[nome].find((linha) => atende(linha, where)))
@@ -77,12 +79,18 @@ const falso = vi.hoisted(() => {
       await rede()
       const linha = { id: proximoId++, ...padrao[nome](), ...data }
       tabelas[nome].push(linha)
+      desfazer?.push(() => tabelas[nome].splice(tabelas[nome].indexOf(linha), 1))
       return copia(linha)
     },
     updateMany: async ({ where, data }: { where: Linha; data: Linha }) => {
       await rede()
       const alvo = tabelas[nome].filter((linha) => atende(linha, where))
-      for (const linha of alvo) aplicar(linha, data)
+      for (const linha of alvo) {
+        // so os campos gravados voltam: o que outra transacao mudou na mesma linha fica
+        const antes = Object.fromEntries(Object.keys(data).map((campo) => [campo, linha[campo]]))
+        aplicar(linha, data)
+        desfazer?.push(() => Object.assign(linha, antes))
+      }
       return { count: alvo.length }
     },
   })
@@ -93,8 +101,11 @@ const falso = vi.hoisted(() => {
     senhaMestra: { findFirst: async () => null },
     $transaction: async (corpo: (tx: unknown) => Promise<unknown>) => {
       let soltar = () => {}
+      const desfazer: (() => void)[] = []
       const tx = {
         ...prisma,
+        usuario: tabela('usuario', desfazer),
+        codigoAcesso: tabela('codigoAcesso', desfazer),
         // a trava consultiva: a proxima transacao que pedir espera esta terminar
         $executeRaw: async (sql: TemplateStringsArray) => {
           if (!sql.join('').includes('pg_advisory_xact_lock')) {
@@ -111,6 +122,9 @@ const falso = vi.hoisted(() => {
 
       try {
         return await corpo(tx)
+      } catch (erro) {
+        for (const volta of desfazer.reverse()) volta()
+        throw erro
       } finally {
         soltar()
       }
@@ -617,6 +631,8 @@ describe('POST /api/acesso/senha', () => {
     expect(resposta.body.erro.codigo).toBe('CODIGO_INVALIDO')
     expect(resposta.headers['set-cookie']).toBeUndefined()
     expect(usuarioDe('tecnico@ufsc.br').hashSenha).toBe(hashAntigo)
+    // o gasto do codigo e a senha estao na mesma transacao: a recusa desfaz o gasto tambem
+    expect(linhaDe('tecnico@ufsc.br')).toMatchObject({ usadoEm: null, tentativas: 0 })
   })
 
   it('o cookie da sessao sai igual ao do login', async () => {
