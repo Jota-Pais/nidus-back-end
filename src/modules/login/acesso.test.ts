@@ -16,7 +16,8 @@ import { hashSenha, senhaCorresponde } from './senha.ts'
 // lt) e a soma do aggregate. Cada consulta devolve copia, como o banco, e o update condicional confere e grava sem
 // pausa no meio, como o UPDATE do Postgres. A trava do pedido de codigo vira uma fila. A
 // transacao que lanca erro desfaz o que ela mesma gravou, como o ROLLBACK: a senha da conta
-// desativada no meio grava o gasto do codigo antes de recusar.
+// desativada no meio grava o gasto do codigo antes de recusar, e o pedido de codigo fecha o
+// anterior antes de conferir os limites.
 // O e-mail tambem e de mentira e guarda o codigo enviado, que o teste usa como a pessoa usaria. O
 // aviso de senha alterada so e espiado
 
@@ -443,6 +444,8 @@ describe('POST /api/acesso/codigo', () => {
     const mesmoEmail = await Promise.all([pedir('novo@ufsc.br'), pedir('novo@ufsc.br')])
 
     expect(statusEmOrdem(mesmoEmail)).toEqual([200, 429])
+    // se o recusado chegou a fechar o codigo do outro dentro da transacao, a recusa desfez isso
+    expect((await conferir('novo@ufsc.br', codigoDe('novo@ufsc.br'))).status).toBe(200)
 
     falso.reiniciar([])
     falso.encher(LIMITES_DE_PEDIDO.totalPorHora - 1, 30)
@@ -693,6 +696,46 @@ describe('teto de codigos errados por e-mail', () => {
     expect(senhaCorresponde).toHaveBeenCalledTimes(2)
     expect(linhaDe('tecnico@ufsc.br').tentativas).toBe(2)
     expect((await conferir('tecnico@ufsc.br', certo)).body.erro).toEqual(travado)
+  })
+
+  it('o erro que chega ao teto durante um pedido de codigo leva o pedido ao 429, sem gravar nem enviar', async () => {
+    // 15 erros em codigos antigos e 4 no vigente: falta um para o teto
+    falso.errosAntigos('tecnico@ufsc.br', 15, 120)
+    await pedir('tecnico@ufsc.br')
+    const vigente = codigoDe('tecnico@ufsc.br')
+    for (let i = 0; i < 4; i++) {
+      expect((await conferir('tecnico@ufsc.br', outro(vigente))).status).toBe(409)
+    }
+    passaUmMinuto()
+
+    // A verificacao nao pega a trava do pedido: o 20o erro chega com o pedido ja dentro dela,
+    // logo antes de o codigo anterior ser fechado
+    type ComCodigos = {
+      codigoAcesso: { updateMany: (consulta: { where: Linha; data: Linha }) => Promise<unknown> }
+    }
+    const transacao = falso.prisma.$transaction
+    let ultimoErro: Awaited<ReturnType<typeof conferir>> | undefined
+    vi.spyOn(falso.prisma, '$transaction').mockImplementationOnce((corpo) =>
+      transacao(async (tx) => {
+        const { codigoAcesso } = tx as ComCodigos
+        const fechar = codigoAcesso.updateMany
+        codigoAcesso.updateMany = async (consulta) => {
+          ultimoErro ??= await conferir('tecnico@ufsc.br', outro(vigente))
+          return fechar(consulta)
+        }
+        return corpo(tx)
+      }),
+    )
+
+    const pedido = await pedir('tecnico@ufsc.br')
+
+    expect(ultimoErro?.body.erro).toEqual(travado)
+    expect(pedido.status).toBe(429)
+    expect(pedido.body).toEqual({ erro: { codigo: 'MUITAS_TENTATIVAS', mensagem: ERROS_DEMAIS } })
+    // so o codigo de antes foi enviado, nenhuma linha nova ficou, e a marcacao do anterior voltou
+    expect(falso.enviados).toHaveLength(1)
+    expect(falso.tabelas.codigoAcesso).toHaveLength(4)
+    expect(linhaDe('tecnico@ufsc.br')).toMatchObject({ tentativas: TENTATIVAS_POR_CODIGO, usadoEm: null })
   })
 })
 

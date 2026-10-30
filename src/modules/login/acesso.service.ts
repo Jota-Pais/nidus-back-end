@@ -89,8 +89,8 @@ async function errosDoEmail(
 }
 
 /**
- * 429 no primeiro limite que o pedido estoura. Roda antes de qualquer gravacao: uma vez so
- * lendo, sem trava, e de novo dentro da transacao
+ * 429 no primeiro limite que o pedido estoura. Roda duas vezes: uma so lendo, sem trava, antes
+ * de qualquer gravacao, e de novo dentro da transacao, que desfaz o que gravou se ela recusar
  */
 async function conferirLimites(tx: Prisma.TransactionClient, email: string, agora: Date) {
   const desde = (intervalo: number) => ({ gt: new Date(agora.getTime() - intervalo) })
@@ -149,10 +149,15 @@ export async function pedirCodigo(
     // aqui dentro. A trava e da transacao (sai no commit) e por isso funciona atras do pooler
     // da Neon. Pedido de codigo e raro, e a fila dura so as contagens e a gravacao
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('login.codigo_acesso'))`
+
+    // O codigo anterior do e-mail deixa de valer. A linha fica, marcada: os limites contam por
+    // ela. A marcacao vem antes da conferencia porque a verificacao nao pega a trava: ate aqui,
+    // um palpite no codigo anterior ainda soma erro, e o que chega ao teto passaria entre a
+    // conferencia e a marcacao. Marcado, o codigo nao aceita mais palpite, e a soma conferida
+    // abaixo vale ate o commit. Se algum limite estourar, a transacao desfaz a marcacao
+    await tx.codigoAcesso.updateMany({ where: { email, usadoEm: null }, data: { usadoEm: agora } })
     await conferirLimites(tx, email, agora)
 
-    // O codigo anterior do e-mail deixa de valer. A linha fica, marcada: os limites contam por ela
-    await tx.codigoAcesso.updateMany({ where: { email, usadoEm: null }, data: { usadoEm: agora } })
     await tx.codigoAcesso.create({
       data: {
         email,
