@@ -103,6 +103,16 @@ export function hojeISO(agora: Date = new Date()): string {
   return dataISO(agora)
 }
 
+/**
+ * O dia de hoje em Brasilia, 'aaaa-mm-dd', o mesmo que o front calcula. So a regra "entrega a
+ * partir de hoje" do pedido usa: das 21h a meia-noite o dia em UTC ja virou, e a entrega para
+ * hoje seria recusada. O resto do back continua com 'hojeISO'
+ */
+export function hojeEmBrasilia(agora: Date = new Date()): string {
+  // en-CA escreve a data como aaaa-mm-dd
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(agora)
+}
+
 /** Traduz um termo de API para 'char(1)', ou 404 se nao existe */
 export function exigirCodigo<T extends string>(
   dic: { paraBanco: (termo: string) => T | undefined },

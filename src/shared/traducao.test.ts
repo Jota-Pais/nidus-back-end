@@ -6,6 +6,7 @@ import {
   estadoCaixa,
   exigirCodigo,
   face,
+  hojeEmBrasilia,
   hojeISO,
   paraData,
   perfil,
@@ -87,5 +88,15 @@ describe('data de calendario', () => {
   it('grava aaaa-mm-dd como meia-noite UTC, e a volta da a mesma data', () => {
     expect(paraData('2026-05-25').toISOString()).toBe('2026-05-25T00:00:00.000Z')
     expect(dataISO(paraData('2026-05-25'))).toBe('2026-05-25')
+  })
+
+  it('o dia de Brasilia so vira a meia-noite de Brasilia, tres horas depois do UTC', () => {
+    // 30/10 as 23h30 em Brasilia: em UTC ja e 31/10
+    const noiteDeBrasilia = new Date('2026-10-31T02:30:00.000Z')
+    expect(hojeEmBrasilia(noiteDeBrasilia)).toBe('2026-10-30')
+    expect(hojeISO(noiteDeBrasilia)).toBe('2026-10-31')
+
+    expect(hojeEmBrasilia(new Date('2026-10-31T03:00:00.000Z'))).toBe('2026-10-31')
+    expect(hojeEmBrasilia(new Date('2026-01-05T12:00:00.000Z'))).toBe('2026-01-05')
   })
 })

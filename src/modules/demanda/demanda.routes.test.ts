@@ -1,8 +1,8 @@
 import type { RequestHandler } from 'express'
 import request from 'supertest'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { criarApp } from '../../app.ts'
-import { hojeISO } from '../../shared/traducao.ts'
+import { hojeEmBrasilia } from '../../shared/traducao.ts'
 import type { Perfil } from '../../shared/traducao.ts'
 import { filtroDaBusca } from '../motor/motor.routes.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
@@ -28,7 +28,7 @@ const pedido = {
   idadeMin: 28,
   idadeMax: 28,
   // a entrega nao pode estar no passado: o teste anda junto com o calendario
-  dataEntrega: somarDias(hojeISO(), 30),
+  dataEntrega: somarDias(hojeEmBrasilia(), 30),
   cronograma: 'unica',
 }
 
@@ -92,13 +92,37 @@ describe('forma da solicitacao', () => {
   })
 
   it('data de entrega no passado e VALIDACAO no campo dataEntrega', async () => {
-    const campos = await camposRecusados({ ...pedido, dataEntrega: somarDias(hojeISO(), -1) })
+    const campos = await camposRecusados({ ...pedido, dataEntrega: somarDias(hojeEmBrasilia(), -1) })
 
     expect(campos.dataEntrega).toBe('A data de entrega ja passou.')
   })
 
   it('a entrega pode ser hoje', () => {
-    expect(solicitacaoNova.safeParse({ ...pedido, dataEntrega: hojeISO() }).success).toBe(true)
+    expect(solicitacaoNova.safeParse({ ...pedido, dataEntrega: hojeEmBrasilia() }).success).toBe(true)
+  })
+
+  describe('hoje e o dia de Brasilia, como no front', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('das 21h a meia-noite de Brasilia, a entrega para hoje passa, mesmo com o UTC no dia seguinte', () => {
+      // 30/10 as 23h30 em Brasilia, 31/10 as 02h30 em UTC
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-10-31T02:30:00.000Z'))
+
+      expect(solicitacaoNova.safeParse({ ...pedido, dataEntrega: '2026-10-30' }).success).toBe(true)
+      expect(solicitacaoNova.safeParse({ ...pedido, dataEntrega: '2026-10-29' }).success).toBe(false)
+    })
+
+    it('depois da meia-noite de Brasilia, o dia anterior ja passou', () => {
+      // 31/10 a 00h30 em Brasilia
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-10-31T03:30:00.000Z'))
+
+      expect(solicitacaoNova.safeParse({ ...pedido, dataEntrega: '2026-10-31' }).success).toBe(true)
+      expect(solicitacaoNova.safeParse({ ...pedido, dataEntrega: '2026-10-30' }).success).toBe(false)
+    })
   })
 
   it('protocolo fora do formato e VALIDACAO no campo protocoloCeua', async () => {

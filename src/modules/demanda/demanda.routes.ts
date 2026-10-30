@@ -5,7 +5,7 @@ import {
   exigirPerfil,
   usuarioDaRequisicao,
 } from '../../shared/middlewares/autorizacao.ts'
-import { hojeISO } from '../../shared/traducao.ts'
+import { hojeEmBrasilia } from '../../shared/traducao.ts'
 import {
   alocarSolicitacao,
   criarSolicitacao,
@@ -73,7 +73,8 @@ export const solicitacaoNova = z
     path: ['idadeMax'],
     error: 'A idade maxima nao pode ser menor que a minima.',
   })
-  .refine((dados) => dados.dataEntrega >= hojeISO(), {
+  // hoje e o dia de Brasilia, o mesmo do front: em UTC, das 21h a meia-noite, hoje ja seria passado
+  .refine((dados) => dados.dataEntrega >= hojeEmBrasilia(), {
     path: ['dataEntrega'],
     error: 'A data de entrega ja passou.',
   })
