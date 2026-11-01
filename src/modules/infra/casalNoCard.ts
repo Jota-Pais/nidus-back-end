@@ -26,14 +26,18 @@ export function partoPrevisto(partos: PartoDoCard[]): string | null {
   return pendente === undefined ? null : dataISO(pendente.dtPartoPrevisto)
 }
 
-/** null quando a caixa nao tem casal ativo - caixa de estoque, reserva ou ja enviada */
-export function casalNoCard(casal: CasalDoCard | undefined) {
-  if (casal === undefined || !casal.ativo) return null
+/** null sem casal, ou com casal encerrado que nao deixou ninhada ou cuja caixa ja foi enviada */
+export function casalNoCard(casal: CasalDoCard | undefined, estado: string) {
+  if (casal === undefined) return null
+
+  const temNinhada = casal.partos.some((parto) => parto.dtPartoReal !== null)
+  if (!casal.ativo && (!temNinhada || estado === 'X')) return null
 
   return {
     identificacao: casal.identificacao.trim(),
     partoAtual: partoAtual(casal.partos),
-    partoPrevisto: partoPrevisto(casal.partos),
+    partoPrevisto: casal.ativo ? partoPrevisto(casal.partos) : null,
+    encerrado: !casal.ativo,
   }
 }
 

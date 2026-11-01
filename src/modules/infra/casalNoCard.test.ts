@@ -36,13 +36,30 @@ describe('parto previsto - o P:dd/mm do card', () => {
 })
 
 describe('casalNoCard', () => {
-  it('nao mostra casal encerrado', () => {
-    expect(casalNoCard({ identificacao: 'AB', ativo: false, partos: [] })).toBeNull()
-    expect(casalNoCard(undefined)).toBeNull()
+  it('nao mostra casal encerrado sem ninhada', () => {
+    expect(casalNoCard({ identificacao: 'AB', ativo: false, partos: [] }, 'R')).toBeNull()
+    expect(casalNoCard({ identificacao: 'AB', ativo: false, partos: [parto('2026-10-01')] }, 'R')).toBeNull()
+    expect(casalNoCard(undefined, 'R')).toBeNull()
+  })
+
+  it('mostra a ninhada do 5o parto depois do encerramento automatico', () => {
+    const partos = ['06-01', '06-30', '07-29', '08-28', '09-26'].map((d) => parto(`2026-${d}`, `2026-${d}`))
+    const casal = casalNoCard({ identificacao: 'AB', ativo: false, partos }, 'R')
+    expect(casal).toEqual({ identificacao: 'AB', partoAtual: 5, partoPrevisto: null, encerrado: true })
+  })
+
+  it('casal encerrado com a caixa ja enviada some do card', () => {
+    const partos = [parto('2026-06-01', '2026-06-01')]
+    expect(casalNoCard({ identificacao: 'AB', ativo: false, partos }, 'X')).toBeNull()
+  })
+
+  it('casal encerrado a mao nao mostra a previsao do parto que nao vai acontecer', () => {
+    const partos = [parto('2026-06-01', '2026-06-01'), parto('2026-06-30')]
+    expect(casalNoCard({ identificacao: 'AB', ativo: false, partos }, 'E')?.partoPrevisto).toBeNull()
   })
 
   it('tira o espaco que o char(2) do banco deixa', () => {
-    const casal = casalNoCard({ identificacao: 'AB ', ativo: true, partos: [parto('2026-10-20')] })
-    expect(casal).toEqual({ identificacao: 'AB', partoAtual: 1, partoPrevisto: '2026-10-20' })
+    const casal = casalNoCard({ identificacao: 'AB ', ativo: true, partos: [parto('2026-10-20')] }, 'R')
+    expect(casal).toEqual({ identificacao: 'AB', partoAtual: 1, partoPrevisto: '2026-10-20', encerrado: false })
   })
 })
