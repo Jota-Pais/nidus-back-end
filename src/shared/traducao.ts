@@ -98,9 +98,9 @@ export function paraData(iso: string): Date {
   return new Date(`${iso}T00:00:00.000Z`)
 }
 
-/** A data de hoje em UTC, para comparar com coluna '@db.Date' */
+/** A data de hoje em Brasilia, para comparar com coluna '@db.Date' */
 export function hojeISO(agora: Date = new Date()): string {
-  return dataISO(agora)
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(agora)
 }
 
 /** Traduz um termo de API para 'char(1)', ou 404 se nao existe */

@@ -41,6 +41,10 @@ const POR_INVARIANTE: Record<string, Traducao> = {
     codigo: 'CAIXA_JA_TEM_CASAL_ATIVO',
     mensagem: 'Esta caixa ja tem um casal ativo. Encerre o casal atual antes de formar outro.',
   },
+  parto_id_casal_ordem_key: {
+    codigo: 'SEQUENCIA_INVALIDA',
+    mensagem: 'Este parto ja foi registrado.',
+  },
   // CHECK
   parto_ordem_ciclo: {
     codigo: 'LIMITE_PARTOS_ATINGIDO',

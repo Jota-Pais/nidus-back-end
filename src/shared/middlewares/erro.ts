@@ -35,6 +35,22 @@ export const tratadorDeErros: ErrorRequestHandler = (erro, req, res, next) => {
     return
   }
 
+  const tipoDoCorpo = (erro as { type?: unknown }).type
+
+  if (tipoDoCorpo === 'entity.parse.failed' || tipoDoCorpo === 'entity.too.large') {
+    const grande = tipoDoCorpo === 'entity.too.large'
+    res.status(grande ? 413 : 400).json({
+      erro: {
+        codigo: 'VALIDACAO',
+        mensagem: grande
+          ? 'O corpo da requisicao e grande demais.'
+          : 'O corpo da requisicao nao e um JSON valido.',
+        campos: { '(corpo)': grande ? 'Grande demais.' : 'JSON invalido.' },
+      },
+    })
+    return
+  }
+
   if (erro instanceof ZodError) {
     res.status(400).json({
       erro: {

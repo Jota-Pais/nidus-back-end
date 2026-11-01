@@ -54,33 +54,24 @@ export type PedidoDeTransicao = {
 }
 
 /**
- * PATCH /api/caixas/:id/estado - arrastar o card para outra coluna. Se o parto atual da caixa
+ * PATCH /api/caixas/:id/estado - arrastar o card para outra coluna. Se algum parto da caixa
  * tem compromisso ativo, a mudanca so passa com 'confirmar: true'
  */
 export async function moverCaixa(idCaixa: number, dados: PedidoDeTransicao) {
   const caixa = await prisma.caixa.findUnique({
     where: { id: idCaixa },
-    select: {
-      id: true,
-      casais: {
-        where: { ativo: true },
-        take: 1,
-        select: { partos: { orderBy: { ordem: 'desc' }, take: 1, select: { id: true } } },
-      },
-    },
+    select: { id: true, ativa: true },
   })
 
-  if (caixa === null) {
+  if (caixa === null || !caixa.ativa) {
     throw naoEncontrado('Caixa')
   }
 
   const estadoNovo = exigirCodigo(estadoCaixa, dados.estado, 'Estado')
-  const partoAtual = caixa.casais[0]?.partos[0]
 
-  const compromissos =
-    partoAtual === undefined
-      ? 0
-      : await prisma.compromisso.count({ where: { idParto: partoAtual.id, dtCancelamento: null } })
+  const compromissos = await prisma.compromisso.count({
+    where: { dtCancelamento: null, parto: { casal: { idCaixa } } },
+  })
 
   if (compromissos > 0 && !dados.confirmar) {
     throw erroDeRegra(

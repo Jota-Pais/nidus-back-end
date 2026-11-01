@@ -37,9 +37,9 @@ export function casalNoCard(casal: CasalDoCard | undefined) {
   }
 }
 
-/** O select do Prisma que alimenta 'casalNoCard': o casal mais recente e todos os partos dele */
+/** O select do Prisma que alimenta 'casalNoCard': o casal ativo (ou o mais recente) e todos os partos dele */
 export const selecaoDoCasalNoCard = {
-  orderBy: { dtFormacao: 'desc' as const },
+  orderBy: [{ ativo: 'desc' as const }, { dtFormacao: 'desc' as const }, { id: 'desc' as const }],
   take: 1,
   select: {
     identificacao: true,

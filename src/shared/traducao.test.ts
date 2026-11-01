@@ -84,6 +84,11 @@ describe('data de calendario', () => {
     expect(hojeISO(new Date('2026-09-10T23:30:00.000Z'))).toBe('2026-09-10')
   })
 
+  it('hoje e o dia em Brasilia, nao em UTC', () => {
+    expect(hojeISO(new Date('2026-10-30T01:30:00.000Z'))).toBe('2026-10-29')
+    expect(hojeISO(new Date('2026-10-30T03:00:00.000Z'))).toBe('2026-10-30')
+  })
+
   it('grava aaaa-mm-dd como meia-noite UTC, e a volta da a mesma data', () => {
     expect(paraData('2026-05-25').toISOString()).toBe('2026-05-25T00:00:00.000Z')
     expect(dataISO(paraData('2026-05-25'))).toBe('2026-05-25')

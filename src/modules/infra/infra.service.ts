@@ -1,6 +1,6 @@
 // Estantes: lista, grade das duas faces e cadastro
 
-import { naoEncontrado } from '../../shared/erros.ts'
+import { erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { codigoDaEspecie, estadoCaixa, face as faceDic } from '../../shared/traducao.ts'
 import { casalNoCard, selecaoDoCasalNoCard } from './casalNoCard.ts'
@@ -55,7 +55,7 @@ export async function listarEstantes() {
 /** GET /api/estantes/:id/grade - as duas faces, com posicao vazia como 'caixa: null' */
 export async function montarGrade(id: number) {
   const [estante, caixas] = await Promise.all([
-    prisma.estante.findUnique({ where: { id } }),
+    prisma.estante.findFirst({ where: { id, ativa: true } }),
     prisma.caixa.findMany({
       where: { idEstante: id, ativa: true },
       select: {
@@ -126,6 +126,17 @@ export function capacidadeDerivada(faces: number, linhas: number, colunas: numbe
 
 /** POST /api/estantes */
 export async function cadastrarEstante(dados: NovaEstante) {
+  const mesmoNumero = await prisma.estante.findFirst({
+    where: { sala: dados.sala, numeroVisivel: dados.numeroVisivel, ativa: true },
+  })
+
+  if (mesmoNumero !== null) {
+    throw erroDeRegra(
+      'ESTANTE_DUPLICADA',
+      `Ja existe a estante ${dados.numeroVisivel} na sala ${dados.sala}.`,
+    )
+  }
+
   const criada = await prisma.estante.create({
     data: {
       ...dados,

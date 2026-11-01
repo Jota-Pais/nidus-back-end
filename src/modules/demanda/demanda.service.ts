@@ -1,6 +1,6 @@
 // Projetos CEUA, solicitacoes de animais e a alocacao das caixas que atendem cada uma
 
-import { erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
+import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { prisma } from '../../shared/prisma.ts'
 import {
@@ -106,6 +106,14 @@ export async function criarSolicitacao(
     throw naoEncontrado('Linhagem')
   }
 
+  if (!linhagem.ativa) {
+    throw campoInvalido('idLinhagem', 'Esta linhagem esta inativa.')
+  }
+
+  if (dados.dataEntrega < hojeISO(agora)) {
+    throw campoInvalido('dataEntrega', 'A data de entrega nao pode estar no passado.')
+  }
+
   const criada = await prisma.$transaction(async (tx) => {
     const solicitacao = await tx.solicitacao.create({
       data: {
@@ -140,15 +148,38 @@ export async function criarSolicitacao(
 
 export type ItemDeAlocacao = { idParto: number; machos: number; femeas: number }
 
+function campoInvalido(campo: string, mensagem: string) {
+  return new ErroDeAplicacao(400, 'VALIDACAO', 'Confira os campos destacados.', {
+    campos: { [campo]: mensagem },
+  })
+}
+
+function somarPorParto(itens: ItemDeAlocacao[]): ItemDeAlocacao[] {
+  const porParto = new Map<number, ItemDeAlocacao>()
+
+  for (const item of itens) {
+    const somado = porParto.get(item.idParto)
+    porParto.set(item.idParto, {
+      idParto: item.idParto,
+      machos: (somado?.machos ?? 0) + item.machos,
+      femeas: (somado?.femeas ?? 0) + item.femeas,
+    })
+  }
+
+  return [...porParto.values()]
+}
+
 /**
  * POST /api/solicitacoes/:id/alocacao - o tecnico aceita as caixas da busca. Cada item vira um
  * compromisso com o parto; caixa que estava em Livres vai para Pre-reserva
  */
 export async function alocarSolicitacao(
   idSolicitacao: number,
-  itens: ItemDeAlocacao[],
+  itensPedidos: ItemDeAlocacao[],
   usuario: UsuarioDaSessao,
 ) {
+  const itens = somarPorParto(itensPedidos)
+
   const solicitacao = await prisma.solicitacao.findUnique({
     where: { id: idSolicitacao },
     include: { remessas: { orderBy: { sequencia: 'asc' }, take: 1 } },
@@ -178,10 +209,27 @@ export async function alocarSolicitacao(
     throw naoEncontrado('Remessa da solicitacao')
   }
 
+  const totalM = itens.reduce((soma, item) => soma + item.machos, 0)
+  const totalF = itens.reduce((soma, item) => soma + item.femeas, 0)
+
+  if (totalM > solicitacao.qtdM || totalF > solicitacao.qtdF) {
+    throw campoInvalido(
+      'itens',
+      `A alocacao passa do pedido (${solicitacao.qtdM} machos, ${solicitacao.qtdF} femeas).`,
+    )
+  }
+
   const partos = await prisma.parto.findMany({
     where: { id: { in: itens.map((item) => item.idParto) } },
     include: {
-      casal: { select: { idCaixa: true, linhagem: { select: { idEspecie: true } } } },
+      casal: {
+        select: {
+          idCaixa: true,
+          idLinhagem: true,
+          caixa: { select: { ativa: true, estado: true } },
+          linhagem: { select: { idEspecie: true } },
+        },
+      },
       compromissos: compromissosAtivos,
     },
   })
@@ -192,6 +240,20 @@ export async function alocarSolicitacao(
 
     if (parto === undefined || parto.casal.linhagem.idEspecie !== solicitacao.idEspecie) {
       throw naoEncontrado(`Parto ${item.idParto} da especie pedida`)
+    }
+
+    if (parto.casal.idLinhagem !== solicitacao.idLinhagem) {
+      throw erroDeRegra(
+        'DISPONIBILIDADE_EXCEDIDA',
+        `O ${parto.ordem}o parto da caixa nao e da linhagem pedida.`,
+      )
+    }
+
+    if (!parto.casal.caixa.ativa || parto.casal.caixa.estado === 'X') {
+      throw erroDeRegra(
+        'DISPONIBILIDADE_EXCEDIDA',
+        `A caixa do ${parto.ordem}o parto esta inativa ou ja foi enviada.`,
+      )
     }
 
     const { disponivel } = disponibilidadeDoParto(parto)
@@ -205,6 +267,15 @@ export async function alocarSolicitacao(
   }
 
   await prisma.$transaction(async (tx) => {
+    const aprovada = await tx.solicitacao.updateMany({
+      where: { id: idSolicitacao, status: 'EN' },
+      data: { status: 'AP' },
+    })
+
+    if (aprovada.count === 0) {
+      throw erroDeRegra('SOLICITACAO_JA_ALOCADA', `A solicitacao #${idSolicitacao} ja foi alocada.`)
+    }
+
     for (const item of itens) {
       const parto = partos.find((p) => p.id === item.idParto)
       if (parto === undefined || item.machos + item.femeas === 0) continue
@@ -226,8 +297,6 @@ export async function alocarSolicitacao(
       where: { id: { in: partos.map((parto) => parto.casal.idCaixa) }, estado: 'R' },
       data: { estado: 'P' },
     })
-
-    await tx.solicitacao.update({ where: { id: idSolicitacao }, data: { status: 'AP' } })
   })
 
   return { idSolicitacao, status: statusSolicitacao.paraApi('AP') }

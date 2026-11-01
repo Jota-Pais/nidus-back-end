@@ -42,7 +42,27 @@ describe('casal em caixa de maternidade ou recria', () => {
 
     const filtro = consultas.caixa.at(-1)?.where
 
-    expect(filtro).toMatchObject({ idEspecie: 1, ativa: true, casais: { some: { ativo: true } } })
+    expect(filtro).toMatchObject({ idEspecie: 1, ativa: true, casais: { some: {} } })
     expect(filtro).not.toHaveProperty('finalidade')
+  })
+})
+
+describe('ninhada de casal encerrado na busca de atendimento', () => {
+  it('nao exige casal ativo: a ninhada do 5o parto continua sendo oferecida', async () => {
+    await buscarAtendimento(
+      { especie: 'rato', machos: 2, femeas: 2, idade: 28 },
+      new Date('2026-10-29T12:00:00.000Z'),
+    )
+
+    expect(consultas.caixa.at(-1)?.where.casais).toEqual({ some: {} })
+  })
+
+  it('com linhagem, filtra so pela linhagem', async () => {
+    await buscarAtendimento(
+      { especie: 'rato', idLinhagem: 3, machos: 2, femeas: 2, idade: 28 },
+      new Date('2026-10-29T12:00:00.000Z'),
+    )
+
+    expect(consultas.caixa.at(-1)?.where.casais).toEqual({ some: { idLinhagem: 3 } })
   })
 })

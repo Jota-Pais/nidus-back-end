@@ -1,4 +1,4 @@
-// A busca de atendimento lida do banco: caixas com casal ativo da especie, os partos de
+// A busca de atendimento lida do banco: caixas da especie que ja tiveram casal, os partos de
 // cada casal (os confirmados e o proximo, que e o que existe na tabela) e o que cada um ainda
 // tem livre
 
@@ -43,7 +43,7 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
       estado: { in: ['R', 'P', 'E'] },
       ...(pedido.excluir && pedido.excluir.length > 0 ? { id: { notIn: pedido.excluir } } : {}),
       casais: {
-        some: { ativo: true, ...(pedido.idLinhagem === undefined ? {} : { idLinhagem: pedido.idLinhagem }) },
+        some: pedido.idLinhagem === undefined ? {} : { idLinhagem: pedido.idLinhagem },
       },
     },
     select: {
@@ -54,8 +54,7 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
       estado: true,
       estante: { select: { numeroVisivel: true, colunas: true } },
       casais: {
-        where: { ativo: true },
-        take: 1,
+        where: pedido.idLinhagem === undefined ? {} : { idLinhagem: pedido.idLinhagem },
         select: {
           identificacao: true,
           partos: {
@@ -82,47 +81,46 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
 
   const faixa = faixaAceita(pedido.idade)
 
-  const candidatas = caixas.flatMap((caixa) => {
-    const casal = caixa.casais[0]
-    if (casal === undefined) return []
+  const candidatas = caixas.flatMap((caixa) =>
+    caixa.casais.flatMap((casal) =>
+      casal.partos.flatMap((parto) => {
+        const nascimento = dataISO(parto.dtPartoReal ?? parto.dtPartoPrevisto)
+        const idadeNaEntrega = diasEntre(nascimento, referencia)
+        if (idadeNaEntrega < faixa.min || idadeNaEntrega > faixa.max) return []
 
-    return casal.partos.flatMap((parto) => {
-      const nascimento = dataISO(parto.dtPartoReal ?? parto.dtPartoPrevisto)
-      const idadeNaEntrega = diasEntre(nascimento, referencia)
-      if (idadeNaEntrega < faixa.min || idadeNaEntrega > faixa.max) return []
+        // o animal tem de estar desmamado ate a entrega
+        const desmame = parto.dtDesmameReal
+          ? dataISO(parto.dtDesmameReal)
+          : somarDias(nascimento, ALEITAMENTO_DIAS)
+        if (desmame > referencia) return []
 
-      // o animal tem de estar desmamado ate a entrega
-      const desmame = parto.dtDesmameReal
-        ? dataISO(parto.dtDesmameReal)
-        : somarDias(nascimento, ALEITAMENTO_DIAS)
-      if (desmame > referencia) return []
+        const { disponivel } = disponibilidadeDoParto(parto)
+        if (disponivel.m + disponivel.f === 0) return []
 
-      const { disponivel } = disponibilidadeDoParto(parto)
-      if (disponivel.m + disponivel.f === 0) return []
+        const origem: Origem = parto.dtDesmameReal
+          ? 'de_fato'
+          : parto.dtPartoReal
+            ? 'previsao'
+            : 'previsao_parto'
 
-      const origem: Origem = parto.dtDesmameReal
-        ? 'de_fato'
-        : parto.dtPartoReal
-          ? 'previsao'
-          : 'previsao_parto'
-
-      return [
-        {
-          idCaixa: caixa.id,
-          idParto: parto.id,
-          codigo: codigoDaPosicao(caixa.face, caixa.linha, caixa.coluna, caixa.estante.colunas),
-          numeroVisivel: caixa.estante.numeroVisivel,
-          estado: estadoCaixa.paraApi(caixa.estado),
-          casal: casal.identificacao.trim(),
-          parto: parto.ordem,
-          origem,
-          nascimento,
-          idadeNaEntrega,
-          disponivel,
-        },
-      ]
-    })
-  })
+        return [
+          {
+            idCaixa: caixa.id,
+            idParto: parto.id,
+            codigo: codigoDaPosicao(caixa.face, caixa.linha, caixa.coluna, caixa.estante.colunas),
+            numeroVisivel: caixa.estante.numeroVisivel,
+            estado: estadoCaixa.paraApi(caixa.estado),
+            casal: casal.identificacao.trim(),
+            parto: parto.ordem,
+            origem,
+            nascimento,
+            idadeNaEntrega,
+            disponivel,
+          },
+        ]
+      }),
+    ),
+  )
 
   const { itens, deficit } = sugerirAlocacao(ordenar(candidatas, pedido.idade), {
     m: pedido.machos,

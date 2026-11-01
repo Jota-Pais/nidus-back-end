@@ -4,7 +4,7 @@ import { ErroDeAplicacao } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { perfil as dicPerfil } from '../../shared/traducao.ts'
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
-import { senhaCorresponde } from './senha.ts'
+import { hashSenha, senhaCorresponde } from './senha.ts'
 import { criarSessao } from './sessao.ts'
 
 export type Credenciais = {
@@ -37,14 +37,19 @@ async function senhaMestraConfere(senha: string): Promise<boolean> {
   return mestra !== null && (await senhaCorresponde(senha, mestra.hashSenha))
 }
 
+const hashSemUsuario = hashSenha(crypto.randomUUID())
+
 /** POST /api/sessao - autentica e abre sessao */
 export async function autenticar({ email, senha }: Credenciais): Promise<{
   usuario: UsuarioDaSessao
   idSessao: string
 }> {
-  const usuario = await prisma.usuario.findUnique({ where: { email } })
+  const usuario = await prisma.usuario.findFirst({
+    where: { email: { equals: email, mode: 'insensitive' } },
+  })
 
   if (usuario === null || !usuario.ativo) {
+    await senhaCorresponde(senha, await hashSemUsuario)
     throw new ErroDeAplicacao(401, 'NAO_AUTENTICADO', 'E-mail ou senha invalidos.')
   }
 

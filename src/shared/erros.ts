@@ -15,6 +15,8 @@ export type CodigoErro =
   | 'SEQUENCIA_INVALIDA'
   | 'PROJETO_INVALIDO'
   | 'SOLICITACAO_JA_ALOCADA'
+  | 'ESTANTE_DUPLICADA'
+  | 'MUITAS_TENTATIVAS'
   | 'ERRO_INTERNO'
 
 export type ExtrasErro = {

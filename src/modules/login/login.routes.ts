@@ -2,8 +2,10 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { env } from '../../env.ts'
 import { exigirPerfil, usuarioDaRequisicao } from '../../shared/middlewares/autorizacao.ts'
+import { ErroDeAplicacao } from '../../shared/erros.ts'
 import { autenticar } from './login.service.ts'
 import { NOME_COOKIE, revogarSessao } from './sessao.ts'
+import { conferirTentativas, limparFalhas, registrarFalha } from './tentativas.ts'
 
 /** So esta rota fica fora de 'exigirPerfil': e como a sessao nasce */
 export const sessaoRoutes = Router()
@@ -27,13 +29,24 @@ const opcoesCookie = {
 }
 
 const credenciais = z.object({
-  email: z.string().trim().min(1),
+  email: z.string().trim().toLowerCase().min(1),
   senha: z.string().min(1),
 })
 
 sessaoRoutes.post('/', async (req, res) => {
   const dados = credenciais.parse(req.body)
-  const { usuario, idSessao } = await autenticar(dados)
+  const chave = `${req.ip}:${dados.email}`
+  conferirTentativas(chave)
+
+  const sessao = await autenticar(dados).catch((erro: unknown) => {
+    if (erro instanceof ErroDeAplicacao && erro.status === 401) {
+      registrarFalha(chave)
+    }
+    throw erro
+  })
+
+  limparFalhas(chave)
+  const { usuario, idSessao } = sessao
 
   res.cookie(NOME_COOKIE, idSessao, opcoesCookie)
   res.json({ usuario })

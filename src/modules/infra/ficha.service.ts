@@ -89,7 +89,11 @@ export async function montarFicha(idCaixa: number) {
       estante: { select: { numeroVisivel: true, sala: true, colunas: true } },
       especie: { select: { nome: true } },
       // O casal mais recente, ativo ou nao: a ficha e historico
-      casais: { orderBy: { dtFormacao: 'desc' }, take: 1, select: { id: true } },
+      casais: {
+        orderBy: [{ ativo: 'desc' }, { dtFormacao: 'desc' }, { id: 'desc' }],
+        take: 1,
+        select: { id: true },
+      },
     },
   })
 

@@ -6,7 +6,7 @@ import { calcularCicloInicial, calcularProximoCiclo } from './cadeiaTemporal.ts'
 import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { prisma } from '../../shared/prisma.ts'
-import { dataISO, paraData } from '../../shared/traducao.ts'
+import { dataISO, hojeISO, paraData } from '../../shared/traducao.ts'
 
 /**
  * Valida o par genetico ANTES do insert, para dar a mensagem rica
@@ -102,6 +102,12 @@ export async function cicloFicha(idParto: number) {
     disponivel: disponibilidade.disponivel,
     comprometido: disponibilidade.comprometido,
   }
+}
+
+function campoInvalido(campo: string, mensagem: string) {
+  return new ErroDeAplicacao(400, 'VALIDACAO', 'Confira os campos destacados.', {
+    campos: { [campo]: mensagem },
+  })
 }
 
 export type PosicaoVazia = {
@@ -200,6 +206,10 @@ export async function formarCasal(dados: NovoCasal) {
       throw naoEncontrado('Caixa')
     }
 
+    if (caixaExistente !== null && caixaExistente.estado !== 'R') {
+      await tx.caixa.update({ where: { id: idCaixa }, data: { estado: 'R' } })
+    }
+
     const criado = await tx.casal.create({
       data: {
         idCaixa,
@@ -234,8 +244,16 @@ export type Nascimento = {
 }
 
 /** POST /api/partos/:id/nascimento */
-export async function registrarNascimento(idParto: number, dados: Nascimento, idUsuario: number) {
-  const parto = await prisma.parto.findUnique({ where: { id: idParto } })
+export async function registrarNascimento(
+  idParto: number,
+  dados: Nascimento,
+  idUsuario: number,
+  agora: Date = new Date(),
+) {
+  const parto = await prisma.parto.findUnique({
+    where: { id: idParto },
+    include: { casal: { select: { ativo: true } } },
+  })
 
   if (parto === null) {
     throw naoEncontrado('Parto')
@@ -246,6 +264,20 @@ export async function registrarNascimento(idParto: number, dados: Nascimento, id
       'SEQUENCIA_INVALIDA',
       'Este parto ja tem data real registrada. Correcao de registro ainda nao esta disponivel.',
     )
+  }
+
+  if (!parto.casal.ativo) {
+    throw erroDeRegra('SEQUENCIA_INVALIDA', 'Este casal esta encerrado e nao recebe parto novo.')
+  }
+
+  const acasalamento = dataISO(parto.dtAcasalamento)
+
+  if (dados.dtPartoReal < acasalamento) {
+    throw campoInvalido('dtPartoReal', `O parto nao pode ser antes do acasalamento (${acasalamento}).`)
+  }
+
+  if (dados.dtPartoReal > hojeISO(agora)) {
+    throw campoInvalido('dtPartoReal', 'O parto nao pode ser numa data futura.')
   }
 
   await prisma.$transaction(async (tx) => {
@@ -310,6 +342,18 @@ export async function registrarSelecao(idParto: number, dados: Selecao, idUsuari
     throw erroDeRegra('SEQUENCIA_INVALIDA', 'Registre o parto antes da selecao.')
   }
 
+  if (parto.dtDesmameReal !== null) {
+    throw erroDeRegra('SEQUENCIA_INVALIDA', 'O desmame ja foi registrado: a selecao vem antes dele.')
+  }
+
+  if (parto.dtSelecao !== null) {
+    throw erroDeRegra('SEQUENCIA_INVALIDA', 'A selecao deste parto ja foi registrada.')
+  }
+
+  if (dados.dtSelecao < dataISO(parto.dtPartoReal)) {
+    throw campoInvalido('dtSelecao', 'A selecao nao pode ser antes do parto.')
+  }
+
   if (dados.eutanasiadoM > parto.nascidoM || dados.eutanasiadoF > parto.nascidoF) {
     throw new ErroDeAplicacao(400, 'VALIDACAO', 'Confira os campos destacados.', {
       campos: {
@@ -346,8 +390,26 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
     throw naoEncontrado('Parto')
   }
 
-  if (parto.dtPartoReal === null) {
+  if (parto.dtPartoReal === null || parto.nascidoM === null || parto.nascidoF === null) {
     throw erroDeRegra('SEQUENCIA_INVALIDA', 'Registre o parto antes do desmame.')
+  }
+
+  if (parto.dtDesmameReal !== null) {
+    throw erroDeRegra('SEQUENCIA_INVALIDA', 'O desmame deste parto ja foi registrado.')
+  }
+
+  if (dados.dtDesmameReal < dataISO(parto.dtPartoReal)) {
+    throw campoInvalido('dtDesmameReal', 'O desmame nao pode ser antes do parto.')
+  }
+
+  const vivosM = parto.nascidoM - (parto.eutanasiadoM ?? 0)
+  const vivosF = parto.nascidoF - (parto.eutanasiadoF ?? 0)
+
+  if (dados.desmamadoM > vivosM || dados.desmamadoF > vivosF) {
+    throw campoInvalido(
+      'desmamado',
+      `Nao pode passar do nascido menos a selecao (${vivosM} M, ${vivosF} F).`,
+    )
   }
 
   await prisma.parto.update({
@@ -381,6 +443,10 @@ export async function encerrarCasal(idCasal: number, dados: Encerramento) {
     throw new ErroDeAplicacao(400, 'VALIDACAO', 'Confira os campos destacados.', {
       campos: { idCasal: 'Este casal ja esta encerrado.' },
     })
+  }
+
+  if (dados.dtEncerramento < dataISO(casal.dtFormacao)) {
+    throw campoInvalido('dtEncerramento', 'O encerramento nao pode ser antes da formacao do casal.')
   }
 
   await prisma.casal.update({

@@ -113,6 +113,14 @@ describe('invariante do banco vira 409', () => {
     expect(traduzido?.codigo).toBe('CAIXA_JA_TEM_CASAL_ATIVO')
   })
 
+  it('parto registrado duas vezes (duplo clique) vira SEQUENCIA_INVALIDA', () => {
+    const traduzido = traduzirErroDoBanco(unique('parto_id_casal_ordem_key', 'parto'))
+
+    expect(traduzido?.status).toBe(409)
+    expect(traduzido?.codigo).toBe('SEQUENCIA_INVALIDA')
+    expect(traduzido?.message).toBe('Este parto ja foi registrado.')
+  })
+
   it('sexto parto vira LIMITE_PARTOS_ATINGIDO', () => {
     const traduzido = traduzirErroDoBanco(check('parto_ordem_ciclo', 'parto'))
 
