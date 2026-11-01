@@ -17,7 +17,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  schemas  = ["infra", "catalogo", "reproducao", "login", "etica", "demanda"]
+  schemas  = ["infra", "catalogo", "reproducao", "login", "etica", "demanda", "auditoria"]
 }
 
 // ---------------------------------------------------------------- infra
@@ -293,6 +293,7 @@ model Usuario {
   partosRegistrados   Parto[]       @relation("RegistrouParto")
   selecoesRegistradas Parto[]       @relation("RegistrouSelecao")
   desmamesRegistrados Parto[]       @relation("RegistrouDesmame")
+  historico           Historico[]
 
   @@map("usuario")
   @@schema("login")
@@ -423,4 +424,24 @@ model Compromisso {
   @@index([idParto, dtCancelamento])
   @@map("compromisso")
   @@schema("demanda")
+}
+
+// ------------------------------------------------------------- auditoria
+
+model Historico {
+  id         Int      @id @default(autoincrement())
+  idUsuario  Int      @map("id_usuario")
+  dtHora     DateTime @default(now()) @map("dt_hora") @db.Timestamptz(6)
+  entidade   String   @db.VarChar(20)
+  idEntidade Int      @map("id_entidade")
+  acao       String   @db.VarChar(40)
+  descricao  String   @db.VarChar(300)
+  dados      Json?
+
+  usuario Usuario @relation(fields: [idUsuario], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([entidade, idEntidade])
+  @@index([dtHora])
+  @@map("historico")
+  @@schema("auditoria")
 }

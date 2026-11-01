@@ -17,6 +17,10 @@ export type CodigoErro =
   | 'SOLICITACAO_JA_ALOCADA'
   | 'ESTANTE_DUPLICADA'
   | 'MUITAS_TENTATIVAS'
+  | 'EMAIL_EM_USO'
+  | 'ALTERACAO_PROPRIA'
+  | 'PROJETO_DUPLICADO'
+  | 'LINHAGEM_DUPLICADA'
   | 'ERRO_INTERNO'
 
 export type ExtrasErro = {

@@ -62,6 +62,18 @@ const POR_INVARIANTE: Record<string, Traducao> = {
     codigo: 'PAR_GENETICO_INVALIDO',
     mensagem: 'Este par nao esta na rotacao genetica permitida.',
   },
+  usuario_email_key: {
+    codigo: 'EMAIL_EM_USO',
+    mensagem: 'Ja existe uma conta com este e-mail.',
+  },
+  projeto_numero_key: {
+    codigo: 'PROJETO_DUPLICADO',
+    mensagem: 'Ja existe um projeto com este numero.',
+  },
+  linhagem_id_especie_nome_key: {
+    codigo: 'LINHAGEM_DUPLICADA',
+    mensagem: 'Ja existe uma linhagem com este nome nesta especie.',
+  },
 }
 
 /** Acha o nome da constraint dentro da mensagem do Postgres */

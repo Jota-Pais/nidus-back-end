@@ -5,6 +5,7 @@ import {
   exigirPerfil,
   usuarioDaRequisicao,
 } from '../../shared/middlewares/autorizacao.ts'
+import { corrigirDesmame, corrigirNascimento, corrigirSelecao } from './correcao.service.ts'
 import {
   encerrarCasal,
   formarCasal,
@@ -58,7 +59,7 @@ export const casalNovo = z
 casalRoutes.post('/', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const dados = casalNovo.parse(req.body)
 
-  res.status(201).json(await formarCasal(dados))
+  res.status(201).json(await formarCasal(dados, usuarioDaRequisicao(req).id))
 })
 
 const encerramento = z.object({
@@ -70,7 +71,7 @@ casalRoutes.post('/:id/encerramento', exigirPerfil(...OPERA_A_COLONIA), async (r
   const { id } = idNaRota.parse(req.params)
   const dados = encerramento.parse(req.body)
 
-  res.json(await encerrarCasal(id, dados))
+  res.json(await encerrarCasal(id, dados, usuarioDaRequisicao(req).id))
 })
 
 const nascimento = z.object({
@@ -111,4 +112,29 @@ partoRoutes.post('/:id/desmame', exigirPerfil(...OPERA_A_COLONIA), async (req, r
   const dados = desmame.parse(req.body)
 
   res.json(await registrarDesmame(id, dados, usuarioDaRequisicao(req).id))
+})
+
+const motivoDaCorrecao = z.object({
+  motivo: z.string().trim().min(1, 'Diga o motivo da correcao.').max(200),
+})
+
+partoRoutes.patch('/:id/nascimento', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+  const { id } = idNaRota.parse(req.params)
+  const dados = nascimento.extend(motivoDaCorrecao.shape).parse(req.body)
+
+  res.json(await corrigirNascimento(id, dados, usuarioDaRequisicao(req).id))
+})
+
+partoRoutes.patch('/:id/selecao', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+  const { id } = idNaRota.parse(req.params)
+  const dados = selecao.extend(motivoDaCorrecao.shape).parse(req.body)
+
+  res.json(await corrigirSelecao(id, dados, usuarioDaRequisicao(req).id))
+})
+
+partoRoutes.patch('/:id/desmame', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+  const { id } = idNaRota.parse(req.params)
+  const dados = desmame.extend(motivoDaCorrecao.shape).parse(req.body)
+
+  res.json(await corrigirDesmame(id, dados, usuarioDaRequisicao(req).id))
 })

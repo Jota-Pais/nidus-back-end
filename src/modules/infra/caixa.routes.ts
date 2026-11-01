@@ -1,8 +1,12 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { OPERA_A_COLONIA, exigirPerfil } from '../../shared/middlewares/autorizacao.ts'
+import {
+  OPERA_A_COLONIA,
+  exigirPerfil,
+  usuarioDaRequisicao,
+} from '../../shared/middlewares/autorizacao.ts'
 import { estadoCaixa } from '../../shared/traducao.ts'
-import { montarQuadro, moverCaixa } from './caixa.service.ts'
+import { montarQuadro, moverCaixa, mudarDePosicao } from './caixa.service.ts'
 import { montarFicha } from './ficha.service.ts'
 
 /** /api/quadro e o kanban de uma especie; /api/caixas e a ficha e a mudanca de coluna */
@@ -38,5 +42,18 @@ const transicao = z.object({
 caixaRoutes.patch('/:id/estado', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
 
-  res.json(await moverCaixa(id, transicao.parse(req.body)))
+  res.json(await moverCaixa(id, transicao.parse(req.body), usuarioDaRequisicao(req).id))
+})
+
+const posicaoNova = z.object({
+  idEstante: z.number().int().positive(),
+  face: z.enum(['frontal', 'traseira']),
+  linha: z.number().int().positive(),
+  coluna: z.number().int().positive(),
+})
+
+caixaRoutes.patch('/:id/posicao', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+  const { id } = idNaRota.parse(req.params)
+
+  res.json(await mudarDePosicao(id, posicaoNova.parse(req.body), usuarioDaRequisicao(req).id))
 })

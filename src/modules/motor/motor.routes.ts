@@ -1,9 +1,11 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { OPERA_A_COLONIA, exigirPerfil } from '../../shared/middlewares/autorizacao.ts'
+import { consultarEstoque } from './estoque.service.ts'
 import { buscarAtendimento } from './motor.service.ts'
 
 export const buscaRoutes = Router()
+export const estoqueRoutes = Router()
 
 /** query string chega sempre como texto: 'z.coerce' faz a conversao */
 export const filtroDaBusca = z.object({
@@ -23,4 +25,10 @@ export const filtroDaBusca = z.object({
 /** GET /api/busca - a busca de atendimento do tecnico */
 buscaRoutes.get('/', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   res.json(await buscarAtendimento(filtroDaBusca.parse(req.query)))
+})
+
+const filtroDoEstoque = z.object({ especie: z.string().trim().min(1) })
+
+estoqueRoutes.get('/', exigirPerfil(), async (req, res) => {
+  res.json(await consultarEstoque(filtroDoEstoque.parse(req.query).especie))
 })

@@ -1,5 +1,7 @@
 import { Router } from 'express'
-import { exigirPerfil } from '../../shared/middlewares/autorizacao.ts'
+import { z } from 'zod'
+import { exigirPerfil, usuarioDaRequisicao } from '../../shared/middlewares/autorizacao.ts'
+import { alterarLinhagem, criarLinhagem } from '../demanda/projeto.service.ts'
 import { montarCatalogo } from './catalogo.service.ts'
 
 export const catalogoRoutes = Router()
@@ -10,4 +12,34 @@ export const catalogoRoutes = Router()
  */
 catalogoRoutes.get('/', exigirPerfil(), async (_req, res) => {
   res.json(await montarCatalogo())
+})
+
+const idNaRota = z.object({ id: z.coerce.number().int().positive() })
+
+export const linhagemNova = z.object({
+  idEspecie: z.number().int().positive(),
+  nome: z.string().trim().min(1).max(60),
+})
+
+const alteracaoDeLinhagem = z
+  .object({
+    nome: z.string().trim().min(1).max(60).optional(),
+    ativa: z.boolean().optional(),
+  })
+  .refine((dados) => dados.nome !== undefined || dados.ativa !== undefined, {
+    path: ['nome'],
+    error: 'Informe o que alterar.',
+  })
+
+catalogoRoutes.post('/linhagens', exigirPerfil('gestor'), async (req, res) => {
+  const dados = linhagemNova.parse(req.body)
+
+  res.status(201).json(await criarLinhagem(dados, usuarioDaRequisicao(req)))
+})
+
+catalogoRoutes.patch('/linhagens/:id', exigirPerfil('gestor'), async (req, res) => {
+  const { id } = idNaRota.parse(req.params)
+  const dados = alteracaoDeLinhagem.parse(req.body)
+
+  res.json(await alterarLinhagem(id, dados, usuarioDaRequisicao(req)))
 })

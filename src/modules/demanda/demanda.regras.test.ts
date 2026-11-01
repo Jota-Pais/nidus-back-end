@@ -37,6 +37,7 @@ vi.mock('../../shared/prisma.ts', () => ({
         solicitacao: { updateMany: async () => ({ count: banco.aprovadas }) },
         compromisso: { create: async () => ({}) },
         caixa: { updateMany: async () => ({ count: 0 }) },
+        historico: { create: async () => ({}) },
       }),
   },
 }))

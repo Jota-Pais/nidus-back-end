@@ -3,6 +3,7 @@
 import { erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { codigoDaEspecie, estadoCaixa, face as faceDic } from '../../shared/traducao.ts'
+import { registrarHistorico } from '../historico/historico.service.ts'
 import { casalNoCard, selecaoDoCasalNoCard } from './casalNoCard.ts'
 import { codigoDaPosicao } from './endereco.ts'
 
@@ -125,7 +126,7 @@ export function capacidadeDerivada(faces: number, linhas: number, colunas: numbe
 }
 
 /** POST /api/estantes */
-export async function cadastrarEstante(dados: NovaEstante) {
+export async function cadastrarEstante(dados: NovaEstante, idUsuario: number) {
   const mesmoNumero = await prisma.estante.findFirst({
     where: { sala: dados.sala, numeroVisivel: dados.numeroVisivel, ativa: true },
   })
@@ -137,11 +138,24 @@ export async function cadastrarEstante(dados: NovaEstante) {
     )
   }
 
-  const criada = await prisma.estante.create({
-    data: {
-      ...dados,
-      capacidade: capacidadeDerivada(dados.faces, dados.linhas, dados.colunas),
-    },
+  const criada = await prisma.$transaction(async (tx) => {
+    const estante = await tx.estante.create({
+      data: {
+        ...dados,
+        capacidade: capacidadeDerivada(dados.faces, dados.linhas, dados.colunas),
+      },
+    })
+
+    await registrarHistorico(tx, {
+      idUsuario,
+      entidade: 'estante',
+      idEntidade: estante.id,
+      acao: 'cadastro',
+      descricao: `Estante ${dados.numeroVisivel} cadastrada na ${dados.sala}`,
+      dados: { ...dados },
+    })
+
+    return estante
   })
 
   return paraApi(criada)

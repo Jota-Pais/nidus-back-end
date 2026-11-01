@@ -62,6 +62,7 @@ e o que você grava rodando local aparece para o cliente.
 | `npm run db:seed` | Carga inicial: espécies, linhagens, parâmetros, pares genéticos e estantes (não duplica nada) |
 | `npm run db:usuarios` | Cria os três usuários e o projeto CEUA num banco novo (o que já existe fica como está) |
 | `npm run db:senha -- <email> "<senha>"` | Define a senha própria de um usuário |
+| `npm run desempenho` | Mede o tempo de resposta das rotas de leitura (veja Desempenho) |
 
 ## Stack
 
@@ -87,6 +88,8 @@ src/
     motor/             busca de atendimento
     catalogo/          espécies, linhagens e pares genéticos
     login/             sessão
+    usuarios/          contas e perfis (só o gestor)
+    historico/         quem fez cada operação, quando e o que mudou
 ```
 
 Validação é `parse` do Zod direto na rota: `ZodError` vira `400 VALIDACAO`.
@@ -115,6 +118,45 @@ Web Service no plano free, a partir do GitHub, descrito no `render.yaml`. Push e
 - O free tier dorme depois de uns 15 minutos parado e leva até um minuto para
   acordar. Abra o sistema antes de qualquer apresentação.
 - A sessão vive em memória: quando a instância reinicia, todo mundo loga de novo.
+
+## Desempenho
+
+Limite combinado para as telas do dia a dia: p95 de até 1 s por chamada de leitura,
+com 5 pessoas usando ao mesmo tempo, com a instância já acordada.
+
+```bash
+npm run desempenho
+NIDUS_API=https://nidus-cpmr-api.onrender.com NIDUS_COOKIE=<valor do cookie nidus_sessao> npm run desempenho
+```
+
+O script só faz `GET` e não grava nada. Sem `NIDUS_COOKIE` ele mede apenas a `/saude`.
+O cookie sai do navegador logado (DevTools, Application, Cookies, `nidus_sessao`).
+Variáveis opcionais: `NIDUS_REPETICOES` (30), `NIDUS_SIMULTANEAS` (5) e
+`NIDUS_LIMITE_P95_MS` (1000). Termina com código 1 se alguma rota passar do limite
+ou der erro.
+
+## Backup e restauração
+
+O banco é o de produção, então qualquer erro de dado é erro do cliente.
+
+1. **Restauração pela Neon.** O painel da Neon guarda o histórico do banco e restaura
+   o branch para um momento anterior (Restore, no branch `main`). A janela depende do
+   plano: confira no painel antes de precisar.
+2. **Cópia manual** antes de cada migration e uma vez por semana, com o `pg_dump` do
+   PostgreSQL instalado:
+
+   ```bash
+   pg_dump "$DATABASE_URL_UNPOOLED" -Fc -f nidus-AAAA-MM-DD.dump
+   ```
+
+   Guarde o arquivo fora do repositório (ele tem dados pessoais e hashes de senha).
+3. **Restaurar uma cópia** sempre num branch novo da Neon, nunca por cima do `main`:
+
+   ```bash
+   pg_restore --no-owner --no-privileges -d "<url do branch novo>" nidus-AAAA-MM-DD.dump
+   ```
+
+   Confira os dados no branch novo e só então troque as variáveis da Render para ele.
 
 ## Equipe
 

@@ -138,7 +138,7 @@ describe('encerramento', () => {
     banco.casal = { id: 1, ativo: true, dtFormacao: d('2026-09-01') }
 
     await expect(
-      encerrarCasal(1, { dtEncerramento: '2026-08-30', motivo: 'teste' }),
+      encerrarCasal(1, { dtEncerramento: '2026-08-30', motivo: 'teste' }, 1),
     ).rejects.toEqual(recusa(400, 'VALIDACAO'))
     expect(banco.gravou).toBe(false)
   })

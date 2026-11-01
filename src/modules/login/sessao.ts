@@ -24,3 +24,9 @@ export function sessaoValida(id: string): UsuarioDaSessao | undefined {
 export function revogarSessao(id: string): void {
   sessoes.delete(id)
 }
+
+export function revogarSessoesDoUsuario(idUsuario: number): void {
+  for (const [id, usuario] of sessoes) {
+    if (usuario.id === idUsuario) sessoes.delete(id)
+  }
+}

@@ -1,5 +1,6 @@
 // Casais e o registro dos partos: nascimento, eutanasia de selecao e desmame
 
+import { registrarHistorico } from '../historico/historico.service.ts'
 import { codigoDaPosicao } from '../infra/endereco.ts'
 import { compromissosAtivos, disponibilidadeDoParto } from './disponibilidade.ts'
 import { calcularCicloInicial, calcularProximoCiclo } from './cadeiaTemporal.ts'
@@ -151,7 +152,7 @@ async function caixaNaPosicao(posicao: PosicaoVazia) {
  * POST /api/casais - forma o casal e ja cria o 1o parto, com as datas previstas. Numa posicao
  * vazia a caixa nasce na mesma transacao, com a especie da linhagem escolhida
  */
-export async function formarCasal(dados: NovoCasal) {
+export async function formarCasal(dados: NovoCasal, idUsuario: number) {
   const linhagem = await prisma.linhagem.findUnique({ where: { id: dados.idLinhagem } })
 
   if (linhagem === null) {
@@ -231,6 +232,15 @@ export async function formarCasal(dados: NovoCasal) {
       },
     })
 
+    await registrarHistorico(tx, {
+      idUsuario,
+      entidade: 'casal',
+      idEntidade: criado.id,
+      acao: 'formacao',
+      descricao: `Casal ${criado.identificacao} formado em ${dados.dtFormacao} (${linhagem.nome})`,
+      dados: { idCaixa, idLinhagem: dados.idLinhagem, dtFormacao: dados.dtFormacao },
+    })
+
     return criado
   })
 
@@ -290,6 +300,15 @@ export async function registrarNascimento(
         idUsuarioParto: idUsuario,
         dtRegistroParto: new Date(),
       },
+    })
+
+    await registrarHistorico(tx, {
+      idUsuario,
+      entidade: 'parto',
+      idEntidade: idParto,
+      acao: 'nascimento',
+      descricao: `${parto.ordem}o parto em ${dados.dtPartoReal}: ${dados.nascidoM} M e ${dados.nascidoF} F`,
+      dados: { ...dados },
     })
 
     if (parto.ordem >= MAX_PARTOS_POR_CASAL) {
@@ -362,15 +381,26 @@ export async function registrarSelecao(idParto: number, dados: Selecao, idUsuari
     })
   }
 
-  await prisma.parto.update({
-    where: { id: idParto },
-    data: {
-      dtSelecao: paraData(dados.dtSelecao),
-      eutanasiadoM: dados.eutanasiadoM,
-      eutanasiadoF: dados.eutanasiadoF,
-      idUsuarioSelecao: idUsuario,
-      dtRegistroSelecao: new Date(),
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.parto.update({
+      where: { id: idParto },
+      data: {
+        dtSelecao: paraData(dados.dtSelecao),
+        eutanasiadoM: dados.eutanasiadoM,
+        eutanasiadoF: dados.eutanasiadoF,
+        idUsuarioSelecao: idUsuario,
+        dtRegistroSelecao: new Date(),
+      },
+    })
+
+    await registrarHistorico(tx, {
+      idUsuario,
+      entidade: 'parto',
+      idEntidade: idParto,
+      acao: 'selecao',
+      descricao: `Selecao do ${parto.ordem}o parto em ${dados.dtSelecao}: ${dados.eutanasiadoM} M e ${dados.eutanasiadoF} F`,
+      dados: { ...dados },
+    })
   })
 
   return cicloFicha(idParto)
@@ -412,15 +442,26 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
     )
   }
 
-  await prisma.parto.update({
-    where: { id: idParto },
-    data: {
-      dtDesmameReal: paraData(dados.dtDesmameReal),
-      desmamadoM: dados.desmamadoM,
-      desmamadoF: dados.desmamadoF,
-      idUsuarioDesmame: idUsuario,
-      dtRegistroDesmame: new Date(),
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.parto.update({
+      where: { id: idParto },
+      data: {
+        dtDesmameReal: paraData(dados.dtDesmameReal),
+        desmamadoM: dados.desmamadoM,
+        desmamadoF: dados.desmamadoF,
+        idUsuarioDesmame: idUsuario,
+        dtRegistroDesmame: new Date(),
+      },
+    })
+
+    await registrarHistorico(tx, {
+      idUsuario,
+      entidade: 'parto',
+      idEntidade: idParto,
+      acao: 'desmame',
+      descricao: `Desmame do ${parto.ordem}o parto em ${dados.dtDesmameReal}: ${dados.desmamadoM} M e ${dados.desmamadoF} F`,
+      dados: { ...dados },
+    })
   })
 
   return cicloFicha(idParto)
@@ -432,7 +473,7 @@ export type Encerramento = {
 }
 
 /** POST /api/casais/:id/encerramento - nada e apagado, so encerra */
-export async function encerrarCasal(idCasal: number, dados: Encerramento) {
+export async function encerrarCasal(idCasal: number, dados: Encerramento, idUsuario: number) {
   const casal = await prisma.casal.findUnique({ where: { id: idCasal } })
 
   if (casal === null) {
@@ -449,13 +490,24 @@ export async function encerrarCasal(idCasal: number, dados: Encerramento) {
     throw campoInvalido('dtEncerramento', 'O encerramento nao pode ser antes da formacao do casal.')
   }
 
-  await prisma.casal.update({
-    where: { id: idCasal },
-    data: {
-      ativo: false,
-      dtEncerramento: paraData(dados.dtEncerramento),
-      motivoEncerramento: dados.motivo,
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.casal.update({
+      where: { id: idCasal },
+      data: {
+        ativo: false,
+        dtEncerramento: paraData(dados.dtEncerramento),
+        motivoEncerramento: dados.motivo,
+      },
+    })
+
+    await registrarHistorico(tx, {
+      idUsuario,
+      entidade: 'casal',
+      idEntidade: idCasal,
+      acao: 'encerramento',
+      descricao: `Casal ${casal.identificacao} encerrado em ${dados.dtEncerramento}: ${dados.motivo}`,
+      dados: { ...dados },
+    })
   })
 
   return casalFicha(idCasal)

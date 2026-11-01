@@ -3,6 +3,8 @@
 import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { prisma } from '../../shared/prisma.ts'
+import { registrarHistorico } from '../historico/historico.service.ts'
+import { SITUACAO_DO_PROJETO } from './projeto.service.ts'
 import {
   codigoDaEspecie,
   cronograma,
@@ -27,6 +29,7 @@ export async function listarProjetos(usuario: UsuarioDaSessao, agora: Date = new
   const projetos = await prisma.projeto.findMany({
     where: doPesquisador(usuario) ? { idUsuarioResponsavel: usuario.id } : {},
     orderBy: { numero: 'asc' },
+    include: { usuarioResponsavel: { select: { nome: true } } },
   })
 
   return {
@@ -34,6 +37,13 @@ export async function listarProjetos(usuario: UsuarioDaSessao, agora: Date = new
       id: projeto.id,
       numero: projeto.numero,
       vigente: projeto.situacao === 'V' && dataISO(projeto.dtVigenciaFim) >= hoje,
+      titulo: projeto.titulo,
+      idUsuarioResponsavel: projeto.idUsuarioResponsavel,
+      responsavel: projeto.usuarioResponsavel.nome,
+      dtVigenciaInicio: dataISO(projeto.dtVigenciaInicio),
+      dtVigenciaFim: dataISO(projeto.dtVigenciaFim),
+      cotaAutorizada: projeto.cotaAutorizada,
+      situacao: SITUACAO_DO_PROJETO[projeto.situacao as keyof typeof SITUACAO_DO_PROJETO],
     })),
   }
 }
@@ -51,6 +61,22 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
     },
   })
 
+  const recusas = await prisma.historico.findMany({
+    where: {
+      entidade: 'solicitacao',
+      acao: 'recusa',
+      idEntidade: { in: solicitacoes.filter((s) => s.status === 'RE').map((s) => s.id) },
+    },
+    select: { idEntidade: true, dados: true },
+  })
+
+  const motivoDaRecusa = (id: number) => {
+    const dados = recusas.find((recusa) => recusa.idEntidade === id)?.dados
+    return typeof dados === 'object' && dados !== null && 'motivo' in dados && typeof dados.motivo === 'string'
+      ? dados.motivo
+      : null
+  }
+
   return {
     solicitacoes: solicitacoes.map((s) => ({
       id: s.id,
@@ -65,6 +91,7 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
       dataEntrega: dataISO(s.dtDesejada),
       cronograma: cronograma.paraApi(s.regime),
       status: statusSolicitacao.paraApi(s.status),
+      motivoRecusa: s.status === 'RE' ? motivoDaRecusa(s.id) : null,
     })),
   }
 }
@@ -138,6 +165,15 @@ export async function criarSolicitacao(
         qtdMPrevista: dados.machos,
         qtdFPrevista: dados.femeas,
       },
+    })
+
+    await registrarHistorico(tx, {
+      idUsuario: usuario.id,
+      entidade: 'solicitacao',
+      idEntidade: solicitacao.id,
+      acao: 'criacao',
+      descricao: `Solicitacao de ${dados.machos} M e ${dados.femeas} F de ${linhagem.nome} para ${dados.dataEntrega}`,
+      dados: { ...dados },
     })
 
     return solicitacao
@@ -297,7 +333,121 @@ export async function alocarSolicitacao(
       where: { id: { in: partos.map((parto) => parto.casal.idCaixa) }, estado: 'R' },
       data: { estado: 'P' },
     })
+
+    await registrarHistorico(tx, {
+      idUsuario: usuario.id,
+      entidade: 'solicitacao',
+      idEntidade: idSolicitacao,
+      acao: 'alocacao',
+      descricao: `Solicitacao #${idSolicitacao} alocada: ${totalM} M e ${totalF} F em ${itens.length} parto(s)`,
+      dados: { itens },
+    })
   })
 
   return { idSolicitacao, status: statusSolicitacao.paraApi('AP') }
+}
+
+export async function registrarEntrega(
+  idSolicitacao: number,
+  dtEntrega: string,
+  idUsuario: number,
+  agora: Date = new Date(),
+) {
+  const solicitacao = await prisma.solicitacao.findUnique({ where: { id: idSolicitacao } })
+
+  if (solicitacao === null) {
+    throw naoEncontrado('Solicitacao')
+  }
+
+  if (solicitacao.status === 'CO') {
+    throw erroDeRegra(
+      'SEQUENCIA_INVALIDA',
+      `A entrega da solicitacao #${idSolicitacao} ja foi registrada.`,
+    )
+  }
+
+  if (solicitacao.status !== 'AP') {
+    throw erroDeRegra(
+      'SEQUENCIA_INVALIDA',
+      `A solicitacao #${idSolicitacao} ainda nao tem caixas alocadas.`,
+    )
+  }
+
+  if (dtEntrega > hojeISO(agora)) {
+    throw campoInvalido('dtEntrega', 'A data da entrega nao pode ser no futuro.')
+  }
+
+  if (dtEntrega < dataISO(solicitacao.dtCriacao)) {
+    throw campoInvalido('dtEntrega', 'A data da entrega nao pode ser antes do pedido.')
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const concluida = await tx.solicitacao.updateMany({
+      where: { id: idSolicitacao, status: 'AP' },
+      data: { status: 'CO' },
+    })
+
+    if (concluida.count === 0) {
+      throw erroDeRegra(
+        'SEQUENCIA_INVALIDA',
+        `A entrega da solicitacao #${idSolicitacao} ja foi registrada.`,
+      )
+    }
+
+    await tx.remessa.updateMany({
+      where: { idSolicitacao, dtRealizada: null },
+      data: { dtRealizada: paraData(dtEntrega), status: 'E' },
+    })
+
+    await registrarHistorico(tx, {
+      idUsuario,
+      entidade: 'solicitacao',
+      idEntidade: idSolicitacao,
+      acao: 'entrega',
+      descricao: `Entrega da solicitacao #${idSolicitacao} em ${dtEntrega}`,
+      dados: { dtEntrega },
+    })
+  })
+
+  return { idSolicitacao, status: statusSolicitacao.paraApi('CO'), dtEntrega }
+}
+
+export async function recusarSolicitacao(idSolicitacao: number, motivo: string, idUsuario: number) {
+  const solicitacao = await prisma.solicitacao.findUnique({ where: { id: idSolicitacao } })
+
+  if (solicitacao === null) {
+    throw naoEncontrado('Solicitacao')
+  }
+
+  if (solicitacao.status !== 'EN') {
+    throw erroDeRegra(
+      'SEQUENCIA_INVALIDA',
+      `A solicitacao #${idSolicitacao} nao esta aguardando analise e nao pode ser recusada.`,
+    )
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const recusada = await tx.solicitacao.updateMany({
+      where: { id: idSolicitacao, status: 'EN' },
+      data: { status: 'RE' },
+    })
+
+    if (recusada.count === 0) {
+      throw erroDeRegra(
+        'SEQUENCIA_INVALIDA',
+        `A solicitacao #${idSolicitacao} nao esta aguardando analise e nao pode ser recusada.`,
+      )
+    }
+
+    await registrarHistorico(tx, {
+      idUsuario,
+      entidade: 'solicitacao',
+      idEntidade: idSolicitacao,
+      acao: 'recusa',
+      descricao: `Solicitacao #${idSolicitacao} recusada: ${motivo}`,
+      dados: { motivo },
+    })
+  })
+
+  return { idSolicitacao, status: statusSolicitacao.paraApi('RE'), motivo }
 }

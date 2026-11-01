@@ -43,6 +43,14 @@ describe('autorizacao', () => {
     expect(busca.status).toBe(403)
     expect(alocacao.status).toBe(403)
   })
+
+  it('o pesquisador nao registra entrega', async () => {
+    const resposta = await request(app('pesquisador'))
+      .post('/api/solicitacoes/1/entrega')
+      .send({ dtEntrega: '2026-10-30' })
+
+    expect(resposta.status).toBe(403)
+  })
 })
 
 describe('forma da solicitacao', () => {
@@ -57,6 +65,15 @@ describe('forma da solicitacao', () => {
 
   it('alocacao sem item e VALIDACAO', async () => {
     const resposta = await request(app('tecnico')).post('/api/solicitacoes/1/alocacao').send({ itens: [] })
+
+    expect(resposta.status).toBe(400)
+    expect(resposta.body.erro.codigo).toBe('VALIDACAO')
+  })
+
+  it('entrega sem data valida e VALIDACAO', async () => {
+    const resposta = await request(app('tecnico'))
+      .post('/api/solicitacoes/1/entrega')
+      .send({ dtEntrega: '30/10/2026' })
 
     expect(resposta.status).toBe(400)
     expect(resposta.body.erro.codigo).toBe('VALIDACAO')

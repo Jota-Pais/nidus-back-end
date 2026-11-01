@@ -1,6 +1,10 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { OPERA_A_COLONIA, exigirPerfil } from '../../shared/middlewares/autorizacao.ts'
+import {
+  OPERA_A_COLONIA,
+  exigirPerfil,
+  usuarioDaRequisicao,
+} from '../../shared/middlewares/autorizacao.ts'
 import { LETRAS_DISPONIVEIS, letrasNecessarias } from './endereco.ts'
 import { cadastrarEstante, listarEstantes, montarGrade } from './infra.service.ts'
 
@@ -41,5 +45,5 @@ estanteRoutes.get('/:id/grade', exigirPerfil(...OPERA_A_COLONIA), async (req, re
 estanteRoutes.post('/', exigirPerfil('gestor'), async (req, res) => {
   const dados = estanteNova.parse(req.body)
 
-  res.status(201).json(await cadastrarEstante(dados))
+  res.status(201).json(await cadastrarEstante(dados, usuarioDaRequisicao(req).id))
 })
