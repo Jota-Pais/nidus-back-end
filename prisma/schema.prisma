@@ -314,6 +314,30 @@ model SenhaMestra {
   @@schema("login")
 }
 
+/// Codigo de primeiro acesso e de senha esquecida, mandado ao e-mail da UFSC. Sem FK
+/// para usuario: o primeiro acesso pede codigo para e-mail que ainda nao tem conta.
+/// Guarda so o hash do codigo. Linha nunca se apaga: os limites de pedido contam as
+/// linhas por email e dt_criacao, e o teto total so por dt_criacao.
+model CodigoAcesso {
+  id         Int       @id @default(autoincrement())
+  email      String    @db.VarChar(160)
+  hashCodigo String    @map("hash_codigo") @db.VarChar(255)
+  expiraEm   DateTime  @map("expira_em") @db.Timestamptz(6)
+  /// Conferencias erradas, mais a que esta em andamento: o acerto devolve a sua. O
+  /// codigo aceita 5, e o e-mail, 20 somando os codigos das ultimas 24 h.
+  tentativas Int       @default(0) @db.SmallInt
+  /// Quando o codigo deixou de valer: gasto na senha nova ou trocado por um codigo
+  /// mais novo do mesmo e-mail.
+  usadoEm    DateTime? @map("usado_em") @db.Timestamptz(6)
+  dtCriacao  DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
+
+  @@index([email, dtCriacao])
+  /// As contagens do teto total, sem e-mail: o indice de cima nao serve a elas.
+  @@index([dtCriacao])
+  @@map("codigo_acesso")
+  @@schema("login")
+}
+
 // ----------------------------------------------------------------- etica
 
 /// Cota de etica e limite rigido. Nenhuma aprovacao alem do saldo nem

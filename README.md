@@ -60,8 +60,8 @@ e o que você grava rodando local aparece para o cliente.
 | `npm start` | Roda o build, é o comando da Render |
 | `npm run db:deploy` | Aplica migrations pendentes. Nunca dropa nada |
 | `npm run db:seed` | Carga inicial: espécies, linhagens, parâmetros, pares genéticos e estantes (não duplica nada) |
-| `npm run db:usuarios` | Cria os três usuários e o projeto CEUA num banco novo (o que já existe fica como está) |
-| `npm run db:senha -- <email> "<senha>"` | Define a senha própria de um usuário |
+| `npm run db:usuarios` | Cria os três usuários e o projeto CEUA num banco novo. Procura cada usuário pelo e-mail: o que acha fica como está, o que não acha é criado de novo |
+| `npm run db:senha -- <email> "<senha>"` | Define a senha de um usuário que já existe. É a reserva de quem já tem conta, quando o e-mail com o código não chega ou trava por código errado demais. Não cria conta |
 | `npm run desempenho` | Mede o tempo de resposta das rotas de leitura (veja Desempenho) |
 
 ## Stack
@@ -80,14 +80,14 @@ src/
   app.ts               monta o Express (é o que o teste usa)
   server.ts            sobe a porta e encerra limpo no SIGTERM
   shared/              prisma, erros, tradução dos códigos do banco, autorização,
-                       parâmetros biológicos
+                       parâmetros biológicos, envio de e-mail
   modules/
     infra/             estantes, grade, kanban e ficha
     reproducao/        casais e partos
     demanda/           projetos CEUA, solicitações e alocação
     motor/             busca de atendimento
     catalogo/          espécies, linhagens e pares genéticos
-    login/             sessão
+    login/             sessão, primeiro acesso e senha esquecida
     usuarios/          contas e perfis (só o gestor)
     historico/         quem fez cada operação, quando e o que mudou
 ```
@@ -99,6 +99,91 @@ a rede: o banco guarda `R`, a API responde `livres` (`shared/traducao.ts`).
 
 Mudança de schema passa pelo responsável pelo banco. `prisma migrate dev` pode
 recriar o schema quando o histórico diverge, e o banco é o de produção.
+
+## Login e primeiro acesso
+
+| Rota | O que faz |
+|---|---|
+| `POST /api/sessao` | Login com `{ email, senha }`. Abre a sessão no cookie `nidus_sessao`, que dura 12 h |
+| `GET /api/sessao` | Quem está logado |
+| `DELETE /api/sessao` | Logout. A sessão some da memória |
+| `POST /api/acesso/codigo` | `{ email }`: manda um código de 6 números para o e-mail da UFSC. Vale 15 minutos e responde `{ validadeEmMinutos }` |
+| `POST /api/acesso/verificacao` | `{ email, codigo }`: confere o código sem gastar e responde `{ novo }`, `true` quando o e-mail ainda não tem conta |
+| `POST /api/acesso/senha` | `{ email, codigo, senha, nome? }`: gasta o código, grava a senha e abre a sessão como o login. Sem conta, cria um pesquisador, e o `nome` passa a ser obrigatório |
+
+O ID-UFSC entra depois dos testes práticos. Até lá, quem não tem senha, ou
+esqueceu, pede o código pela tela `/definir-senha` do front.
+
+- O login compara o e-mail em minúsculas e sem espaço nas pontas, que é como o
+  primeiro acesso grava. Quem tiver e-mail com maiúscula em `login.usuario` deixa
+  de entrar.
+- As rotas de `/api/acesso` ficam fora do login e nunca respondem 401: o front lê
+  qualquer 401 como senha errada. Código errado, vencido, já usado ou de conta
+  inativa dá `409 CODIGO_INVALIDO`, e cada código aceita 5 tentativas. Pedido de
+  código demais dá `429 MUITAS_TENTATIVAS`: 1 por minuto e 5 por hora por e-mail,
+  e no total 30 por hora e 130 por dia. O teto total cabe na cota de 300 e-mails
+  por dia da Brevo contando o aviso de senha alterada, que cada pedido pode gerar
+  além do código. Os números ficam em `LIMITES_DE_PEDIDO`, no `acesso.service.ts`.
+- Cada e-mail aguenta 20 códigos errados em 24 h, somando todos os códigos dele
+  (`TETO_DE_ERROS_POR_EMAIL`). Passado o teto, o pedido de código dá `429
+  MUITAS_TENTATIVAS` sem enviar nem gravar código, e a verificação e a senha dão
+  `409 CODIGO_INVALIDO`, mesmo com o código certo, até a janela andar. Vale igual
+  com conta, sem conta e com conta inativa. Quem já tem conta e ficar travado
+  recebe a senha pelo `db:senha`, que só define a senha de usuário existente: o
+  primeiro acesso, de quem ainda não tem conta, espera a janela de 24 h.
+- O pedido de código responde igual com conta, sem conta e com conta inativa, e
+  as rotas de `/api/acesso` só dizem se a conta existe depois do código certo.
+  Conta inativa nunca recebe código, nunca troca a senha e nunca abre sessão.
+- O primeiro acesso só cria pesquisador. Quem já tem conta troca só a senha:
+  perfil e nome ficam.
+- Quando a senha de uma conta que já existia muda, todas as sessões abertas dela,
+  em qualquer aparelho, deixam de valer, e só então abre a sessão nova. O login
+  com a senha antiga que ainda estava em andamento na hora da troca também não
+  fica com sessão: dá o 401 da senha errada ou, se a conferência terminar entre
+  a gravação da senha nova e a revogação, um 200 com um cookie que já não vale.
+  O `db:senha` roda fora da API e não derruba sessão nenhuma.
+- Nessa mesma troca, a pessoa recebe por e-mail o aviso de que a senha foi
+  alterada, com dia e hora e o que fazer se não foi ela. Conta nova não recebe
+  aviso. A resposta não espera o envio, e a falha do aviso vai para o log sem
+  desfazer a troca.
+- O código fica em `login.codigo_acesso`, só como hash. Linha nenhuma se apaga:
+  os limites contam por elas.
+
+**E-mail.** O código de acesso e o aviso de senha alterada saem pela API HTTP de
+envio transacional da Brevo, com o `fetch` do Node, em `src/shared/email.ts`. Em
+production o envio precisa de duas variáveis, e o boot cai sem elas:
+
+- `BREVO_API_KEY`: a chave de API, criada no painel da Brevo;
+- `EMAIL_REMETENTE`: o endereço que aparece como remetente, validado na conta da
+  Brevo.
+
+Em development e test, nenhum e-mail sai: o código e o aviso aparecem no console
+do servidor (`npm run dev`), e as duas variáveis podem ficar vazias. Nenhum teste
+chama a Brevo.
+
+O envio não segura a resposta. Se a Brevo recusar ou não responder em 10 s, o
+erro vai para o log do servidor, sem o código e sem a chave, e a tela segue
+dizendo que o código foi enviado. O envio não segue redirecionamento: um 3xx vira
+erro, para a chave e o código não irem a outro endereço. O plano grátis da Brevo
+manda 300 e-mails por dia.
+
+Antes do merge no `main`, as duas variáveis entram no painel da Render. O
+`render.yaml` as declara, mas num serviço que já existe a Render não pede o valor.
+Sem elas, o build aplica a migration e o serviço novo não sobe: a Render mantém o
+deploy anterior, e todo push seguinte falha.
+
+**Contas de exemplo.** Os três usuários do `db:usuarios` têm e-mails de exemplo
+(`gestor@ufsc.br`, `tecnico@ufsc.br` e `pesquisador@ufsc.br`), de caixas que a
+equipe não controla. Com o envio ligado, quem tiver uma dessas caixas na UFSC
+recebe o código, define a senha da conta e entra com o perfil dela, gestor
+inclusive. O primeiro acesso só serve a conta com o e-mail real da pessoa, e
+conta de exemplo recebe senha pelo `db:senha`.
+
+Antes de ligar o envio, a saída segura é desativar as contas de exemplo que
+estiverem no banco (`ativo = false`): a linha fica, e o `db:usuarios` a acha pelo
+e-mail e a deixa como está. Trocar o e-mail delas pelo real não basta: o script
+procura pelo e-mail, e rodar o `db:usuarios` de novo naquele banco recria a
+conta de exemplo, ativa e com o e-mail genérico.
 
 ## Deploy na Render
 
@@ -112,7 +197,7 @@ Web Service no plano free, a partir do GitHub, descrito no `render.yaml`. Push e
 | Build | `npm ci --include=dev && npm run build && npm run db:deploy` |
 | Start | `npm start` |
 | Health check | `/saude` |
-| Variáveis | `NODE_ENV=production`, `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `CORS_ORIGEM` |
+| Variáveis | `NODE_ENV=production`, `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `CORS_ORIGEM`, `BREVO_API_KEY`, `EMAIL_REMETENTE` |
 
 - `--include=dev` é obrigatório: sem ele faltam os `@types/*` e o `tsc` para.
 - O free tier dorme depois de uns 15 minutos parado e leva até um minuto para

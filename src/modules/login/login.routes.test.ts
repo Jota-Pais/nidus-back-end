@@ -3,6 +3,7 @@ import request from 'supertest'
 import { describe, expect, it } from 'vitest'
 import { criarApp } from '../../app.ts'
 import type { Perfil } from '../../shared/traducao.ts'
+import { credenciais } from './login.routes.ts'
 
 // login de verdade (usuario existe, senha confere) e teste de integracao: sai de
 // autenticar chamando o banco. Aqui so o que nao toca banco - forma da entrada e a
@@ -40,6 +41,14 @@ describe('POST /api/sessao - forma da entrada', () => {
     const resposta = await request(app()).post('/api/sessao').send({ email: '', senha: 'x' })
 
     expect(resposta.status).toBe(400)
+  })
+
+  it('compara o email em minusculas e sem espaco nas pontas', () => {
+    // a senha fica como veio: maiuscula na senha e outra senha
+    expect(credenciais.parse({ email: ' Tecnico@UFSC.br ', senha: 'Senha123' })).toEqual({
+      email: 'tecnico@ufsc.br',
+      senha: 'Senha123',
+    })
   })
 })
 

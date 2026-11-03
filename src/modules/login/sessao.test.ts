@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { criarSessao, revogarSessao, sessaoValida } from './sessao.ts'
+import {
+  criarSessao,
+  novaMarca,
+  revogadasDesde,
+  revogarSessao,
+  revogarSessoesDoUsuario,
+  sessaoValida,
+} from './sessao.ts'
 
 const usuario = { id: 1, nome: 'Ana Souza', email: 'tecnico@ufsc.br', perfil: 'tecnico' as const }
+// So o ultimo teste usa estes dois: as sessoes dos testes de cima continuam no 'Map'
+const gestor = { id: 2, nome: 'Carlos Mendes', email: 'gestor@ufsc.br', perfil: 'gestor' as const }
+const pesquisador = {
+  id: 3,
+  nome: 'Beatriz Lima',
+  email: 'pesquisador@ufsc.br',
+  perfil: 'pesquisador' as const,
+}
 
 describe('sessao em memoria', () => {
   it('devolve o usuario para um ID de sessao criado', () => {
@@ -29,5 +44,26 @@ describe('sessao em memoria', () => {
 
     expect(sessaoValida(idA)).toBeUndefined()
     expect(sessaoValida(idB)).toEqual(usuario)
+  })
+
+  it('revogar as sessoes do usuario derruba todas as dele, e so as dele', () => {
+    const doGestor = [criarSessao(gestor), criarSessao(gestor), criarSessao(gestor)]
+    const doOutro = criarSessao(pesquisador)
+
+    expect(revogarSessoesDoUsuario(gestor.id)).toBe(3)
+
+    for (const id of doGestor) expect(sessaoValida(id)).toBeUndefined()
+    expect(sessaoValida(doOutro)).toEqual(pesquisador)
+    expect(revogarSessoesDoUsuario(gestor.id)).toBe(0)
+  })
+
+  it('a revogacao alcanca o que comecou antes dela, e so o que e do usuario', () => {
+    const antes = novaMarca()
+    revogarSessoesDoUsuario(gestor.id)
+    const depois = novaMarca()
+
+    expect(revogadasDesde(gestor.id, antes)).toBe(true)
+    expect(revogadasDesde(gestor.id, depois)).toBe(false)
+    expect(revogadasDesde(pesquisador.id, antes)).toBe(false)
   })
 })

@@ -5,7 +5,7 @@ import { prisma } from '../../shared/prisma.ts'
 import { perfil as dicPerfil } from '../../shared/traducao.ts'
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { hashSenha, senhaCorresponde } from './senha.ts'
-import { criarSessao } from './sessao.ts'
+import { criarSessao, novaMarca, revogadasDesde } from './sessao.ts'
 
 export type Credenciais = {
   email: string
@@ -44,9 +44,9 @@ export async function autenticar({ email, senha }: Credenciais): Promise<{
   usuario: UsuarioDaSessao
   idSessao: string
 }> {
-  const usuario = await prisma.usuario.findFirst({
-    where: { email: { equals: email, mode: 'insensitive' } },
-  })
+  // marcado antes de ler a senha: ver o fim da funcao
+  const inicio = novaMarca()
+  const usuario = await prisma.usuario.findUnique({ where: { email } })
 
   if (usuario === null || !usuario.ativo) {
     await senhaCorresponde(senha, await hashSemUsuario)
@@ -64,8 +64,26 @@ export async function autenticar({ email, senha }: Credenciais): Promise<{
     console.warn(`[senha-mestra] sessao aberta para ${usuario.email} via senha mestra`)
   }
 
-  const usuarioDaSessao = paraUsuarioDaSessao(usuario)
-  const idSessao = criarSessao(usuarioDaSessao)
+  // A senha foi lida no comeco, e o bcrypt leva segundos. Se nesse meio tempo ela mudou pela
+  // senha esquecida, o que conferiu aqui pode ser a senha antiga, e esta sessao nasceria depois
+  // da revogacao das outras, a salvo dela. Recusa como senha errada: a senha certa agora e outra.
+  // Se o bcrypt terminar antes da revogacao, a sessao nasce antes dela e cai junto com as outras
+  if (revogadasDesde(usuario.id, inicio)) {
+    throw new ErroDeAplicacao(401, 'NAO_AUTENTICADO', 'E-mail ou senha invalidos.')
+  }
 
-  return { usuario: usuarioDaSessao, idSessao }
+  return abrirSessao(usuario)
+}
+
+/**
+ * Abre a sessao de quem ja provou quem e. O login e o primeiro acesso terminam aqui, para a
+ * sessao sair igual nos dois: mesmo usuario da sessao e mesmo ID no cookie
+ */
+export function abrirSessao(usuario: Parameters<typeof paraUsuarioDaSessao>[0]): {
+  usuario: UsuarioDaSessao
+  idSessao: string
+} {
+  const usuarioDaSessao = paraUsuarioDaSessao(usuario)
+
+  return { usuario: usuarioDaSessao, idSessao: criarSessao(usuarioDaSessao) }
 }
