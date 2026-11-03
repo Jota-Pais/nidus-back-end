@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   codigoDaEspecie,
   cronograma,
@@ -92,5 +92,30 @@ describe('data de calendario', () => {
   it('grava aaaa-mm-dd como meia-noite UTC, e a volta da a mesma data', () => {
     expect(paraData('2026-05-25').toISOString()).toBe('2026-05-25T00:00:00.000Z')
     expect(dataISO(paraData('2026-05-25'))).toBe('2026-05-25')
+  })
+
+  it('o dia de Brasilia so vira a meia-noite de Brasilia, tres horas depois do UTC', () => {
+    // 30/10 as 23h30 em Brasilia: em UTC ja e 31/10
+    const noiteDeBrasilia = new Date('2026-10-31T02:30:00.000Z')
+    expect(hojeISO(noiteDeBrasilia)).toBe('2026-10-30')
+
+    expect(hojeISO(new Date('2026-10-31T03:00:00.000Z'))).toBe('2026-10-31')
+    expect(hojeISO(new Date('2026-01-05T12:00:00.000Z'))).toBe('2026-01-05')
+  })
+
+  it('o dia de Brasilia nao depende do padrao de data do idioma', () => {
+    // um ICU que passasse a escrever a data como 10/30/2026: a comparacao de texto com
+    // 'aaaa-mm-dd' aceitaria data passada sem aviso
+    class OutroPadrao extends Intl.DateTimeFormat {
+      override format() {
+        return '10/30/2026'
+      }
+    }
+    vi.stubGlobal('Intl', Object.create(Intl, { DateTimeFormat: { value: OutroPadrao } }))
+    try {
+      expect(hojeISO(new Date('2026-10-31T02:30:00.000Z'))).toBe('2026-10-30')
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

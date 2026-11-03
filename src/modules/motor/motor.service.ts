@@ -1,6 +1,6 @@
 // A busca de atendimento lida do banco: caixas da especie que ja tiveram casal, os partos de
 // cada casal (os confirmados e o proximo, que e o que existe na tabela) e o que cada um ainda
-// tem livre
+// tem livre. So entram partos com a idade na entrega dentro da faixa aceita do pedido
 
 import { ALEITAMENTO_DIAS, GESTACAO_DIAS } from '../../shared/parametros.ts'
 import { prisma } from '../../shared/prisma.ts'
@@ -9,7 +9,7 @@ import { codigoDaPosicao } from '../infra/endereco.ts'
 import { idDaEspecie } from '../infra/infra.service.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
 import { compromissosAtivos, disponibilidadeDoParto } from '../reproducao/disponibilidade.ts'
-import { casaisParaODeficit, faixaAceita, ordenar, sugerirAlocacao } from './motor.ts'
+import { casaisParaODeficit, faixaDoPedido, ordenar, sugerirAlocacao } from './motor.ts'
 import type { Origem } from './motor.ts'
 
 export type PedidoDeBusca = {
@@ -17,8 +17,11 @@ export type PedidoDeBusca = {
   idLinhagem?: number | undefined
   machos: number
   femeas: number
-  /** idade pedida, em dias desde o nascimento */
-  idade: number
+  /** de qualquer sexo: sai da sobra das caixas depois de machos e femeas */
+  qualquer: number
+  /** a faixa de idade pedida, em dias desde o nascimento. A idade exata e min = max */
+  idadeMin: number
+  idadeMax: number
   /** sem data, a referencia e hoje */
   dataEntrega?: string | undefined
   /** caixas ja sugeridas em remessas anteriores do mesmo pedido */
@@ -79,7 +82,8 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
     },
   })
 
-  const faixa = faixaAceita(pedido.idade)
+  const idade = { min: pedido.idadeMin, max: pedido.idadeMax }
+  const faixa = faixaDoPedido(idade)
 
   const candidatas = caixas.flatMap((caixa) =>
     caixa.casais.flatMap((casal) =>
@@ -122,13 +126,15 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
     ),
   )
 
-  const { itens, deficit } = sugerirAlocacao(ordenar(candidatas, pedido.idade), {
+  const { itens, deficit } = sugerirAlocacao(ordenar(candidatas, idade), {
     m: pedido.machos,
     f: pedido.femeas,
+    qualquer: pedido.qualquer,
   })
 
   // ultima alternativa: acasalamento novo. A entrega precisa caber em hoje + gestacao + idade
-  const dataMinima = somarDias(hoje, GESTACAO_DIAS + pedido.idade)
+  // minima, a menor idade que o pedido aceita
+  const dataMinima = somarDias(hoje, GESTACAO_DIAS + pedido.idadeMin)
 
   return {
     faixa,

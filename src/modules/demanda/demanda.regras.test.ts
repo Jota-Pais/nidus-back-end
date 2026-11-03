@@ -28,6 +28,7 @@ vi.mock('../../shared/prisma.ts', () => ({
         idLinhagem: 3,
         qtdM: 2,
         qtdF: 2,
+        qtdQualquer: 0,
         remessas: [{ id: 1 }],
       }),
     },
@@ -45,13 +46,17 @@ vi.mock('../../shared/prisma.ts', () => ({
 const tecnica: UsuarioDaSessao = { id: 2, nome: 'Ana', email: 'tecnico@ufsc.br', perfil: 'tecnico' }
 const agora = new Date('2026-10-30T15:00:00.000Z')
 const pedido = {
-  idProjeto: 1,
+  nomePesquisador: 'Ana',
+  protocoloCeua: 'CEUA-1',
   idLinhagem: 3,
   machos: 2,
   femeas: 2,
-  idade: 28,
+  qualquer: 0,
+  idadeMin: 28,
+  idadeMax: 28,
   dataEntrega: '2026-11-20',
   cronograma: 'unica',
+  observacoes: null,
 }
 
 const parto = (idLinhagem: number, caixa = { ativa: true, estado: 'R' }) => ({

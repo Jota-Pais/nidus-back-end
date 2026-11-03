@@ -20,7 +20,10 @@ import {
   disponibilidadeDoParto,
 } from '../reproducao/disponibilidade.ts'
 
-/** O pesquisador so ve os proprios projetos e pedidos; tecnico e gestor veem todos */
+/**
+ * O pesquisador so ve os proprios pedidos e so pede no projeto que esta no nome dele; tecnico e
+ * gestor veem todos e pedem em qualquer projeto
+ */
 const doPesquisador = (usuario: UsuarioDaSessao) => usuario.perfil === 'pesquisador'
 
 /** GET /api/projetos */
@@ -55,7 +58,7 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
     orderBy: { id: 'desc' },
     include: {
       projeto: { select: { numero: true } },
-      usuarioSolicitante: { select: { nome: true } },
+      usuarioSolicitante: { select: { email: true } },
       especie: { select: { nome: true } },
       linhagem: { select: { id: true, nome: true } },
     },
@@ -80,16 +83,21 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
   return {
     solicitacoes: solicitacoes.map((s) => ({
       id: s.id,
-      projeto: s.projeto.numero,
-      solicitante: s.usuarioSolicitante.nome,
+      protocoloCeua: s.projeto.numero,
+      // o nome e o que a pessoa digitou no pedido; o e-mail e o da conta que pediu
+      pesquisador: s.nomePesquisador,
+      email: s.usuarioSolicitante.email,
       especie: codigoDaEspecie(s.especie.nome),
       idLinhagem: s.linhagem.id,
       linhagem: s.linhagem.nome,
       machos: s.qtdM,
       femeas: s.qtdF,
-      idade: s.idadeAlvoDias,
+      qualquer: s.qtdQualquer,
+      idadeMin: s.idadeMinDias,
+      idadeMax: s.idadeMaxDias,
       dataEntrega: dataISO(s.dtDesejada),
       cronograma: cronograma.paraApi(s.regime),
+      observacoes: s.observacoes,
       status: statusSolicitacao.paraApi(s.status),
       motivoRecusa: s.status === 'RE' ? motivoDaRecusa(s.id) : null,
     })),
@@ -97,14 +105,24 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
 }
 
 export type NovaSolicitacao = {
-  idProjeto: number
+  nomePesquisador: string
+  /** o numero do projeto em etica.projeto, no formato 23080.XXXXXX/AAAA-XX */
+  protocoloCeua: string
   idLinhagem: number
   machos: number
   femeas: number
-  idade: number
+  qualquer: number
+  /** a idade exata vem com idadeMin = idadeMax */
+  idadeMin: number
+  idadeMax: number
   dataEntrega: string
   cronograma: string
+  observacoes: string | null
 }
+
+/** 409 do protocolo, com o campo, para o front mostrar a mensagem embaixo dele */
+const protocoloInvalido = (mensagem: string) =>
+  erroDeRegra('PROJETO_INVALIDO', mensagem, { campos: { protocoloCeua: mensagem } })
 
 /** POST /api/solicitacoes - o pedido do pesquisador, com a primeira remessa */
 export async function criarSolicitacao(
@@ -112,19 +130,20 @@ export async function criarSolicitacao(
   usuario: UsuarioDaSessao,
   agora: Date = new Date(),
 ) {
-  const projeto = await prisma.projeto.findUnique({ where: { id: dados.idProjeto } })
+  // esta rota nao cria projeto: procura pelo numero o que ja esta no banco
+  const projeto = await prisma.projeto.findUnique({ where: { numero: dados.protocoloCeua } })
 
   if (projeto === null) {
-    throw naoEncontrado('Projeto')
+    throw protocoloInvalido('Protocolo CEUA nao encontrado. Confira o numero ou fale com o bioterio.')
   }
 
   // a cota da CEUA e liberacao por pessoa e projeto, nao saldo (combinado com o cliente em 20/09)
   if (doPesquisador(usuario) && projeto.idUsuarioResponsavel !== usuario.id) {
-    throw erroDeRegra('PROJETO_INVALIDO', 'Este projeto CEUA nao esta no seu nome.')
+    throw protocoloInvalido('Este projeto CEUA nao esta no seu nome.')
   }
 
   if (projeto.situacao !== 'V' || dataISO(projeto.dtVigenciaFim) < hojeISO(agora)) {
-    throw erroDeRegra('PROJETO_INVALIDO', `O projeto ${projeto.numero} nao esta vigente.`)
+    throw protocoloInvalido(`O projeto ${projeto.numero} nao esta vigente.`)
   }
 
   const linhagem = await prisma.linhagem.findUnique({ where: { id: dados.idLinhagem } })
@@ -146,17 +165,22 @@ export async function criarSolicitacao(
       data: {
         idProjeto: projeto.id,
         idUsuarioSolicitante: usuario.id,
+        nomePesquisador: dados.nomePesquisador,
         idEspecie: linhagem.idEspecie,
         idLinhagem: linhagem.id,
         qtdM: dados.machos,
         qtdF: dados.femeas,
-        idadeAlvoDias: dados.idade,
+        qtdQualquer: dados.qualquer,
+        idadeMinDias: dados.idadeMin,
+        idadeMaxDias: dados.idadeMax,
         dtDesejada: paraData(dados.dataEntrega),
         regime: exigirCodigo(cronograma, dados.cronograma, 'Cronograma'),
         status: 'EN',
+        observacoes: dados.observacoes,
       },
     })
 
+    // a remessa preve o pedido inteiro: o "qualquer" vai junto, como machos e femeas
     await tx.remessa.create({
       data: {
         idSolicitacao: solicitacao.id,
@@ -164,6 +188,7 @@ export async function criarSolicitacao(
         dtPrevista: paraData(dados.dataEntrega),
         qtdMPrevista: dados.machos,
         qtdFPrevista: dados.femeas,
+        qtdQualquerPrevista: dados.qualquer,
       },
     })
 
@@ -172,7 +197,7 @@ export async function criarSolicitacao(
       entidade: 'solicitacao',
       idEntidade: solicitacao.id,
       acao: 'criacao',
-      descricao: `Solicitacao de ${dados.machos} M e ${dados.femeas} F de ${linhagem.nome} para ${dados.dataEntrega}`,
+      descricao: `Solicitacao de ${dados.machos} M, ${dados.femeas} F e ${dados.qualquer} de qualquer sexo de ${linhagem.nome} para ${dados.dataEntrega}`,
       dados: { ...dados },
     })
 
@@ -248,10 +273,17 @@ export async function alocarSolicitacao(
   const totalM = itens.reduce((soma, item) => soma + item.machos, 0)
   const totalF = itens.reduce((soma, item) => soma + item.femeas, 0)
 
-  if (totalM > solicitacao.qtdM || totalF > solicitacao.qtdF) {
+  // o "qualquer" pode vir como macho ou como femea, mas o total nao passa do pedido
+  const { qtdM, qtdF, qtdQualquer } = solicitacao
+
+  if (
+    totalM > qtdM + qtdQualquer ||
+    totalF > qtdF + qtdQualquer ||
+    totalM + totalF > qtdM + qtdF + qtdQualquer
+  ) {
     throw campoInvalido(
       'itens',
-      `A alocacao passa do pedido (${solicitacao.qtdM} machos, ${solicitacao.qtdF} femeas).`,
+      `A alocacao passa do pedido (${qtdM} machos, ${qtdF} femeas e ${qtdQualquer} de qualquer sexo).`,
     )
   }
 

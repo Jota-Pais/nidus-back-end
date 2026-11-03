@@ -36,7 +36,7 @@ describe('casal em caixa de maternidade ou recria', () => {
 
   it('aparece na busca de atendimento: a consulta nao filtra a finalidade da caixa', async () => {
     await buscarAtendimento(
-      { especie: 'rato', machos: 2, femeas: 2, idade: 28 },
+      { especie: 'rato', machos: 2, femeas: 2, qualquer: 0, idadeMin: 28, idadeMax: 28 },
       new Date('2026-10-29T12:00:00.000Z'),
     )
 
@@ -50,7 +50,7 @@ describe('casal em caixa de maternidade ou recria', () => {
 describe('ninhada de casal encerrado na busca de atendimento', () => {
   it('nao exige casal ativo: a ninhada do 5o parto continua sendo oferecida', async () => {
     await buscarAtendimento(
-      { especie: 'rato', machos: 2, femeas: 2, idade: 28 },
+      { especie: 'rato', machos: 2, femeas: 2, qualquer: 0, idadeMin: 28, idadeMax: 28 },
       new Date('2026-10-29T12:00:00.000Z'),
     )
 
@@ -59,7 +59,7 @@ describe('ninhada de casal encerrado na busca de atendimento', () => {
 
   it('com linhagem, filtra so pela linhagem', async () => {
     await buscarAtendimento(
-      { especie: 'rato', idLinhagem: 3, machos: 2, femeas: 2, idade: 28 },
+      { especie: 'rato', idLinhagem: 3, machos: 2, femeas: 2, qualquer: 0, idadeMin: 28, idadeMax: 28 },
       new Date('2026-10-29T12:00:00.000Z'),
     )
 
