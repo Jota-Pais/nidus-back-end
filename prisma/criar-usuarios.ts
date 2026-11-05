@@ -31,7 +31,7 @@ const usuarios = [
 
 /** O projeto da pesquisadora, vigente durante 2026 */
 const projeto = {
-  numero: '23080.001234/2026-11',
+  numero: '23080.001234/2026-74',
   titulo: 'Avaliacao de modelo experimental de hipertensao',
   responsavel: 'pesquisador@ufsc.br',
   dtVigenciaInicio: new Date('2026-01-01T00:00:00.000Z'),
