@@ -7,23 +7,13 @@
 export const especies = [
   {
     nome: 'Rato',
-    nomeCientifico: 'Rattus norvegicus',
     linhagens: ['Wistar', 'SHR', 'Kyoto'],
   },
   {
     nome: 'Camundongo',
-    nomeCientifico: 'Mus musculus',
     linhagens: ['Swiss', 'C57BL/6J'],
   },
 ] as const
-
-/**
- * Inicio da vigencia das linhas de parametro_biologico e tolerancia_idade que o seed
- * grava. Os valores vem de `src/shared/parametros.ts`; a tabela ainda pede a data
- * porque o trigger compromisso_respeita_oferta procura o parametro vigente na data do
- * acasalamento. Fixa, e nao o dia em que o seed rodou, para todo banco ficar igual.
- */
-export const inicioVigencia = new Date('2026-01-01T00:00:00.000Z')
 
 /** Rotacao em anel: so estes cinco pares formam casal. */
 export const paresGeneticos = [

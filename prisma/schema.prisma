@@ -59,8 +59,6 @@ model Caixa {
   codigo    String @db.VarChar(20)
   /// A segregacao por especie e aplicada no servidor.
   idEspecie Int @map("id_especie")
-  /// R reproducao | M maternidade | C recria | E expedicao
-  finalidade String @default("R") @db.Char(1)
   /// Coluna do Kanban (spec do cliente, secao 1.9):
   /// R livres | P pre-reserva | E estoque | T reserva | X enviado
   estado     String @default("R") @db.Char(1)
@@ -70,8 +68,7 @@ model Caixa {
 
   estante Estante @relation(fields: [idEstante], references: [id], onDelete: NoAction, onUpdate: NoAction)
   especie Especie @relation(fields: [idEspecie], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  casais       Casal[]
-  partosRecria Parto[] @relation("CaixaRecria")
+  casais  Casal[]
 
   @@index([idEstante, face])
   @@index([estado, idEspecie])
@@ -85,11 +82,9 @@ model Especie {
   id             Int    @id @default(autoincrement())
   /// Rato | Camundongo
   nome           String @db.VarChar(40)
-  nomeCientifico String @map("nome_cientifico") @db.VarChar(80)
 
   linhagens     Linhagem[]
   caixas        Caixa[]
-  parametros    ParametroBiologico[]
   solicitacoes  Solicitacao[]
 
   @@unique([nome])
@@ -107,56 +102,12 @@ model Linhagem {
 
   especie Especie @relation(fields: [idEspecie], references: [id], onDelete: NoAction, onUpdate: NoAction)
   casais       Casal[]
-  parametros   ParametroBiologico[]
   solicitacoes Solicitacao[]
 
   /// Alvo da FK composta (id_especie, id_linhagem) que entra por SQL.
   @@unique([idEspecie, id])
   @@unique([idEspecie, nome])
   @@map("linhagem")
-  @@schema("catalogo")
-}
-
-/// Parametros configuraveis e VERSIONADOS. Nao sao constantes de codigo -
-/// calculo feito no passado precisa continuar reproduzivel.
-model ParametroBiologico {
-  id        Int  @id @default(autoincrement())
-  idEspecie Int  @map("id_especie")
-  /// Nulo vale para a especie inteira.
-  idLinhagem Int? @map("id_linhagem")
-
-  gestacaoDias       Int @default(23) @map("gestacao_dias") @db.SmallInt
-  aleitamentoDias    Int @default(22) @map("aleitamento_dias") @db.SmallInt
-  intervaloCicloDias Int @default(6) @map("intervalo_ciclo_dias") @db.SmallInt
-  maxPartoCasal      Int @default(5) @map("max_parto_casal") @db.SmallInt
-  /// Expectativa de ninhada nao nascida: e estimativa, NUNCA teto.
-  expectativaM Int @default(4) @map("expectativa_m") @db.SmallInt
-  expectativaF Int @default(4) @map("expectativa_f") @db.SmallInt
-
-  dtVigenciaInicio DateTime  @map("dt_vigencia_inicio") @db.Date
-  /// Nulo e vigente.
-  dtVigenciaFim    DateTime? @map("dt_vigencia_fim") @db.Date
-
-  especie  Especie   @relation(fields: [idEspecie], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  linhagem Linhagem? @relation(fields: [idLinhagem], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@index([idEspecie, dtVigenciaFim])
-  @@map("parametro_biologico")
-  @@schema("catalogo")
-}
-
-/// A variacao aceita cresce com a idade pedida. Dado configuravel, nao codigo.
-model ToleranciaIdade {
-  id            Int  @id @default(autoincrement())
-  idadeMinDias  Int  @map("idade_min_dias") @db.SmallInt
-  /// Nulo e sem teto: e a faixa "> 90" dias.
-  idadeMaxDias  Int? @map("idade_max_dias") @db.SmallInt
-  variacaoDias  Int  @map("variacao_dias") @db.SmallInt
-
-  dtVigenciaInicio DateTime  @map("dt_vigencia_inicio") @db.Date
-  dtVigenciaFim    DateTime? @map("dt_vigencia_fim") @db.Date
-
-  @@map("tolerancia_idade")
   @@schema("catalogo")
 }
 
@@ -236,13 +187,6 @@ model Parto {
   desmamadoM        Int?      @map("desmamado_m") @db.SmallInt
   desmamadoF        Int?      @map("desmamado_f") @db.SmallInt
 
-  /// Nulo = filhotes seguem na caixa do casal;
-  /// preenchido = mudaram para caixa propria.
-  idCaixaRecria Int? @map("id_caixa_recria")
-
-  /// C confirmado | P previsto | J projetado.
-  grauCerteza String @default("J") @map("grau_certeza") @db.Char(1)
-
   /// Quem registrou cada evento e quando, para a trilha da ficha. `dtRegistro*`
   /// e o carimbo da ACAO no sistema (para ordenar e diferenciar dois registros
   /// no mesmo dia) - `dtPartoReal`/`dtSelecao`/`dtDesmameReal` continuam sendo a
@@ -258,15 +202,12 @@ model Parto {
   dtManutencao DateTime? @map("dt_manutencao") @db.Timestamptz(6)
 
   casal          Casal    @relation(fields: [idCasal], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  caixaRecria    Caixa?   @relation("CaixaRecria", fields: [idCaixaRecria], references: [id], onDelete: NoAction, onUpdate: NoAction)
   usuarioParto   Usuario? @relation("RegistrouParto", fields: [idUsuarioParto], references: [id], onDelete: NoAction, onUpdate: NoAction)
   usuarioSelecao Usuario? @relation("RegistrouSelecao", fields: [idUsuarioSelecao], references: [id], onDelete: NoAction, onUpdate: NoAction)
   usuarioDesmame Usuario? @relation("RegistrouDesmame", fields: [idUsuarioDesmame], references: [id], onDelete: NoAction, onUpdate: NoAction)
   compromissos   Compromisso[]
 
   @@unique([idCasal, ordem])
-  /// Indice quente: serve a varredura de partos da busca de atendimento.
-  @@index([grauCerteza, dtDesmamePrevisto])
   @@map("parto")
   @@schema("reproducao")
 }

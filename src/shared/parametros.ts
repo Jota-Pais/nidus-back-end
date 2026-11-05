@@ -1,8 +1,7 @@
 // Parametros biologicos da colonia, como no 'config/settings.py' do sistema do cliente:
-// rato e camundongo usam os mesmos numeros. O codigo le daqui. O 'prisma/seed.ts' grava os
-// mesmos valores em catalogo.parametro_biologico, porque o trigger
-// compromisso_respeita_oferta do banco ainda le a expectativa de la, e em
-// catalogo.tolerancia_idade, que fica no banco ate uma migration tirar as duas tabelas
+// rato e camundongo usam os mesmos numeros. O codigo le daqui, e so daqui. O banco repete
+// um numero so: o 4 e 4 de ESPERADOS_POR_CASAL, no trigger compromisso_respeita_oferta
+// (migration 'enxuga_o_banco'). Mudou aqui, muda la tambem
 
 /** parto previsto = acasalamento + 23 dias */
 export const GESTACAO_DIAS = 23
