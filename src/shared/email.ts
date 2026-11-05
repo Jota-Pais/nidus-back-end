@@ -174,7 +174,6 @@ export async function avisarSenhaAlterada(email: string, quando: Date): Promise<
 
 /** O que o aviso conta do pedido: o mesmo resumo que o pesquisador ve na lista */
 export type ResumoDoPedido = {
-  id: number
   protocoloCeua: string
   linhagem: string
   machos: number
@@ -230,13 +229,13 @@ export async function avisarPedidoDecidido(
 
   await enviarPelaBrevo({
     para: email,
-    assunto: `Seu pedido #${pedido.id} foi ${aprovado ? 'aprovado' : 'recusado'}`,
+    assunto: `Seu pedido de animais foi ${aprovado ? 'aprovado' : 'recusado'}`,
     texto: [
       'Olá!',
       '',
       aprovado
-        ? `O CPMR aprovou o seu pedido #${pedido.id} de animais.`
-        : `O CPMR recusou o seu pedido #${pedido.id} de animais.`,
+        ? `O CPMR aprovou o seu pedido de animais.`
+        : `O CPMR recusou o seu pedido de animais.`,
       '',
       ...(aprovado ? [] : [`Motivo: ${motivoDaRecusa}`, '']),
       ...linhasDoResumo(pedido),

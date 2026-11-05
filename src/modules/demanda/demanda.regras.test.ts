@@ -161,7 +161,6 @@ describe('alocacao', () => {
     expect(avisarPedidoDecidido).toHaveBeenCalledWith(
       'paula@ufsc.br',
       {
-        id: 7,
         protocoloCeua: '23080.000001/2026-54',
         linhagem: 'Wistar',
         machos: 2,

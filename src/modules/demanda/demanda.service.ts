@@ -254,7 +254,6 @@ function avisarPesquisador(
   avisarPedidoDecidido(
     solicitacao.usuarioSolicitante.email,
     {
-      id,
       protocoloCeua: solicitacao.projeto.numero,
       linhagem: solicitacao.linhagem.nome,
       machos: solicitacao.qtdM,

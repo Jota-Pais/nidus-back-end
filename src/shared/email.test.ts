@@ -235,7 +235,6 @@ describe('aviso de senha alterada, em production', () => {
 
 describe('aviso do pedido decidido', () => {
   const pedido = {
-    id: 12,
     protocoloCeua: '23080.000001/2026-54',
     linhagem: 'Wistar',
     machos: 2,
@@ -261,8 +260,8 @@ describe('aviso do pedido decidido', () => {
 
     const { corpo } = chamadaUnica()
     expect(corpo.to).toEqual([{ email: 'ana@ufsc.br' }])
-    expect(corpo.subject).toBe('Seu pedido #12 foi aprovado')
-    expect(corpo.textContent).toContain('aprovou o seu pedido #12')
+    expect(corpo.subject).toBe('Seu pedido de animais foi aprovado')
+    expect(corpo.textContent).toContain('aprovou o seu pedido de animais')
     expect(corpo.textContent).toContain('Protocolo CEUA: 23080.000001/2026-54')
     expect(corpo.textContent).toContain('Linhagem: Wistar')
     expect(corpo.textContent).toContain('Animais: 2 machos, 1 fêmea')
@@ -276,8 +275,8 @@ describe('aviso do pedido decidido', () => {
     await avisarPedidoDecidido('ana@ufsc.br', pedido, 'Sem Wistar até dezembro')
 
     const { corpo } = chamadaUnica()
-    expect(corpo.subject).toBe('Seu pedido #12 foi recusado')
-    expect(corpo.textContent).toContain('recusou o seu pedido #12')
+    expect(corpo.subject).toBe('Seu pedido de animais foi recusado')
+    expect(corpo.textContent).toContain('recusou o seu pedido de animais')
     expect(corpo.textContent).toContain('Motivo: Sem Wistar até dezembro')
   })
 })

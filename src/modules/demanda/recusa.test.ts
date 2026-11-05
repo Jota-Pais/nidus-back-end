@@ -69,7 +69,7 @@ describe('recusa de solicitacao', () => {
     await expect(recusarSolicitacao(7, 'Sem Wistar', 2)).resolves.toMatchObject({ status: 'recusada' })
     expect(avisarPedidoDecidido).toHaveBeenCalledWith(
       'paula@ufsc.br',
-      expect.objectContaining({ id: 7, idadeMin: 21, idadeMax: 28, dataEntrega: '2026-12-01' }),
+      expect.objectContaining({ idadeMin: 21, idadeMax: 28, dataEntrega: '2026-12-01' }),
       'Sem Wistar',
     )
     await vi.waitFor(() => expect(log).toHaveBeenCalled())
