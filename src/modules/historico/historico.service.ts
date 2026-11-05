@@ -28,6 +28,7 @@ export function registrarHistorico(banco: BancoComHistorico, alteracao: Alteraca
 export type FiltroDoHistorico = {
   entidade?: string | undefined
   idEntidade?: number | undefined
+  busca?: string | undefined
   limite: number
 }
 
@@ -36,6 +37,14 @@ export async function listarHistorico(filtro: FiltroDoHistorico) {
     where: {
       ...(filtro.entidade === undefined ? {} : { entidade: filtro.entidade }),
       ...(filtro.idEntidade === undefined ? {} : { idEntidade: filtro.idEntidade }),
+      ...(filtro.busca === undefined
+        ? {}
+        : {
+            OR: [
+              { descricao: { contains: filtro.busca, mode: 'insensitive' as const } },
+              { usuario: { nome: { contains: filtro.busca, mode: 'insensitive' as const } } },
+            ],
+          }),
     },
     orderBy: { id: 'desc' },
     take: filtro.limite,
