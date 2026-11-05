@@ -22,6 +22,10 @@ export function conferirTentativas(chave: string, agora: number = Date.now()): v
 }
 
 export function registrarFalha(chave: string, agora: number = Date.now()): void {
+  for (const [outra, antigo] of falhas) {
+    if (agora - antigo.desde > JANELA_MS) falhas.delete(outra)
+  }
+
   const registro = falhas.get(chave)
 
   if (registro === undefined || agora - registro.desde > JANELA_MS) {
@@ -34,4 +38,8 @@ export function registrarFalha(chave: string, agora: number = Date.now()): void 
 
 export function limparFalhas(chave: string): void {
   falhas.delete(chave)
+}
+
+export function chavesGuardadas(): number {
+  return falhas.size
 }

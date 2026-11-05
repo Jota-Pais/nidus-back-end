@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { conferirTentativas, limparFalhas, registrarFalha } from './tentativas.ts'
+import { chavesGuardadas, conferirTentativas, limparFalhas, registrarFalha } from './tentativas.ts'
 
 describe('limite de tentativas de login', () => {
   it('bloqueia depois de 5 falhas seguidas', () => {
@@ -31,5 +31,12 @@ describe('limite de tentativas de login', () => {
     limparFalhas(chave)
 
     expect(() => conferirTentativas(chave, 2_000)).not.toThrow()
+  })
+
+  it('falhas com mais de 15 minutos saem da memoria', () => {
+    registrarFalha('ip:antiga@ufsc.br', 0)
+    registrarFalha('ip:nova@ufsc.br', 24 * 60 * 60_000)
+
+    expect(chavesGuardadas()).toBe(1)
   })
 })

@@ -80,3 +80,19 @@ describe('GET e DELETE /api/sessao - autenticado, qualquer perfil', () => {
     expect(resposta.body).toEqual({})
   })
 })
+
+describe('IP de quem tenta logar', () => {
+  it('vem do X-Forwarded-For da Render, nao do proxy, para o bloqueio nao valer para todos', async () => {
+    const vistos: (string | undefined)[] = []
+    const anotarIp: RequestHandler = (req, _res, next) => {
+      vistos.push(req.ip)
+      next()
+    }
+    const aplicacao = criarApp({ autenticacao: anotarIp })
+
+    await request(aplicacao).get('/api/sessao').set('X-Forwarded-For', '200.1.1.1')
+    await request(aplicacao).get('/api/sessao').set('X-Forwarded-For', '200.2.2.2')
+
+    expect(vistos).toEqual(['200.1.1.1', '200.2.2.2'])
+  })
+})

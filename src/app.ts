@@ -39,6 +39,7 @@ export function criarApp({
   autenticacao = autenticacaoPorCookie,
 }: OpcoesApp = {}): Express {
   const app = express()
+  app.set('trust proxy', 1)
 
   app.use(cors({ origin: corsOrigem, credentials: true }))
   app.use(express.json())
