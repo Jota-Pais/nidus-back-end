@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   NOME_DO_REMETENTE,
   TEMPO_LIMITE_DO_ENVIO_EM_MS,
+  avisarPedidoDecidido,
   avisarSenhaAlterada,
   enviarCodigoDeAcesso,
 } from './email.ts'
@@ -14,6 +15,7 @@ const REMETENTE = 'nidus@exemplo.com'
 
 const ambiente = vi.hoisted(() => ({
   NODE_ENV: 'production',
+  CORS_ORIGEM: 'https://thenidus.vercel.app',
   BREVO_API_KEY: undefined as string | undefined,
   EMAIL_REMETENTE: undefined as string | undefined,
 }))
@@ -228,5 +230,54 @@ describe('aviso de senha alterada, em production', () => {
 
     expect(String(erro)).toContain('Envio pela Brevo recusado: 400 unauthorized')
     expect(String(erro)).not.toContain(CHAVE)
+  })
+})
+
+describe('aviso do pedido decidido', () => {
+  const pedido = {
+    id: 12,
+    protocoloCeua: '23080.000001/2026-54',
+    linhagem: 'Wistar',
+    machos: 2,
+    femeas: 1,
+    qualquer: 0,
+    idadeMin: 21,
+    idadeMax: 28,
+    dataEntrega: '2026-12-01',
+  }
+
+  it('fora de production vai para o console, sem rede', async () => {
+    ambiente.NODE_ENV = 'test'
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await avisarPedidoDecidido('ana@ufsc.br', pedido)
+
+    expect(log).toHaveBeenCalledWith('[pedido] aviso de pedido aprovado para ana@ufsc.br')
+    expect(fetchFalso).not.toHaveBeenCalled()
+  })
+
+  it('a aprovacao traz o resumo e o link, sem motivo', async () => {
+    await avisarPedidoDecidido('ana@ufsc.br', pedido)
+
+    const { corpo } = chamadaUnica()
+    expect(corpo.to).toEqual([{ email: 'ana@ufsc.br' }])
+    expect(corpo.subject).toBe('Seu pedido #12 foi aprovado')
+    expect(corpo.textContent).toContain('aprovou o seu pedido #12')
+    expect(corpo.textContent).toContain('Protocolo CEUA: 23080.000001/2026-54')
+    expect(corpo.textContent).toContain('Linhagem: Wistar')
+    expect(corpo.textContent).toContain('Animais: 2 machos, 1 fêmea')
+    expect(corpo.textContent).toContain('Idade: de 21 a 28 dias')
+    expect(corpo.textContent).toContain('Data de entrega: 01/12/2026')
+    expect(corpo.textContent).toContain('https://thenidus.vercel.app/solicitar')
+    expect(corpo.textContent).not.toContain('Motivo')
+  })
+
+  it('a recusa traz o motivo', async () => {
+    await avisarPedidoDecidido('ana@ufsc.br', pedido, 'Sem Wistar até dezembro')
+
+    const { corpo } = chamadaUnica()
+    expect(corpo.subject).toBe('Seu pedido #12 foi recusado')
+    expect(corpo.textContent).toContain('recusou o seu pedido #12')
+    expect(corpo.textContent).toContain('Motivo: Sem Wistar até dezembro')
   })
 })

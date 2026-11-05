@@ -171,3 +171,79 @@ export async function avisarSenhaAlterada(email: string, quando: Date): Promise<
     ].join('\n'),
   })
 }
+
+/** O que o aviso conta do pedido: o mesmo resumo que o pesquisador ve na lista */
+export type ResumoDoPedido = {
+  id: number
+  protocoloCeua: string
+  linhagem: string
+  machos: number
+  femeas: number
+  qualquer: number
+  idadeMin: number
+  idadeMax: number
+  /** AAAA-MM-DD */
+  dataEntrega: string
+}
+
+const plural = (n: number, singular: string, flexao: string) =>
+  `${n} ${n === 1 ? singular : flexao}`
+
+/** As linhas do resumo do pedido, so com os grupos de animais que tem quantidade */
+function linhasDoResumo(pedido: ResumoDoPedido): string[] {
+  const animais = [
+    pedido.machos > 0 ? plural(pedido.machos, 'macho', 'machos') : null,
+    pedido.femeas > 0 ? plural(pedido.femeas, 'fêmea', 'fêmeas') : null,
+    pedido.qualquer > 0 ? `${pedido.qualquer} de qualquer sexo` : null,
+  ].filter((parte) => parte !== null)
+
+  const idade =
+    pedido.idadeMin === pedido.idadeMax
+      ? `${pedido.idadeMin} dias`
+      : `de ${pedido.idadeMin} a ${pedido.idadeMax} dias`
+  const [ano, mes, dia] = pedido.dataEntrega.split('-')
+
+  return [
+    `Protocolo CEUA: ${pedido.protocoloCeua}`,
+    `Linhagem: ${pedido.linhagem}`,
+    `Animais: ${animais.join(', ')}`,
+    `Idade: ${idade}`,
+    `Data de entrega: ${dia}/${mes}/${ano}`,
+  ]
+}
+
+/**
+ * O aviso de que o pedido foi aprovado (sem motivo) ou recusado (com o motivo que o tecnico
+ * escreveu). Quem pediu nao precisa abrir o Nidus para saber
+ */
+export async function avisarPedidoDecidido(
+  email: string,
+  pedido: ResumoDoPedido,
+  motivoDaRecusa?: string,
+): Promise<void> {
+  const aprovado = motivoDaRecusa === undefined
+
+  if (env.NODE_ENV !== 'production') {
+    console.log(`[pedido] aviso de pedido ${aprovado ? 'aprovado' : 'recusado'} para ${email}`)
+    return
+  }
+
+  await enviarPelaBrevo({
+    para: email,
+    assunto: `Seu pedido #${pedido.id} foi ${aprovado ? 'aprovado' : 'recusado'}`,
+    texto: [
+      'Olá!',
+      '',
+      aprovado
+        ? `O CPMR aprovou o seu pedido #${pedido.id} de animais.`
+        : `O CPMR recusou o seu pedido #${pedido.id} de animais.`,
+      '',
+      ...(aprovado ? [] : [`Motivo: ${motivoDaRecusa}`, '']),
+      ...linhasDoResumo(pedido),
+      '',
+      `Veja os seus pedidos em ${env.CORS_ORIGEM}/solicitar`,
+      '',
+      NOME_DO_REMETENTE,
+    ].join('\n'),
+  })
+}

@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { avisarPedidoDecidido } from '../../shared/email.ts'
 import { recusarSolicitacao } from './demanda.service.ts'
+
+vi.mock('../../shared/email.ts', () => ({ avisarPedidoDecidido: vi.fn().mockResolvedValue(undefined) }))
 
 const banco = vi.hoisted(() => ({
   solicitacao: null as Record<string, unknown> | null,
@@ -25,7 +28,20 @@ vi.mock('../../shared/prisma.ts', () => ({
 const recusa = (status: number, codigo: string) => expect.objectContaining({ status, codigo })
 
 beforeEach(() => {
-  banco.solicitacao = { id: 7, status: 'EN' }
+  banco.solicitacao = {
+    id: 7,
+    status: 'EN',
+    qtdM: 2,
+    qtdF: 2,
+    qtdQualquer: 0,
+    idadeMinDias: 21,
+    idadeMaxDias: 28,
+    dtDesejada: new Date('2026-12-01T00:00:00.000Z'),
+    projeto: { numero: '23080.000001/2026-54' },
+    linhagem: { nome: 'Wistar' },
+    usuarioSolicitante: { email: 'paula@ufsc.br' },
+  }
+  vi.clearAllMocks()
   banco.recusadas = 1
   banco.historico = null
 })
@@ -44,6 +60,27 @@ describe('recusa de solicitacao', () => {
       acao: 'recusa',
       dados: { motivo: 'Sem animais da linhagem' },
     })
+  })
+
+  it('avisa quem pediu, com o motivo, e a falha do envio nao derruba a recusa', async () => {
+    vi.mocked(avisarPedidoDecidido).mockRejectedValueOnce(new Error('Brevo fora do ar'))
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await expect(recusarSolicitacao(7, 'Sem Wistar', 2)).resolves.toMatchObject({ status: 'recusada' })
+    expect(avisarPedidoDecidido).toHaveBeenCalledWith(
+      'paula@ufsc.br',
+      expect.objectContaining({ id: 7, idadeMin: 21, idadeMax: 28, dataEntrega: '2026-12-01' }),
+      'Sem Wistar',
+    )
+    await vi.waitFor(() => expect(log).toHaveBeenCalled())
+    log.mockRestore()
+  })
+
+  it('a recusa que nao grava nao avisa ninguem', async () => {
+    banco.recusadas = 0
+
+    await expect(recusarSolicitacao(7, 'teste', 2)).rejects.toBeDefined()
+    expect(avisarPedidoDecidido).not.toHaveBeenCalled()
   })
 
   it('a ja alocada nao pode ser recusada', async () => {

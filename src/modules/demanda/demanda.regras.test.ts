@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
+import { avisarPedidoDecidido } from '../../shared/email.ts'
 import { alocarSolicitacao, criarSolicitacao } from './demanda.service.ts'
+
+vi.mock('../../shared/email.ts', () => ({ avisarPedidoDecidido: vi.fn().mockResolvedValue(undefined) }))
 
 const banco = vi.hoisted(() => ({
   linhagem: null as Record<string, unknown> | null,
@@ -29,6 +32,12 @@ vi.mock('../../shared/prisma.ts', () => ({
         qtdM: 2,
         qtdF: 2,
         qtdQualquer: 0,
+        idadeMinDias: 28,
+        idadeMaxDias: 28,
+        dtDesejada: new Date('2026-12-01T00:00:00.000Z'),
+        projeto: { numero: '23080.000001/2026-54' },
+        linhagem: { nome: 'Wistar' },
+        usuarioSolicitante: { email: 'paula@ufsc.br' },
         remessas: [{ id: 1 }],
       }),
     },
@@ -77,6 +86,7 @@ const parto = (idLinhagem: number, caixa = { ativa: true, estado: 'R' }) => ({
 const recusa = (status: number, codigo: string) => expect.objectContaining({ status, codigo })
 
 beforeEach(() => {
+  vi.clearAllMocks()
   banco.linhagem = { id: 3, idEspecie: 1, ativa: true }
   banco.partos = [parto(3)]
   banco.aprovadas = 1
@@ -143,5 +153,45 @@ describe('alocacao', () => {
     await expect(
       alocarSolicitacao(7, [{ idParto: 10, machos: 1, femeas: 1 }], tecnica),
     ).resolves.toEqual({ idSolicitacao: 7, status: 'aprovada' })
+  })
+
+  it('avisa quem pediu, sem motivo, depois de gravar', async () => {
+    await alocarSolicitacao(7, [{ idParto: 10, machos: 1, femeas: 1 }], tecnica)
+
+    expect(avisarPedidoDecidido).toHaveBeenCalledWith(
+      'paula@ufsc.br',
+      {
+        id: 7,
+        protocoloCeua: '23080.000001/2026-54',
+        linhagem: 'Wistar',
+        machos: 2,
+        femeas: 2,
+        qualquer: 0,
+        idadeMin: 28,
+        idadeMax: 28,
+        dataEntrega: '2026-12-01',
+      },
+      undefined,
+    )
+  })
+
+  it('nao avisa quando a alocacao nao grava', async () => {
+    banco.aprovadas = 0
+
+    await expect(
+      alocarSolicitacao(7, [{ idParto: 10, machos: 1, femeas: 1 }], tecnica),
+    ).rejects.toBeDefined()
+    expect(avisarPedidoDecidido).not.toHaveBeenCalled()
+  })
+
+  it('o envio que falha nao derruba a alocacao', async () => {
+    vi.mocked(avisarPedidoDecidido).mockRejectedValueOnce(new Error('Brevo fora do ar'))
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await expect(
+      alocarSolicitacao(7, [{ idParto: 10, machos: 1, femeas: 1 }], tecnica),
+    ).resolves.toEqual({ idSolicitacao: 7, status: 'aprovada' })
+    await vi.waitFor(() => expect(log).toHaveBeenCalled())
+    log.mockRestore()
   })
 })

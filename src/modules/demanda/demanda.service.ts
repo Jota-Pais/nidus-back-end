@@ -1,5 +1,7 @@
 // Projetos CEUA, solicitacoes de animais e a alocacao das caixas que atendem cada uma
 
+import type { Prisma } from '@prisma/client'
+import { avisarPedidoDecidido } from '../../shared/email.ts'
 import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { prisma } from '../../shared/prisma.ts'
@@ -231,6 +233,43 @@ function somarPorParto(itens: ItemDeAlocacao[]): ItemDeAlocacao[] {
   return [...porParto.values()]
 }
 
+/** O que a solicitacao traz junto para o aviso ao pesquisador */
+const PARA_O_AVISO = {
+  projeto: { select: { numero: true } },
+  linhagem: { select: { nome: true } },
+  usuarioSolicitante: { select: { email: true } },
+} satisfies Prisma.SolicitacaoInclude
+
+/**
+ * Avisa por e-mail quem pediu, DEPOIS de a decisao estar gravada. Sem 'await': o envio nao segura
+ * a resposta do tecnico, e uma falha do servico de e-mail fica so no log, sem desfazer nada.
+ * Com motivo e recusa; sem, aprovacao
+ */
+function avisarPesquisador(
+  solicitacao: Prisma.SolicitacaoGetPayload<{ include: typeof PARA_O_AVISO }>,
+  motivoDaRecusa?: string,
+): void {
+  const { id } = solicitacao
+
+  avisarPedidoDecidido(
+    solicitacao.usuarioSolicitante.email,
+    {
+      id,
+      protocoloCeua: solicitacao.projeto.numero,
+      linhagem: solicitacao.linhagem.nome,
+      machos: solicitacao.qtdM,
+      femeas: solicitacao.qtdF,
+      qualquer: solicitacao.qtdQualquer,
+      idadeMin: solicitacao.idadeMinDias,
+      idadeMax: solicitacao.idadeMaxDias,
+      dataEntrega: dataISO(solicitacao.dtDesejada),
+    },
+    motivoDaRecusa,
+  ).catch((erro: unknown) => {
+    console.error(`[pedido] o aviso do pedido #${id} nao foi enviado:`, erro)
+  })
+}
+
 /**
  * POST /api/solicitacoes/:id/alocacao - o tecnico aceita as caixas da busca. Cada item vira um
  * compromisso com o parto; caixa que estava em Livres vai para Pre-reserva
@@ -244,7 +283,7 @@ export async function alocarSolicitacao(
 
   const solicitacao = await prisma.solicitacao.findUnique({
     where: { id: idSolicitacao },
-    include: { remessas: { orderBy: { sequencia: 'asc' }, take: 1 } },
+    include: { ...PARA_O_AVISO, remessas: { orderBy: { sequencia: 'asc' }, take: 1 } },
   })
 
   if (solicitacao === null) {
@@ -385,6 +424,8 @@ export async function alocarSolicitacao(
     })
   })
 
+  avisarPesquisador(solicitacao)
+
   return { idSolicitacao, status: statusSolicitacao.paraApi('AP') }
 }
 
@@ -454,7 +495,10 @@ export async function registrarEntrega(
 }
 
 export async function recusarSolicitacao(idSolicitacao: number, motivo: string, idUsuario: number) {
-  const solicitacao = await prisma.solicitacao.findUnique({ where: { id: idSolicitacao } })
+  const solicitacao = await prisma.solicitacao.findUnique({
+    where: { id: idSolicitacao },
+    include: PARA_O_AVISO,
+  })
 
   if (solicitacao === null) {
     throw naoEncontrado('Solicitacao')
@@ -489,6 +533,8 @@ export async function recusarSolicitacao(idSolicitacao: number, motivo: string, 
       dados: { motivo },
     })
   })
+
+  avisarPesquisador(solicitacao, motivo)
 
   return { idSolicitacao, status: statusSolicitacao.paraApi('RE'), motivo }
 }
