@@ -59,6 +59,11 @@ describe('autorizacao', () => {
     expect(alocacao.status).toBe(403)
   })
 
+  it('so o pesquisador cria solicitacao', async () => {
+    expect((await request(app('tecnico')).post('/api/solicitacoes').send(pedido)).status).toBe(403)
+    expect((await request(app('gestor')).post('/api/solicitacoes').send(pedido)).status).toBe(403)
+  })
+
   it('o pesquisador nao registra entrega', async () => {
     const resposta = await request(app('pesquisador'))
       .post('/api/solicitacoes/1/entrega')

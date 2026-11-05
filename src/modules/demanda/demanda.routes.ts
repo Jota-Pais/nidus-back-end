@@ -109,7 +109,7 @@ export const solicitacaoNova = z
     error: 'A data de entrega ja passou.',
   })
 
-solicitacaoRoutes.post('/', exigirPerfil(), async (req, res) => {
+solicitacaoRoutes.post('/', exigirPerfil('pesquisador'), async (req, res) => {
   const dados = solicitacaoNova.parse(req.body)
 
   res.status(201).json(await criarSolicitacao(dados, usuarioDaRequisicao(req)))
