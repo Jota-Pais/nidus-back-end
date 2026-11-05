@@ -43,8 +43,15 @@ cada parto repete: mudou num, muda no outro. Os pares genéticos ficam no banco.
 
 ## Pedido de animais e busca de atendimento
 
+- **Protocolo CEUA** (`protocoloCeua` do pedido e `numero` do projeto) - vale
+  um dos dois formatos que a CEUA da UFSC usa: o processo da UFSC,
+  `23080.XXXXXX/AAAA-XX`, com os dois verificadores em módulo 11 e o ano até o
+  atual, ou o número do Sistema CEUA, 10 dígitos sem pontuação, em que os 6
+  últimos são a data do registro (DDMMAA), até hoje. O pedido e o cadastro do
+  projeto usam a mesma regra (`src/modules/demanda/protocolo.ts`): o que o
+  gestor cadastra, o pesquisador consegue pedir
 - **Pedido** (`POST /api/solicitacoes`) - o pesquisador digita o nome e o
-  protocolo CEUA (`23080.XXXXXX/AAAA-XX`); o e-mail é o da conta. O back procura
+  protocolo CEUA; o e-mail é o da conta. O back procura
   o protocolo em `etica.projeto` e não cria projeto: o projeto entra pela equipe
   do biotério (por enquanto, pelo `db:usuarios`). O pedido traz machos, fêmeas e
   animais de qualquer sexo (até 9999 cada, ao menos um no total), a idade de 21 a

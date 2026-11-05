@@ -107,7 +107,7 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
 
 export type NovaSolicitacao = {
   nomePesquisador: string
-  /** o numero do projeto em etica.projeto, no formato 23080.XXXXXX/AAAA-XX */
+  /** o numero do projeto em etica.projeto: o processo 23080.XXXXXX/AAAA-XX ou o do Sistema CEUA */
   protocoloCeua: string
   idLinhagem: number
   machos: number

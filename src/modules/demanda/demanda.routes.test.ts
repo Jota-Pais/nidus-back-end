@@ -6,7 +6,7 @@ import { hojeISO } from '../../shared/traducao.ts'
 import type { Perfil } from '../../shared/traducao.ts'
 import { filtroDaBusca } from '../motor/motor.routes.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
-import { solicitacaoNova } from './demanda.routes.ts'
+import { projetoNovo, solicitacaoNova } from './demanda.routes.ts'
 
 // Autorizacao e forma da entrada. Nenhum teste aqui chega ao banco
 
@@ -20,7 +20,7 @@ const app = (perfil?: Perfil) =>
 
 const pedido = {
   nomePesquisador: 'Paula Lima',
-  protocoloCeua: '23080.001234/2026-11',
+  protocoloCeua: '23080.001234/2026-74',
   idLinhagem: 1,
   machos: 10,
   femeas: 5,
@@ -75,6 +75,30 @@ describe('lista de projetos', () => {
 
     expect(pesquisador.status).toBe(403)
     expect(tecnico.status).toBe(403)
+  })
+})
+
+describe('forma do projeto', () => {
+  const projeto = {
+    numero: '23080.001234/2026-74',
+    titulo: 'Estudo',
+    idUsuarioResponsavel: 5,
+    dtVigenciaInicio: '2026-01-01',
+    dtVigenciaFim: '2026-12-31',
+    cotaAutorizada: 120,
+    situacao: 'vigente',
+  }
+
+  it('o numero segue a regra do protocolo: o que o gestor cadastra, o pesquisador consegue pedir', async () => {
+    expect(projetoNovo.safeParse(projeto).success).toBe(true)
+    expect(projetoNovo.safeParse({ ...projeto, numero: '3106240920' }).success).toBe(true)
+
+    const resposta = await request(app('gestor'))
+      .post('/api/projetos')
+      .send({ ...projeto, numero: '23080.001234/2026-11' })
+
+    expect(resposta.status).toBe(400)
+    expect(resposta.body.erro.campos.numero).toBe('Digito verificador errado. Confira o numero do processo.')
   })
 })
 
@@ -147,6 +171,13 @@ describe('forma da solicitacao', () => {
     const campos = await camposRecusados({ ...pedido, protocoloCeua: '23080.1234/2026-11' })
 
     expect(campos).toHaveProperty('protocoloCeua')
+  })
+
+  it('protocolo com verificador errado e VALIDACAO, e o numero do Sistema CEUA passa', async () => {
+    const campos = await camposRecusados({ ...pedido, protocoloCeua: '23080.001234/2026-11' })
+
+    expect(campos.protocoloCeua).toBe('Digito verificador errado. Confira o numero do processo.')
+    expect(solicitacaoNova.safeParse({ ...pedido, protocoloCeua: '3106240920' }).success).toBe(true)
   })
 
   it('o nome e obrigatorio e vai ate 120 caracteres, sem contar os espacos das pontas', () => {

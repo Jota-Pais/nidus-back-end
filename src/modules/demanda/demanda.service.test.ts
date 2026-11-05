@@ -63,7 +63,7 @@ const tecnica: UsuarioDaSessao = { id: 2, nome: 'Ana Souza', email: 'tecnico@ufs
 const itens = [{ idParto: 1, machos: 1, femeas: 0 }]
 
 const agora = new Date('2026-10-30T12:00:00.000Z')
-const PROTOCOLO = '23080.001234/2026-11'
+const PROTOCOLO = '23080.001234/2026-74'
 
 const projetoDaPaula: Projeto = {
   id: 9,
@@ -102,7 +102,7 @@ describe('protocolo CEUA do pedido', () => {
 
     const resposta = await request(criarApp({ autenticacao: comoPesquisadora }))
       .post('/api/solicitacoes')
-      .send({ ...pedido, protocoloCeua: '23080.999999/2026-01', dataEntrega: '2099-01-01' })
+      .send({ ...pedido, protocoloCeua: '23080.999999/2026-38', dataEntrega: '2099-01-01' })
 
     expect(resposta.status).toBe(409)
     expect(resposta.body.erro).toEqual({

@@ -15,6 +15,7 @@ import {
   registrarEntrega,
 } from './demanda.service.ts'
 import { SITUACAO_DO_PROJETO, alterarProjeto, criarProjeto } from './projeto.service.ts'
+import { numeroCeua } from './protocolo.ts'
 
 export const projetoRoutes = Router()
 export const solicitacaoRoutes = Router()
@@ -27,7 +28,7 @@ projetoRoutes.get('/', exigirPerfil('gestor'), async (req, res) => {
 })
 
 export const projetoNovo = z.object({
-  numero: z.string().trim().min(1).max(30),
+  numero: numeroCeua,
   titulo: z.string().trim().min(1).max(255),
   idUsuarioResponsavel: z.number().int().positive(),
   dtVigenciaInicio: z.iso.date('Data invalida. Use aaaa-mm-dd.'),
@@ -72,7 +73,7 @@ export const solicitacaoNova = z
       .min(1, 'Informe o nome do pesquisador.')
       .max(120, 'O nome passa de 120 caracteres.'),
     /** o numero do projeto em etica.projeto */
-    protocoloCeua: z.string().regex(/^23080\.\d{6}\/\d{4}-\d{2}$/, 'Use o formato 23080.XXXXXX/AAAA-XX.'),
+    protocoloCeua: numeroCeua,
     idLinhagem: z.number().int().positive(),
     machos: animais,
     femeas: animais,

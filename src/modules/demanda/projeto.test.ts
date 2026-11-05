@@ -42,7 +42,7 @@ const gestor: UsuarioDaSessao = { id: 1, nome: 'Gestora', email: 'gestor@ufsc.br
 const recusa = (status: number, codigo: string) => expect.objectContaining({ status, codigo })
 
 const projeto: DadosDoProjeto = {
-  numero: '23080.000123/2026-11',
+  numero: '23080.000123/2026-41',
   titulo: 'Estudo',
   idUsuarioResponsavel: 5,
   dtVigenciaInicio: '2026-01-01',

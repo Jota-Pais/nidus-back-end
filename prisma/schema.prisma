@@ -285,7 +285,8 @@ model CodigoAcesso {
 /// com projeto fora de vigencia.
 model Projeto {
   id     Int    @id @default(autoincrement())
-  /// Formato 23080.XXXXXX/AAAA-XX.
+  /// O processo da UFSC, 23080.XXXXXX/AAAA-XX, ou os 10 digitos do Sistema CEUA
+  /// (regra em src/modules/demanda/protocolo.ts).
   numero String @unique @db.VarChar(30)
   titulo String @db.VarChar(255)
   idUsuarioResponsavel Int @map("id_usuario_responsavel")
