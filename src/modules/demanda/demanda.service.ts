@@ -18,6 +18,7 @@ import {
   calcularGrauCerteza,
   compromissosAtivos,
   disponibilidadeDoParto,
+  partoNaoVaiAcontecer,
 } from '../reproducao/disponibilidade.ts'
 
 /**
@@ -294,6 +295,7 @@ export async function alocarSolicitacao(
         select: {
           idCaixa: true,
           idLinhagem: true,
+          ativo: true,
           caixa: { select: { ativa: true, estado: true } },
           linhagem: { select: { idEspecie: true } },
         },
@@ -321,6 +323,13 @@ export async function alocarSolicitacao(
       throw erroDeRegra(
         'DISPONIBILIDADE_EXCEDIDA',
         `A caixa do ${parto.ordem}o parto esta inativa ou ja foi enviada.`,
+      )
+    }
+
+    if (partoNaoVaiAcontecer(parto, parto.casal)) {
+      throw erroDeRegra(
+        'DISPONIBILIDADE_EXCEDIDA',
+        `O casal do ${parto.ordem}o parto foi encerrado e esse parto nao vai acontecer.`,
       )
     }
 

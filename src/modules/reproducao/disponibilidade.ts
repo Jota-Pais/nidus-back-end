@@ -104,3 +104,10 @@ export function disponibilidadeDoParto(parto: PartoComCompromissos): Disponibili
 
   return calcularDisponibilidade(parto, comprometido)
 }
+
+export function partoNaoVaiAcontecer(
+  parto: { dtPartoReal: Date | null },
+  casal: { ativo: boolean },
+): boolean {
+  return !casal.ativo && parto.dtPartoReal === null
+}

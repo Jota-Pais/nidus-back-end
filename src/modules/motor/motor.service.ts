@@ -8,7 +8,11 @@ import { dataISO, estadoCaixa, hojeISO } from '../../shared/traducao.ts'
 import { codigoDaPosicao } from '../infra/endereco.ts'
 import { idDaEspecie } from '../infra/infra.service.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
-import { compromissosAtivos, disponibilidadeDoParto } from '../reproducao/disponibilidade.ts'
+import {
+  compromissosAtivos,
+  disponibilidadeDoParto,
+  partoNaoVaiAcontecer,
+} from '../reproducao/disponibilidade.ts'
 import { casaisParaODeficit, faixaDoPedido, ordenar, sugerirAlocacao } from './motor.ts'
 import type { Origem } from './motor.ts'
 
@@ -60,6 +64,7 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
         where: pedido.idLinhagem === undefined ? {} : { idLinhagem: pedido.idLinhagem },
         select: {
           identificacao: true,
+          ativo: true,
           partos: {
             orderBy: { ordem: 'asc' },
             select: {
@@ -88,6 +93,8 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
   const candidatas = caixas.flatMap((caixa) =>
     caixa.casais.flatMap((casal) =>
       casal.partos.flatMap((parto) => {
+        if (partoNaoVaiAcontecer(parto, casal)) return []
+
         const nascimento = dataISO(parto.dtPartoReal ?? parto.dtPartoPrevisto)
         const idadeNaEntrega = diasEntre(nascimento, referencia)
         if (idadeNaEntrega < faixa.min || idadeNaEntrega > faixa.max) return []

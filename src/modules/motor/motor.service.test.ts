@@ -10,8 +10,19 @@ const agora = new Date('2026-10-30T12:00:00.000Z')
 /** a data de nascimento de quem chega com 'idade' dias na entrega */
 const nascidoHa = (idade: number) => new Date(Date.parse(`${ENTREGA}T00:00:00.000Z`) - idade * 86_400_000)
 
+const NAO_NASCEU = {
+  dtPartoReal: null,
+  dtDesmameReal: null,
+  nascidoM: null,
+  nascidoF: null,
+  eutanasiadoM: null,
+  eutanasiadoF: null,
+  desmamadoM: null,
+  desmamadoF: null,
+}
+
 /** caixa 'id' com um parto que chega a entrega com 'idade' dias e 4 machos e 4 femeas livres */
-const caixa = (id: number, idade: number) => ({
+const caixa = (id: number, idade: number, { ativo = true, nasceu = true } = {}) => ({
   id,
   face: 1,
   linha: 1,
@@ -21,6 +32,7 @@ const caixa = (id: number, idade: number) => ({
   casais: [
     {
       identificacao: 'AB',
+      ativo,
       partos: [
         {
           id,
@@ -35,6 +47,7 @@ const caixa = (id: number, idade: number) => ({
           desmamadoM: 4,
           desmamadoF: 4,
           compromissos: [],
+          ...(nasceu ? {} : NAO_NASCEU),
         },
       ],
     },
@@ -70,6 +83,24 @@ describe('faixa de idade na busca', () => {
 
     expect(busca.faixa).toEqual({ min: 25, max: 31 })
     expect(busca.candidatas.map((c) => c.idadeNaEntrega)).toEqual([28, 31])
+  })
+})
+
+describe('casal encerrado na busca', () => {
+  it('oferece a ninhada que ja nasceu, mas nao o parto previsto que nao vai acontecer', async () => {
+    banco.caixas = [caixa(1, 30, { ativo: false }), caixa(2, 30, { ativo: false, nasceu: false })]
+
+    const busca = await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
+
+    expect(busca.candidatas.map((c) => c.idCaixa)).toEqual([1])
+  })
+
+  it('o parto previsto de casal ativo continua sendo oferecido', async () => {
+    banco.caixas = [caixa(1, 30, { nasceu: false })]
+
+    const busca = await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
+
+    expect(busca.candidatas.map((c) => c.origem)).toEqual(['previsao_parto'])
   })
 })
 

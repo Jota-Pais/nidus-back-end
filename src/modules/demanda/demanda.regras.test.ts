@@ -71,7 +71,7 @@ const parto = (idLinhagem: number, caixa = { ativa: true, estado: 'R' }) => ({
   dtPartoReal: new Date('2026-10-01T00:00:00.000Z'),
   dtDesmameReal: null,
   compromissos: [],
-  casal: { idCaixa: 4, idLinhagem, caixa, linhagem: { idEspecie: 1 } },
+  casal: { idCaixa: 4, idLinhagem, ativo: true, caixa, linhagem: { idEspecie: 1 } },
 })
 
 const recusa = (status: number, codigo: string) => expect.objectContaining({ status, codigo })
@@ -116,6 +116,15 @@ describe('alocacao', () => {
 
   it('caixa ja enviada e recusada', async () => {
     banco.partos = [parto(3, { ativa: true, estado: 'X' })]
+
+    await expect(
+      alocarSolicitacao(7, [{ idParto: 10, machos: 1, femeas: 1 }], tecnica),
+    ).rejects.toEqual(recusa(409, 'DISPONIBILIDADE_EXCEDIDA'))
+  })
+
+  it('parto que nao nasceu de casal encerrado e recusado', async () => {
+    const naoNasceu = { ...parto(3), nascidoM: null, nascidoF: null, dtPartoReal: null }
+    banco.partos = [{ ...naoNasceu, casal: { ...naoNasceu.casal, ativo: false } }]
 
     await expect(
       alocarSolicitacao(7, [{ idParto: 10, machos: 1, femeas: 1 }], tecnica),
