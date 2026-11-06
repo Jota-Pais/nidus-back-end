@@ -265,6 +265,18 @@ function campoInvalido(campo: string, mensagem: string) {
   })
 }
 
+/** "2 machos, 1 femea e 3 de qualquer sexo", so com o que nao e zero */
+function descreverQuantidade({ m, f, qualquer }: { m: number; f: number; qualquer: number }): string {
+  const partes = [
+    m > 0 ? `${m} ${m === 1 ? 'macho' : 'machos'}` : '',
+    f > 0 ? `${f} ${f === 1 ? 'femea' : 'femeas'}` : '',
+    qualquer > 0 ? `${qualquer} de qualquer sexo` : '',
+  ].filter((parte) => parte !== '')
+
+  const ultima = partes.pop() ?? ''
+  return partes.length > 0 ? `${partes.join(', ')} e ${ultima}` : ultima
+}
+
 function somarPorParto(itens: ItemDeAlocacao[]): ItemDeAlocacao[] {
   const porParto = new Map<number, ItemDeAlocacao>()
 
@@ -317,8 +329,9 @@ function avisarPesquisador(
 }
 
 /**
- * POST /api/solicitacoes/:id/alocacao - o tecnico aceita as caixas da busca. Cada item vira um
- * compromisso com o parto; caixa que estava em Livres vai para Pre-reserva
+ * POST /api/solicitacoes/:id/alocacao - o tecnico aceita as caixas da busca, que tem de cobrir
+ * o pedido inteiro. Cada item vira um compromisso com o parto; caixa que estava em Livres vai
+ * para Pre-reserva
  */
 export async function alocarSolicitacao(
   idSolicitacao: number,
@@ -370,6 +383,23 @@ export async function alocarSolicitacao(
     throw campoInvalido(
       'itens',
       `A alocacao passa do pedido (${qtdM} machos, ${qtdF} femeas e ${qtdQualquer} de qualquer sexo).`,
+    )
+  }
+
+  // e nem fica abaixo: so o pedido inteiro e aceito. Sem animais para completar, o pedido
+  // continua aguardando analise, e a equipe recusa com o motivo ou espera ter animal
+  const falta = {
+    m: Math.max(qtdM - totalM, 0),
+    f: Math.max(qtdF - totalF, 0),
+    // o que veio alem dos machos e das femeas pedidos cobre o "qualquer"
+    qualquer: Math.max(qtdQualquer - Math.max(totalM - qtdM, 0) - Math.max(totalF - qtdF, 0), 0),
+  }
+  const quantasFaltam = falta.m + falta.f + falta.qualquer
+
+  if (quantasFaltam > 0) {
+    throw erroDeRegra(
+      'PEDIDO_INCOMPLETO',
+      `A alocacao so aceita o pedido inteiro: ${quantasFaltam === 1 ? 'falta' : 'faltam'} ${descreverQuantidade(falta)}. Sem animais para completar, recuse com o motivo ou aguarde.`,
     )
   }
 

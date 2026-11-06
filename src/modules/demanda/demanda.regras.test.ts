@@ -133,25 +133,19 @@ describe('alocacao', () => {
   it('parto de outra linhagem e recusado', async () => {
     banco.partos = [parto(9)]
 
-    await expect(
-      alocarSolicitacao(7, [{ idParto: 10, machos: 1, femeas: 1 }], tecnica),
-    ).rejects.toEqual(recusa(409, 'DISPONIBILIDADE_EXCEDIDA'))
+    await expect(alocarSolicitacao(7, inteiro, tecnica)).rejects.toEqual(recusa(409, 'DISPONIBILIDADE_EXCEDIDA'))
   })
 
   it('caixa ja enviada e recusada', async () => {
     banco.partos = [parto(3, { ativa: true, estado: 'X' })]
 
-    await expect(
-      alocarSolicitacao(7, [{ idParto: 10, machos: 1, femeas: 1 }], tecnica),
-    ).rejects.toEqual(recusa(409, 'DISPONIBILIDADE_EXCEDIDA'))
+    await expect(alocarSolicitacao(7, inteiro, tecnica)).rejects.toEqual(recusa(409, 'DISPONIBILIDADE_EXCEDIDA'))
   })
 
   it('parto que ainda nao nasceu e recusado, mesmo de casal ativo', async () => {
     banco.partos = [{ ...parto(3), nascidoM: null, nascidoF: null, dtPartoReal: null }]
 
-    await expect(
-      alocarSolicitacao(7, [{ idParto: 10, machos: 1, femeas: 1 }], tecnica),
-    ).rejects.toEqual(recusa(409, 'DISPONIBILIDADE_EXCEDIDA'))
+    await expect(alocarSolicitacao(7, inteiro, tecnica)).rejects.toEqual(recusa(409, 'DISPONIBILIDADE_EXCEDIDA'))
   })
 
   it('filhote fora da idade pedida e recusado e nada e gravado', async () => {
@@ -179,19 +173,35 @@ describe('alocacao', () => {
   it('dois cliques ao mesmo tempo: o segundo nao grava', async () => {
     banco.aprovadas = 0
 
-    await expect(
-      alocarSolicitacao(7, [{ idParto: 10, machos: 1, femeas: 1 }], tecnica),
-    ).rejects.toEqual(recusa(409, 'SOLICITACAO_JA_ALOCADA'))
+    await expect(alocarSolicitacao(7, inteiro, tecnica)).rejects.toEqual(recusa(409, 'SOLICITACAO_JA_ALOCADA'))
   })
 
   it('pedido certo e alocado', async () => {
+    await expect(alocarSolicitacao(7, inteiro, tecnica)).resolves.toEqual({ idSolicitacao: 7, status: 'aprovada' })
+  })
+
+  it('pedido pela metade e recusado, dizendo quanto falta, sem gravar nem avisar', async () => {
+    const metade = alocarSolicitacao(7, [{ idParto: 10, machos: 1, femeas: 1 }], tecnica)
+
+    await expect(metade).rejects.toEqual(recusa(409, 'PEDIDO_INCOMPLETO'))
+    await expect(metade).rejects.toThrow('faltam 1 macho e 1 femea')
+    expect(banco.transacoes).toBe(0)
+    expect(avisarPedidoDecidido).not.toHaveBeenCalled()
+  })
+
+  it('o de qualquer sexo vem como macho ou femea, mas tem de vir', async () => {
+    banco.solicitacao = { qtdM: 1, qtdF: 1, qtdQualquer: 2 }
+
     await expect(
-      alocarSolicitacao(7, [{ idParto: 10, machos: 1, femeas: 1 }], tecnica),
-    ).resolves.toEqual({ idSolicitacao: 7, status: 'aprovada' })
+      alocarSolicitacao(7, [{ idParto: 10, machos: 2, femeas: 1 }], tecnica),
+    ).rejects.toThrow('falta 1 de qualquer sexo')
+    await expect(
+      alocarSolicitacao(7, [{ idParto: 10, machos: 3, femeas: 1 }], tecnica),
+    ).resolves.toMatchObject({ status: 'aprovada' })
   })
 
   it('avisa quem pediu, sem motivo, depois de gravar', async () => {
-    await alocarSolicitacao(7, [{ idParto: 10, machos: 1, femeas: 1 }], tecnica)
+    await alocarSolicitacao(7, inteiro, tecnica)
 
     expect(avisarPedidoDecidido).toHaveBeenCalledWith(
       'paula@ufsc.br',
@@ -213,9 +223,7 @@ describe('alocacao', () => {
   it('nao avisa quando a alocacao nao grava', async () => {
     banco.aprovadas = 0
 
-    await expect(
-      alocarSolicitacao(7, [{ idParto: 10, machos: 1, femeas: 1 }], tecnica),
-    ).rejects.toBeDefined()
+    await expect(alocarSolicitacao(7, inteiro, tecnica)).rejects.toBeDefined()
     expect(avisarPedidoDecidido).not.toHaveBeenCalled()
   })
 
@@ -223,9 +231,7 @@ describe('alocacao', () => {
     vi.mocked(avisarPedidoDecidido).mockRejectedValueOnce(new Error('Brevo fora do ar'))
     const log = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    await expect(
-      alocarSolicitacao(7, [{ idParto: 10, machos: 1, femeas: 1 }], tecnica),
-    ).resolves.toEqual({ idSolicitacao: 7, status: 'aprovada' })
+    await expect(alocarSolicitacao(7, inteiro, tecnica)).resolves.toEqual({ idSolicitacao: 7, status: 'aprovada' })
     await vi.waitFor(() => expect(log).toHaveBeenCalled())
     log.mockRestore()
   })
