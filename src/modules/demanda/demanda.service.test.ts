@@ -202,6 +202,7 @@ describe('lista de solicitacoes', () => {
       observacoes: 'Machos do mesmo parto.',
       status: 'enviada',
       motivoRecusa: null,
+      reservaEmFalta: null,
     })
     expect(solicitacoes[1]?.observacoes).toBeNull()
   })

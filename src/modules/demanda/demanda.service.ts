@@ -6,6 +6,7 @@ import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
+import { ACAO_DEVOLUCAO, devolvidosDesde, faltaDosPedidos } from './devolucao.service.ts'
 import { SITUACAO_DO_PROJETO } from './projeto.service.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
 import {
@@ -61,9 +62,17 @@ export async function recusarSemResposta(agora: Date = new Date()): Promise<numb
     select: { id: true },
   })
 
+  // o pedido devolvido para analise conta o prazo da devolucao, e nao do dia em que foi feito
+  const devolvidos = await devolvidosDesde(
+    vencidas.map((vencida) => vencida.id),
+    limite,
+  )
+
   let recusadas = 0
 
   for (const { id } of vencidas) {
+    if (devolvidos.has(id)) continue
+
     try {
       // ninguem da equipe recusou: o historico grava sem usuario e a tela mostra "Sistema"
       await recusarSolicitacao(id, MOTIVO_SEM_RESPOSTA, null)
@@ -91,20 +100,31 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
   const decisoes = await prisma.historico.findMany({
     where: {
       entidade: 'solicitacao',
-      acao: { in: ['alocacao', 'recusa'] },
+      acao: { in: ['alocacao', 'recusa', ACAO_DEVOLUCAO] },
       idEntidade: { in: solicitacoes.map((s) => s.id) },
     },
     orderBy: { dtHora: 'asc' },
     select: { idEntidade: true, acao: true, dtHora: true, dados: true },
   })
 
-  const decisao = (id: number, acao: 'alocacao' | 'recusa') =>
-    decisoes.find((d) => d.idEntidade === id && d.acao === acao)
+  // a mais recente: o pedido devolvido para analise pode ser alocado de novo
+  const decisao = (id: number, acao: 'alocacao' | 'recusa' | typeof ACAO_DEVOLUCAO) =>
+    decisoes.filter((d) => d.idEntidade === id && d.acao === acao).at(-1)
 
   const dataDa = (id: number, acao: 'alocacao' | 'recusa') => {
     const encontrada = decisao(id, acao)
-    return encontrada ? hojeISO(encontrada.dtHora) : null
+    const devolucao = decisao(id, ACAO_DEVOLUCAO)
+    // o aceite de antes da devolucao para analise nao vale mais
+    if (encontrada === undefined || (devolucao !== undefined && devolucao.dtHora > encontrada.dtHora)) {
+      return null
+    }
+    return hojeISO(encontrada.dtHora)
   }
+
+  /** o prazo de resposta conta do pedido, ou da ultima devolucao para analise */
+  const inicioDoPrazo = (id: number, dtCriacao: Date) => decisao(id, ACAO_DEVOLUCAO)?.dtHora ?? dtCriacao
+
+  const faltas = await faltaDosPedidos(solicitacoes.filter((s) => s.status === 'AP').map((s) => s.id))
 
   const motivoDaRecusa = (id: number) => {
     const dados = decisao(id, 'recusa')?.dados
@@ -117,7 +137,10 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
     solicitacoes: solicitacoes.map((s) => ({
       id: s.id,
       dataSolicitacao: hojeISO(s.dtCriacao),
-      prazoResposta: s.status === 'EN' ? somarDias(hojeISO(s.dtCriacao), PRAZO_DE_RESPOSTA_EM_DIAS) : null,
+      prazoResposta:
+        s.status === 'EN'
+          ? somarDias(hojeISO(inicioDoPrazo(s.id, s.dtCriacao)), PRAZO_DE_RESPOSTA_EM_DIAS)
+          : null,
       dataAceite: dataDa(s.id, 'alocacao'),
       dataRecusa: s.status === 'RE' ? dataDa(s.id, 'recusa') : null,
       protocoloCeua: s.protocoloCeua,
@@ -136,6 +159,8 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
       observacoes: s.observacoes,
       status: statusSolicitacao.paraApi(s.status),
       motivoRecusa: s.status === 'RE' ? motivoDaRecusa(s.id) : null,
+      /** pedido aceito cuja ninhada ficou com menos animais do que o reservado: quanto pode faltar */
+      reservaEmFalta: faltas.get(s.id) ?? null,
     })),
   }
 }

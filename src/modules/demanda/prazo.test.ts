@@ -7,6 +7,8 @@ const banco = vi.hoisted(() => ({
   consultaDasVencidas: undefined as unknown,
   lista: [] as unknown[],
   decisoes: [] as unknown[],
+  consultaDasDevolucoes: undefined as unknown,
+  reservas: [] as unknown[],
   jaDecididas: [] as number[],
   historico: [] as Record<string, unknown>[],
   avisos: [] as { email: string; dataPedido: string; motivo: string | undefined }[],
@@ -61,7 +63,13 @@ vi.mock('../../shared/prisma.ts', () => {
         },
         findUnique: async ({ where }: { where: { id: number } }) => pedido(where.id),
       },
-      historico: { findMany: async () => banco.decisoes },
+      historico: {
+        findMany: async (consulta: { where: { acao?: unknown } }) => {
+          if (consulta.where.acao === 'devolucao') banco.consultaDasDevolucoes = consulta
+          return banco.decisoes
+        },
+      },
+      compromisso: { findMany: async () => banco.reservas },
       $transaction: async (passos: (cliente: typeof tx) => Promise<unknown>) => passos(tx),
     },
   }
@@ -71,6 +79,8 @@ beforeEach(() => {
   banco.vencidas = []
   banco.lista = []
   banco.decisoes = []
+  banco.consultaDasDevolucoes = undefined
+  banco.reservas = []
   banco.jaDecididas = []
   banco.historico = []
   banco.avisos = []
@@ -105,6 +115,18 @@ describe('pedido sem resposta em 14 dias', () => {
         { email: 'pessoa1@ufsc.br', dataPedido: '2026-10-31', motivo: MOTIVO_SEM_RESPOSTA },
       ]),
     )
+  })
+
+  it('o pedido devolvido para analise ha menos de 14 dias nao e recusado: o prazo recomeca na devolucao', async () => {
+    banco.vencidas = [{ id: 1 }, { id: 2 }]
+    banco.decisoes = [{ idEntidade: 1 }]
+
+    expect(await recusarSemResposta(agora)).toBe(1)
+
+    expect(banco.consultaDasDevolucoes).toMatchObject({
+      where: { acao: 'devolucao', idEntidade: { in: [1, 2] }, dtHora: { gt: new Date('2026-11-06T15:00:00.000Z') } },
+    })
+    expect(banco.historico.map((registro) => registro.idEntidade)).toEqual([2])
   })
 
   it('pula o pedido que alguem decidiu no meio do caminho, sem e-mail', async () => {
@@ -154,5 +176,44 @@ describe('datas na lista de solicitacoes', () => {
       { dataSolicitacao: '2026-10-31', prazoResposta: null, dataAceite: null, dataRecusa: '2026-11-04' },
     ])
     expect(solicitacoes[2]?.motivoRecusa).toBe('Sem Wistar')
+  })
+
+  it('o pedido devolvido para analise conta o prazo da devolucao e perde a data do aceite antigo', async () => {
+    banco.lista = [linha(1, 'EN')]
+    banco.decisoes = [
+      { idEntidade: 1, acao: 'alocacao', dtHora: new Date('2026-11-03T13:00:00.000Z'), dados: {} },
+      { idEntidade: 1, acao: 'devolucao', dtHora: new Date('2026-11-10T13:00:00.000Z'), dados: {} },
+    ]
+
+    const [devolvido] = (await listarSolicitacoes(tecnica)).solicitacoes
+
+    expect(devolvido).toMatchObject({ prazoResposta: '2026-11-24', dataAceite: null })
+  })
+
+  it('o pedido aceito diz quanto falta quando a ninhada reservada ficou com menos animais', async () => {
+    banco.lista = [linha(2, 'AP'), linha(4, 'AP')]
+    banco.reservas = [
+      {
+        id: 70,
+        qtdM: 2,
+        qtdF: 0,
+        remessa: { idSolicitacao: 2 },
+        parto: {
+          ordem: 1,
+          nascidoM: 3,
+          nascidoF: 3,
+          eutanasiadoM: null,
+          eutanasiadoF: null,
+          desmamadoM: 1,
+          desmamadoF: 3,
+          compromissos: [{ qtdM: 2, qtdF: 0, remessa: { idSolicitacao: 2 } }],
+          casal: { idCaixa: 3, caixa: { codigo: 'A1B' } },
+        },
+      },
+    ]
+
+    const { solicitacoes } = await listarSolicitacoes(tecnica)
+
+    expect(solicitacoes.map((s) => s.reservaEmFalta)).toEqual([{ m: 1, f: 0 }, null])
   })
 })
