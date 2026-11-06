@@ -20,7 +20,6 @@ import {
   calcularGrauCerteza,
   compromissosAtivos,
   disponibilidadeDoParto,
-  partoNaoVaiAcontecer,
 } from '../reproducao/disponibilidade.ts'
 
 /** O pesquisador so ve os proprios pedidos e os proprios projetos; tecnico e gestor veem todos */
@@ -353,7 +352,6 @@ export async function alocarSolicitacao(
         select: {
           idCaixa: true,
           idLinhagem: true,
-          ativo: true,
           caixa: { select: { ativa: true, estado: true } },
           linhagem: { select: { idEspecie: true } },
         },
@@ -384,10 +382,10 @@ export async function alocarSolicitacao(
       )
     }
 
-    if (partoNaoVaiAcontecer(parto, parto.casal)) {
+    if (parto.dtPartoReal === null) {
       throw erroDeRegra(
         'DISPONIBILIDADE_EXCEDIDA',
-        `O casal do ${parto.ordem}o parto foi encerrado e esse parto nao vai acontecer.`,
+        `O ${parto.ordem}o parto da caixa ainda nao nasceu: so da para reservar animal que ja existe.`,
       )
     }
 

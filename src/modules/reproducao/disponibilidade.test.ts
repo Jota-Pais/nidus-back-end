@@ -32,9 +32,9 @@ const confirmado = ciclo({
 })
 
 describe('os tres niveis do COALESCE', () => {
-  it('projetado: nada nasceu, a oferta e a expectativa', () => {
+  it('nada nasceu: nao ha animal nenhum', () => {
     expect(calcularGrauCerteza(projetado)).toBe('J')
-    expect(ofertaBruta(projetado)).toEqual({ m: 4, f: 4 })
+    expect(ofertaBruta(projetado)).toEqual({ m: 0, f: 0 })
   })
 
   it('previsto: nasceu, a oferta e nascido menos eutanasiado', () => {
@@ -103,13 +103,13 @@ describe('disponibilidade liquida', () => {
   })
 
   it('sem compromisso, disponivel e a oferta inteira', () => {
-    expect(calcularDisponibilidade(projetado, nada).disponivel).toEqual({ m: 4, f: 4 })
+    expect(calcularDisponibilidade(previsto, nada).disponivel).toEqual({ m: 4, f: 4 })
   })
 })
 
 describe('disponibilidade do parto lido do banco', () => {
   it('soma os compromissos do parto e desconta da oferta', () => {
-    const parto = { ...projetado, compromissos: [{ qtdM: 2, qtdF: 1 }, { qtdM: 1, qtdF: 1 }] }
+    const parto = { ...previsto, compromissos: [{ qtdM: 2, qtdF: 1 }, { qtdM: 1, qtdF: 1 }] }
 
     expect(disponibilidadeDoParto(parto).comprometido).toEqual({ m: 3, f: 2 })
     expect(disponibilidadeDoParto(parto).disponivel).toEqual({ m: 1, f: 2 })

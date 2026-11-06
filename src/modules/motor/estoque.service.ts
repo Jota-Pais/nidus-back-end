@@ -1,14 +1,12 @@
 import { prisma } from '../../shared/prisma.ts'
-import { dataISO } from '../../shared/traducao.ts'
 import { idDaEspecie } from '../infra/infra.service.ts'
 import { compromissosAtivos, disponibilidadeDoParto } from '../reproducao/disponibilidade.ts'
 import type { PorSexo } from '../reproducao/disponibilidade.ts'
 
-type Faixa = 'confirmado' | 'previsto' | 'projetado'
+type Faixa = 'confirmado' | 'previsto'
 
 export type PartoDoEstoque = {
   dtPartoReal: Date | null
-  dtPartoPrevisto: Date
   nascidoM: number | null
   nascidoF: number | null
   eutanasiadoM: number | null
@@ -16,13 +14,13 @@ export type PartoDoEstoque = {
   desmamadoM: number | null
   desmamadoF: number | null
   compromissos: { qtdM: number; qtdF: number }[]
-  casal: { idLinhagem: number; ativo: boolean }
+  casal: { idLinhagem: number }
 }
 
 function faixaDo(parto: PartoDoEstoque): Faixa | null {
   if (parto.desmamadoM !== null && parto.desmamadoF !== null) return 'confirmado'
   if (parto.nascidoM !== null && parto.nascidoF !== null) return 'previsto'
-  return parto.casal.ativo ? 'projetado' : null
+  return null
 }
 
 const somar = (a: PorSexo, b: PorSexo): PorSexo => ({ m: a.m + b.m, f: a.f + b.f })
@@ -33,8 +31,7 @@ export function montarEstoque(
 ) {
   return linhagens.map((linhagem) => {
     const vazio = { m: 0, f: 0 }
-    const faixas: Record<Faixa, PorSexo> = { confirmado: vazio, previsto: vazio, projetado: vazio }
-    let proximoParto: string | null = null
+    const faixas: Record<Faixa, PorSexo> = { confirmado: vazio, previsto: vazio }
 
     for (const parto of partos) {
       if (parto.casal.idLinhagem !== linhagem.id) continue
@@ -43,19 +40,13 @@ export function montarEstoque(
       if (faixa === null) continue
 
       faixas[faixa] = somar(faixas[faixa], disponibilidadeDoParto(parto).disponivel)
-
-      if (faixa === 'projetado') {
-        const previsto = dataISO(parto.dtPartoPrevisto)
-        if (proximoParto === null || previsto < proximoParto) proximoParto = previsto
-      }
     }
 
     return {
       idLinhagem: linhagem.id,
       linhagem: linhagem.nome,
       ...faixas,
-      total: somar(somar(faixas.confirmado, faixas.previsto), faixas.projetado),
-      proximoParto,
+      total: somar(faixas.confirmado, faixas.previsto),
     }
   })
 }
@@ -73,7 +64,6 @@ export async function consultarEstoque(codigoEspecie: string) {
       where: { casal: { caixa: { idEspecie, ativa: true, estado: { in: ['R', 'P', 'E'] } } } },
       select: {
         dtPartoReal: true,
-        dtPartoPrevisto: true,
         nascidoM: true,
         nascidoF: true,
         eutanasiadoM: true,
@@ -81,7 +71,7 @@ export async function consultarEstoque(codigoEspecie: string) {
         desmamadoM: true,
         desmamadoF: true,
         compromissos: compromissosAtivos,
-        casal: { select: { idLinhagem: true, ativo: true } },
+        casal: { select: { idLinhagem: true } },
       },
     }),
   ])

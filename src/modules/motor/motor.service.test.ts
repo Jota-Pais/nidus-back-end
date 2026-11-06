@@ -86,8 +86,8 @@ describe('faixa de idade na busca', () => {
   })
 })
 
-describe('casal encerrado na busca', () => {
-  it('oferece a ninhada que ja nasceu, mas nao o parto previsto que nao vai acontecer', async () => {
+describe('so o que ja nasceu entra na busca', () => {
+  it('oferece a ninhada que ja nasceu, mas nao o parto previsto', async () => {
     banco.caixas = [caixa(1, 30, { ativo: false }), caixa(2, 30, { ativo: false, nasceu: false })]
 
     const busca = await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
@@ -95,12 +95,12 @@ describe('casal encerrado na busca', () => {
     expect(busca.candidatas.map((c) => c.idCaixa)).toEqual([1])
   })
 
-  it('o parto previsto de casal ativo continua sendo oferecido', async () => {
+  it('o parto previsto de casal ativo tambem nao entra: ainda nao tem animal', async () => {
     banco.caixas = [caixa(1, 30, { nasceu: false })]
 
     const busca = await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
 
-    expect(busca.candidatas.map((c) => c.origem)).toEqual(['previsao_parto'])
+    expect(busca.candidatas).toEqual([])
   })
 })
 

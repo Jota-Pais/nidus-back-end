@@ -1,7 +1,5 @@
 // Quanto um parto tem para oferecer, e com que confiança
 
-import { ESPERADOS_POR_CASAL } from '../../shared/parametros.ts'
-
 /** Quantidade por sexo. É como a API conta animal em todo lugar. */
 export type PorSexo = {
   m: number
@@ -36,8 +34,8 @@ export function calcularGrauCerteza(ciclo: ContagemDoCiclo): 'C' | 'P' | 'J' {
 }
 
 /**
- * A oferta BRUTA do parto - o COALESCE de três níveis, sem descontar nada. Parto que ainda
- * não nasceu oferece o esperado por casal (4M/4F)
+ * A oferta BRUTA do parto, sem descontar nada: só o que existe. Parto que ainda não nasceu
+ * não tem animal nenhum
  */
 export function ofertaBruta(ciclo: ContagemDoCiclo): PorSexo {
   if (ciclo.desmamadoM !== null && ciclo.desmamadoF !== null) {
@@ -52,7 +50,7 @@ export function ofertaBruta(ciclo: ContagemDoCiclo): PorSexo {
     }
   }
 
-  return { m: ESPERADOS_POR_CASAL.m, f: ESPERADOS_POR_CASAL.f }
+  return { m: 0, f: 0 }
 }
 
 export type Disponibilidade = {
@@ -103,11 +101,4 @@ export function disponibilidadeDoParto(parto: PartoComCompromissos): Disponibili
   )
 
   return calcularDisponibilidade(parto, comprometido)
-}
-
-export function partoNaoVaiAcontecer(
-  parto: { dtPartoReal: Date | null },
-  casal: { ativo: boolean },
-): boolean {
-  return !casal.ativo && parto.dtPartoReal === null
 }

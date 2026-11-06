@@ -1,11 +1,15 @@
 // O que o kanban e a grade mostram do casal de uma caixa, como na spec do cliente
-// (secao 1.13): a identificacao, o parto atual (a bolinha colorida) e o proximo parto
-// previsto (o "P:dd/mm")
+// (secao 1.13): a identificacao, o parto atual (a bolinha colorida), o proximo parto
+// previsto (o "P:dd/mm") e os animais que existem na caixa, por ninhada e com a idade
 
 import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
-import { dataISO } from '../../shared/traducao.ts'
+import { dataISO, hojeISO } from '../../shared/traducao.ts'
+import { ofertaBruta } from '../reproducao/disponibilidade.ts'
+import type { ContagemDoCiclo } from '../reproducao/disponibilidade.ts'
 
-type PartoDoCard = { dtPartoPrevisto: Date; dtPartoReal: Date | null }
+type DatasDoParto = { dtPartoPrevisto: Date; dtPartoReal: Date | null }
+
+type PartoDoCard = DatasDoParto & ContagemDoCiclo & { ordem: number }
 
 type CasalDoCard = {
   identificacao: string
@@ -15,19 +19,39 @@ type CasalDoCard = {
 }
 
 /** Partos com data real confirmada. Com 0 ou 1 confirmado e 1, e nunca passa de 5 */
-export function partoAtual(partos: PartoDoCard[]): number {
+export function partoAtual(partos: DatasDoParto[]): number {
   const confirmados = partos.filter((parto) => parto.dtPartoReal !== null).length
   return Math.max(1, Math.min(confirmados, MAX_PARTOS_POR_CASAL))
 }
 
 /** A previsao do primeiro parto ainda sem data real, ou null quando nao ha pendente */
-export function partoPrevisto(partos: PartoDoCard[]): string | null {
+export function partoPrevisto(partos: DatasDoParto[]): string | null {
   const pendente = partos.find((parto) => parto.dtPartoReal === null)
   return pendente === undefined ? null : dataISO(pendente.dtPartoPrevisto)
 }
 
+function diasEntre(de: string, ate: string): number {
+  return Math.round((Date.parse(`${ate}T00:00:00Z`) - Date.parse(`${de}T00:00:00Z`)) / 86_400_000)
+}
+
+/** As ninhadas que ja nasceram, com o que existe de cada uma e a idade de hoje */
+export function ninhadas(partos: PartoDoCard[], hoje: string) {
+  return partos.flatMap((parto) => {
+    if (parto.dtPartoReal === null) return []
+
+    const nascimento = dataISO(parto.dtPartoReal)
+    const { m, f } = ofertaBruta(parto)
+
+    return [{ parto: parto.ordem, m, f, idadeDias: diasEntre(nascimento, hoje) }]
+  })
+}
+
 /** null sem casal, ou com casal encerrado que nao deixou ninhada ou cuja caixa ja foi enviada */
-export function casalNoCard(casal: CasalDoCard | undefined, estado: string) {
+export function casalNoCard(
+  casal: CasalDoCard | undefined,
+  estado: string,
+  hoje: string = hojeISO(),
+) {
   if (casal === undefined) return null
 
   const temNinhada = casal.partos.some((parto) => parto.dtPartoReal !== null)
@@ -38,6 +62,7 @@ export function casalNoCard(casal: CasalDoCard | undefined, estado: string) {
     partoAtual: partoAtual(casal.partos),
     partoPrevisto: casal.ativo ? partoPrevisto(casal.partos) : null,
     encerrado: !casal.ativo,
+    ninhadas: ninhadas(casal.partos, hoje),
   }
 }
 
@@ -51,7 +76,17 @@ export const selecaoDoCasalNoCard = {
     linhagem: { select: { nome: true } },
     partos: {
       orderBy: { ordem: 'asc' as const },
-      select: { dtPartoPrevisto: true, dtPartoReal: true },
+      select: {
+        ordem: true,
+        dtPartoPrevisto: true,
+        dtPartoReal: true,
+        nascidoM: true,
+        nascidoF: true,
+        eutanasiadoM: true,
+        eutanasiadoF: true,
+        desmamadoM: true,
+        desmamadoF: true,
+      },
     },
   },
 }

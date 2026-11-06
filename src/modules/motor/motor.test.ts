@@ -37,12 +37,9 @@ const candidata = (id: number, origem: Candidata['origem'], idade: number, m: nu
 const exata = (idade: number) => ({ min: idade, max: idade })
 
 describe('ordem das candidatas', () => {
-  it('de fato antes de previsao, previsao antes de previsao de parto', () => {
-    const ordem = ordenar(
-      [candidata(1, 'previsao_parto', 28, 4, 4), candidata(2, 'previsao', 28, 4, 4), candidata(3, 'de_fato', 30, 4, 4)],
-      exata(28),
-    )
-    expect(ordem.map((c) => c.idCaixa)).toEqual([3, 2, 1])
+  it('de fato antes de previsao', () => {
+    const ordem = ordenar([candidata(2, 'previsao', 28, 4, 4), candidata(3, 'de_fato', 30, 4, 4)], exata(28))
+    expect(ordem.map((c) => c.idCaixa)).toEqual([3, 2])
   })
 
   it('no mesmo grupo, a idade mais proxima da pedida vem primeiro', () => {

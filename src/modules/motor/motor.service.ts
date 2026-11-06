@@ -1,6 +1,5 @@
-// A busca de atendimento lida do banco: caixas da especie que ja tiveram casal, os partos de
-// cada casal (os confirmados e o proximo, que e o que existe na tabela) e o que cada um ainda
-// tem livre. So entram partos com a idade na entrega dentro da faixa aceita do pedido
+// A busca de atendimento lida do banco: caixas da especie que ja tiveram casal, os partos que
+// ja nasceram e o que cada um ainda tem livre. So entram partos com a idade na entrega dentro da faixa aceita do pedido
 
 import { ALEITAMENTO_DIAS, GESTACAO_DIAS } from '../../shared/parametros.ts'
 import { prisma } from '../../shared/prisma.ts'
@@ -11,7 +10,6 @@ import { somarDias } from '../reproducao/cadeiaTemporal.ts'
 import {
   compromissosAtivos,
   disponibilidadeDoParto,
-  partoNaoVaiAcontecer,
 } from '../reproducao/disponibilidade.ts'
 import { casaisParaODeficit, faixaDoPedido, ordenar, sugerirAlocacao } from './motor.ts'
 import type { Origem } from './motor.ts'
@@ -64,13 +62,11 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
         where: pedido.idLinhagem === undefined ? {} : { idLinhagem: pedido.idLinhagem },
         select: {
           identificacao: true,
-          ativo: true,
           partos: {
             orderBy: { ordem: 'asc' },
             select: {
               id: true,
               ordem: true,
-              dtPartoPrevisto: true,
               dtPartoReal: true,
               dtDesmameReal: true,
               nascidoM: true,
@@ -93,9 +89,9 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
   const candidatas = caixas.flatMap((caixa) =>
     caixa.casais.flatMap((casal) =>
       casal.partos.flatMap((parto) => {
-        if (partoNaoVaiAcontecer(parto, casal)) return []
+        if (parto.dtPartoReal === null) return []
 
-        const nascimento = dataISO(parto.dtPartoReal ?? parto.dtPartoPrevisto)
+        const nascimento = dataISO(parto.dtPartoReal)
         const idadeNaEntrega = diasEntre(nascimento, referencia)
         if (idadeNaEntrega < faixa.min || idadeNaEntrega > faixa.max) return []
 
@@ -108,11 +104,7 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
         const { disponivel } = disponibilidadeDoParto(parto)
         if (disponivel.m + disponivel.f === 0) return []
 
-        const origem: Origem = parto.dtDesmameReal
-          ? 'de_fato'
-          : parto.dtPartoReal
-            ? 'previsao'
-            : 'previsao_parto'
+        const origem: Origem = parto.dtDesmameReal ? 'de_fato' : 'previsao'
 
         return [
           {

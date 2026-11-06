@@ -132,9 +132,8 @@ describe('alocacao', () => {
     ).rejects.toEqual(recusa(409, 'DISPONIBILIDADE_EXCEDIDA'))
   })
 
-  it('parto que nao nasceu de casal encerrado e recusado', async () => {
-    const naoNasceu = { ...parto(3), nascidoM: null, nascidoF: null, dtPartoReal: null }
-    banco.partos = [{ ...naoNasceu, casal: { ...naoNasceu.casal, ativo: false } }]
+  it('parto que ainda nao nasceu e recusado, mesmo de casal ativo', async () => {
+    banco.partos = [{ ...parto(3), nascidoM: null, nascidoF: null, dtPartoReal: null }]
 
     await expect(
       alocarSolicitacao(7, [{ idParto: 10, machos: 1, femeas: 1 }], tecnica),

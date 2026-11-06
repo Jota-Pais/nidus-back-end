@@ -5,10 +5,10 @@
 import { ESPERADOS_POR_CASAL, FAIXAS_IDADE } from '../../shared/parametros.ts'
 import type { PorSexo } from '../reproducao/disponibilidade.ts'
 
-/** De onde vem o animal: ja desmamado, ja nascido, ou parto ainda previsto */
-export type Origem = 'de_fato' | 'previsao' | 'previsao_parto'
+/** De onde vem o animal: ja desmamado ou ja nascido */
+export type Origem = 'de_fato' | 'previsao'
 
-const PRIORIDADE: Record<Origem, number> = { de_fato: 0, previsao: 1, previsao_parto: 2 }
+const PRIORIDADE: Record<Origem, number> = { de_fato: 0, previsao: 1 }
 
 /** O que o pedido quer: machos, femeas e animais de qualquer sexo */
 export type Pedido = PorSexo & { qualquer: number }
