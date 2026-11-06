@@ -58,14 +58,15 @@ export async function recusarSemResposta(agora: Date = new Date()): Promise<numb
   const limite = new Date(agora.getTime() - PRAZO_DE_RESPOSTA_EM_DIAS * 24 * 60 * 60 * 1000)
   const vencidas = await prisma.solicitacao.findMany({
     where: { status: 'EN', dtCriacao: { lte: limite } },
-    select: { id: true, idUsuarioSolicitante: true },
+    select: { id: true },
   })
 
   let recusadas = 0
 
-  for (const { id, idUsuarioSolicitante } of vencidas) {
+  for (const { id } of vencidas) {
     try {
-      await recusarSolicitacao(id, MOTIVO_SEM_RESPOSTA, idUsuarioSolicitante)
+      // ninguem da equipe recusou: o historico grava sem usuario e a tela mostra "Sistema"
+      await recusarSolicitacao(id, MOTIVO_SEM_RESPOSTA, null)
       recusadas += 1
     } catch (erro) {
       if (!(erro instanceof ErroDeAplicacao)) throw erro
@@ -511,7 +512,8 @@ export async function registrarEntrega(
   return { idSolicitacao, status: statusSolicitacao.paraApi('CO'), dtEntrega }
 }
 
-export async function recusarSolicitacao(idSolicitacao: number, motivo: string, idUsuario: number) {
+/** idUsuario null quando a recusa e automatica, sem ninguem da equipe por tras */
+export async function recusarSolicitacao(idSolicitacao: number, motivo: string, idUsuario: number | null) {
   const solicitacao = await prisma.solicitacao.findUnique({
     where: { id: idSolicitacao },
     include: PARA_O_AVISO,

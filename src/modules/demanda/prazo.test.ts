@@ -3,7 +3,7 @@ import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { listarSolicitacoes, MOTIVO_SEM_RESPOSTA, recusarSemResposta } from './demanda.service.ts'
 
 const banco = vi.hoisted(() => ({
-  vencidas: [] as { id: number; idUsuarioSolicitante: number }[],
+  vencidas: [] as { id: number }[],
   consultaDasVencidas: undefined as unknown,
   lista: [] as unknown[],
   decisoes: [] as unknown[],
@@ -87,14 +87,14 @@ describe('pedido sem resposta em 14 dias', () => {
     })
   })
 
-  it('recusa, guarda o motivo no historico e avisa quem pediu por e-mail', async () => {
-    banco.vencidas = [{ id: 1, idUsuarioSolicitante: 31 }]
+  it('recusa em nome do sistema, guarda o motivo no historico e avisa quem pediu por e-mail', async () => {
+    banco.vencidas = [{ id: 1 }]
 
     expect(await recusarSemResposta(agora)).toBe(1)
 
     expect(banco.historico).toEqual([
       expect.objectContaining({
-        idUsuario: 31,
+        idUsuario: null,
         idEntidade: 1,
         acao: 'recusa',
         dados: { motivo: MOTIVO_SEM_RESPOSTA },
@@ -108,10 +108,7 @@ describe('pedido sem resposta em 14 dias', () => {
   })
 
   it('pula o pedido que alguem decidiu no meio do caminho, sem e-mail', async () => {
-    banco.vencidas = [
-      { id: 1, idUsuarioSolicitante: 31 },
-      { id: 2, idUsuarioSolicitante: 32 },
-    ]
+    banco.vencidas = [{ id: 1 }, { id: 2 }]
     banco.jaDecididas = [1]
 
     expect(await recusarSemResposta(agora)).toBe(1)

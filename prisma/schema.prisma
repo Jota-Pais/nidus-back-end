@@ -411,7 +411,9 @@ model Compromisso {
 
 model Historico {
   id         Int      @id @default(autoincrement())
-  idUsuario  Int      @map("id_usuario")
+  /// Nulo quando foi o proprio sistema, sem ninguem da equipe por tras (a
+  /// recusa do pedido sem resposta). A tela mostra "Sistema".
+  idUsuario  Int?     @map("id_usuario")
   dtHora     DateTime @default(now()) @map("dt_hora") @db.Timestamptz(6)
   entidade   String   @db.VarChar(20)
   idEntidade Int      @map("id_entidade")
@@ -419,7 +421,7 @@ model Historico {
   descricao  String   @db.VarChar(300)
   dados      Json?
 
-  usuario Usuario @relation(fields: [idUsuario], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario Usuario? @relation(fields: [idUsuario], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([entidade, idEntidade])
   @@index([dtHora])

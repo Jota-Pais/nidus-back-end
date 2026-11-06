@@ -3,8 +3,12 @@ import { prisma } from '../../shared/prisma.ts'
 
 type BancoComHistorico = Pick<Prisma.TransactionClient, 'historico'>
 
+/** Nome mostrado em "Quem" quando nao ha pessoa por tras da acao */
+export const NOME_DO_SISTEMA = 'Sistema'
+
 export type Alteracao = {
-  idUsuario: number
+  /** null so quando foi o proprio sistema. Obrigatorio para nenhuma acao ficar sem dono por esquecimento */
+  idUsuario: number | null
   entidade: 'caixa' | 'casal' | 'parto' | 'solicitacao' | 'usuario' | 'projeto' | 'linhagem' | 'estante'
   idEntidade: number
   acao: string
@@ -43,6 +47,8 @@ export async function listarHistorico(filtro: FiltroDoHistorico) {
             OR: [
               { descricao: { contains: filtro.busca, mode: 'insensitive' as const } },
               { usuario: { nome: { contains: filtro.busca, mode: 'insensitive' as const } } },
+              // quem busca por "Sistema" acha o que o sistema fez, como na coluna Quem
+              ...(NOME_DO_SISTEMA.toLowerCase().includes(filtro.busca.toLowerCase()) ? [{ idUsuario: null }] : []),
             ],
           }),
     },
@@ -55,7 +61,7 @@ export async function listarHistorico(filtro: FiltroDoHistorico) {
     historico: registros.map((registro) => ({
       id: registro.id,
       dataHora: registro.dtHora.toISOString(),
-      usuario: registro.usuario.nome,
+      usuario: registro.usuario?.nome ?? NOME_DO_SISTEMA,
       entidade: registro.entidade,
       idEntidade: registro.idEntidade,
       acao: registro.acao,
