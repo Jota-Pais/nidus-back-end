@@ -183,6 +183,8 @@ export type ResumoDoPedido = {
   idadeMax: number
   /** AAAA-MM-DD */
   dataEntrega: string
+  /** AAAA-MM-DD */
+  dataPedido: string
 }
 
 const plural = (n: number, singular: string, flexao: string) =>
@@ -201,8 +203,10 @@ function linhasDoResumo(pedido: ResumoDoPedido): string[] {
       ? `${pedido.idadeMin} dias`
       : `de ${pedido.idadeMin} a ${pedido.idadeMax} dias`
   const [ano, mes, dia] = pedido.dataEntrega.split('-')
+  const [anoDoPedido, mesDoPedido, diaDoPedido] = pedido.dataPedido.split('-')
 
   return [
+    `Data do pedido: ${diaDoPedido}/${mesDoPedido}/${anoDoPedido}`,
     `Protocolo CEUA: ${pedido.protocoloCeua}`,
     `Linhagem: ${pedido.linhagem}`,
     `Animais: ${animais.join(', ')}`,

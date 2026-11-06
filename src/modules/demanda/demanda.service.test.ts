@@ -187,6 +187,7 @@ describe('lista de solicitacoes', () => {
     regime: 'U',
     status: 'EN',
     observacoes: 'Machos do mesmo parto.',
+    dtCriacao: new Date('2026-11-05T13:00:00.000Z'),
     projeto: { numero: PROTOCOLO },
     usuarioSolicitante: { email: 'paula@ufsc.br' },
     especie: { nome: 'Rato' },
@@ -200,6 +201,10 @@ describe('lista de solicitacoes', () => {
 
     expect(solicitacoes[0]).toEqual({
       id: 5,
+      dataSolicitacao: '2026-11-05',
+      prazoResposta: '2026-11-19',
+      dataAceite: null,
+      dataRecusa: null,
       protocoloCeua: PROTOCOLO,
       pesquisador: 'Paula Lima',
       email: 'paula@ufsc.br',

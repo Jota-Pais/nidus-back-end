@@ -35,6 +35,7 @@ vi.mock('../../shared/prisma.ts', () => ({
         idadeMinDias: 28,
         idadeMaxDias: 28,
         dtDesejada: new Date('2026-12-01T00:00:00.000Z'),
+        dtCriacao: new Date('2026-11-05T13:00:00.000Z'),
         projeto: { numero: '23080.000001/2026-54' },
         linhagem: { nome: 'Wistar' },
         usuarioSolicitante: { email: 'paula@ufsc.br' },
@@ -169,6 +170,7 @@ describe('alocacao', () => {
         idadeMin: 28,
         idadeMax: 28,
         dataEntrega: '2026-12-01',
+        dataPedido: '2026-11-05',
       },
       undefined,
     )

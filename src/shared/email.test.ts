@@ -243,6 +243,7 @@ describe('aviso do pedido decidido', () => {
     idadeMin: 21,
     idadeMax: 28,
     dataEntrega: '2026-12-01',
+    dataPedido: '2026-11-05',
   }
 
   it('fora de production vai para o console, sem rede', async () => {
@@ -267,6 +268,7 @@ describe('aviso do pedido decidido', () => {
     expect(corpo.textContent).toContain('Animais: 2 machos, 1 fêmea')
     expect(corpo.textContent).toContain('Idade: de 21 a 28 dias')
     expect(corpo.textContent).toContain('Data de entrega: 01/12/2026')
+    expect(corpo.textContent).toContain('Data do pedido: 05/11/2026')
     expect(corpo.textContent).toContain('https://thenidus.vercel.app/solicitar')
     expect(corpo.textContent).not.toContain('Motivo')
   })

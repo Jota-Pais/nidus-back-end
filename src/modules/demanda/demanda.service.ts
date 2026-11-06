@@ -7,6 +7,7 @@ import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
 import { SITUACAO_DO_PROJETO } from './projeto.service.ts'
+import { somarDias } from '../reproducao/cadeiaTemporal.ts'
 import {
   codigoDaEspecie,
   cronograma,
@@ -54,6 +55,31 @@ export async function listarProjetos(usuario: UsuarioDaSessao, agora: Date = new
   }
 }
 
+export const PRAZO_DE_RESPOSTA_EM_DIAS = 14
+
+export const MOTIVO_SEM_RESPOSTA = `Recusado automaticamente: o CPMR nao respondeu em ${PRAZO_DE_RESPOSTA_EM_DIAS} dias.`
+
+export async function recusarSemResposta(agora: Date = new Date()): Promise<number> {
+  const limite = new Date(agora.getTime() - PRAZO_DE_RESPOSTA_EM_DIAS * 24 * 60 * 60 * 1000)
+  const vencidas = await prisma.solicitacao.findMany({
+    where: { status: 'EN', dtCriacao: { lte: limite } },
+    select: { id: true, idUsuarioSolicitante: true },
+  })
+
+  let recusadas = 0
+
+  for (const { id, idUsuarioSolicitante } of vencidas) {
+    try {
+      await recusarSolicitacao(id, MOTIVO_SEM_RESPOSTA, idUsuarioSolicitante)
+      recusadas += 1
+    } catch (erro) {
+      if (!(erro instanceof ErroDeAplicacao)) throw erro
+    }
+  }
+
+  return recusadas
+}
+
 /** GET /api/solicitacoes */
 export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
   const solicitacoes = await prisma.solicitacao.findMany({
@@ -67,17 +93,26 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
     },
   })
 
-  const recusas = await prisma.historico.findMany({
+  const decisoes = await prisma.historico.findMany({
     where: {
       entidade: 'solicitacao',
-      acao: 'recusa',
-      idEntidade: { in: solicitacoes.filter((s) => s.status === 'RE').map((s) => s.id) },
+      acao: { in: ['alocacao', 'recusa'] },
+      idEntidade: { in: solicitacoes.map((s) => s.id) },
     },
-    select: { idEntidade: true, dados: true },
+    orderBy: { dtHora: 'asc' },
+    select: { idEntidade: true, acao: true, dtHora: true, dados: true },
   })
 
+  const decisao = (id: number, acao: 'alocacao' | 'recusa') =>
+    decisoes.find((d) => d.idEntidade === id && d.acao === acao)
+
+  const dataDa = (id: number, acao: 'alocacao' | 'recusa') => {
+    const encontrada = decisao(id, acao)
+    return encontrada ? hojeISO(encontrada.dtHora) : null
+  }
+
   const motivoDaRecusa = (id: number) => {
-    const dados = recusas.find((recusa) => recusa.idEntidade === id)?.dados
+    const dados = decisao(id, 'recusa')?.dados
     return typeof dados === 'object' && dados !== null && 'motivo' in dados && typeof dados.motivo === 'string'
       ? dados.motivo
       : null
@@ -86,6 +121,10 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
   return {
     solicitacoes: solicitacoes.map((s) => ({
       id: s.id,
+      dataSolicitacao: hojeISO(s.dtCriacao),
+      prazoResposta: s.status === 'EN' ? somarDias(hojeISO(s.dtCriacao), PRAZO_DE_RESPOSTA_EM_DIAS) : null,
+      dataAceite: dataDa(s.id, 'alocacao'),
+      dataRecusa: s.status === 'RE' ? dataDa(s.id, 'recusa') : null,
       protocoloCeua: s.projeto.numero,
       // o nome e o que a pessoa digitou no pedido; o e-mail e o da conta que pediu
       pesquisador: s.nomePesquisador,
@@ -262,6 +301,7 @@ function avisarPesquisador(
       idadeMin: solicitacao.idadeMinDias,
       idadeMax: solicitacao.idadeMaxDias,
       dataEntrega: dataISO(solicitacao.dtDesejada),
+      dataPedido: hojeISO(solicitacao.dtCriacao),
     },
     motivoDaRecusa,
   ).catch((erro: unknown) => {

@@ -11,6 +11,7 @@ import {
   criarSolicitacao,
   listarProjetos,
   listarSolicitacoes,
+  recusarSemResposta,
   recusarSolicitacao,
   registrarEntrega,
 } from './demanda.service.ts'
@@ -51,6 +52,9 @@ projetoRoutes.put('/:id', exigirPerfil('gestor'), async (req, res) => {
 })
 
 solicitacaoRoutes.get('/', exigirPerfil(), async (req, res) => {
+  await recusarSemResposta().catch((erro: unknown) => {
+    console.error('[pedido] a recusa dos pedidos sem resposta falhou:', erro)
+  })
   res.json(await listarSolicitacoes(usuarioDaRequisicao(req)))
 })
 
