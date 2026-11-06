@@ -137,7 +137,7 @@ describe('correcao do parto', () => {
       dtDesmameReal: null,
       desmamadoM: null,
       desmamadoF: null,
-      compromissos: [{ qtdM: 5, qtdF: 0, remessa: { idSolicitacao: 12 } }],
+      compromissos: [{ qtdM: 5, qtdF: 0, remessa: { idSolicitacao: 12, dtRealizada: null } }],
     }
 
     const resposta = await corrigirNascimento(

@@ -88,10 +88,17 @@ export const compromissosAtivos = {
   select: { qtdM: true, qtdF: true },
 }
 
-/** Os compromissos ativos com o pedido de cada um: para dizer qual pedido ficou em falta */
+/**
+ * Os compromissos ativos com o pedido de cada um, para dizer qual pedido ficou em falta, e a
+ * data em que a remessa saiu, para separar o reservado do ja entregue
+ */
 export const compromissosAtivosComPedido = {
   where: { dtCancelamento: null },
-  select: { qtdM: true, qtdF: true, remessa: { select: { idSolicitacao: true } } },
+  select: {
+    qtdM: true,
+    qtdF: true,
+    remessa: { select: { idSolicitacao: true, dtRealizada: true } },
+  },
 }
 
 /** Quanto a reserva passa do que a ninhada tem, e o reservado de cada pedido nela */
@@ -138,12 +145,37 @@ export type PartoComCompromissos = ContagemDoCiclo & {
   compromissos: { qtdM: number; qtdF: number }[]
 }
 
-/** O que um parto ainda tem livre. É esta a função que a ficha, a alocação e a busca chamam */
-export function disponibilidadeDoParto(parto: PartoComCompromissos): Disponibilidade {
-  const comprometido = parto.compromissos.reduce(
+function somarCompromissos(compromissos: { qtdM: number; qtdF: number }[]): PorSexo {
+  return compromissos.reduce(
     (soma, c) => ({ m: soma.m + c.qtdM, f: soma.f + c.qtdF }),
     { m: 0, f: 0 },
   )
+}
 
-  return calcularDisponibilidade(parto, comprometido)
+/** O que um parto ainda tem livre. É esta a função que a ficha, a alocação e a busca chamam */
+export function disponibilidadeDoParto(parto: PartoComCompromissos): Disponibilidade {
+  return calcularDisponibilidade(parto, somarCompromissos(parto.compromissos))
+}
+
+/**
+ * Um compromisso com a data em que a remessa saiu, como 'compromissosAtivosComPedido' le. A
+ * entrega grava essa data, e o animal entregue deixa a caixa. O compromisso entregue continua
+ * ativo: o trigger do banco confere todos os ativos contra a oferta bruta, e e assim que o
+ * entregue nao volta a ficar livre
+ */
+export type CompromissoComEntrega = {
+  qtdM: number
+  qtdF: number
+  remessa: { dtRealizada: Date | null }
+}
+
+/** Separa o que ainda esta reservado na caixa do que ja foi entregue */
+export function separarEntregues(compromissos: CompromissoComEntrega[]): {
+  comprometido: PorSexo
+  entregue: PorSexo
+} {
+  return {
+    comprometido: somarCompromissos(compromissos.filter((c) => c.remessa.dtRealizada === null)),
+    entregue: somarCompromissos(compromissos.filter((c) => c.remessa.dtRealizada !== null)),
+  }
 }

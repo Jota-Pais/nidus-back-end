@@ -5,12 +5,17 @@
 
 import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { dataISO, hojeISO } from '../../shared/traducao.ts'
-import { ofertaBruta } from '../reproducao/disponibilidade.ts'
-import type { ContagemDoCiclo } from '../reproducao/disponibilidade.ts'
+import {
+  compromissosAtivosComPedido,
+  ofertaBruta,
+  separarEntregues,
+} from '../reproducao/disponibilidade.ts'
+import type { CompromissoComEntrega, ContagemDoCiclo } from '../reproducao/disponibilidade.ts'
 
 type DatasDoParto = { dtPartoPrevisto: Date; dtPartoReal: Date | null }
 
-type PartoDoCard = DatasDoParto & ContagemDoCiclo & { ordem: number }
+type PartoDoCard = DatasDoParto &
+  ContagemDoCiclo & { ordem: number; compromissos: CompromissoComEntrega[] }
 
 type CasalDoCard = {
   identificacao: string
@@ -35,13 +40,21 @@ function diasEntre(de: string, ate: string): number {
   return Math.round((Date.parse(`${ate}T00:00:00Z`) - Date.parse(`${de}T00:00:00Z`)) / 86_400_000)
 }
 
-/** As ninhadas do casal que ja nasceram, com o que existe de cada uma e a idade de hoje */
+/**
+ * As ninhadas do casal que ja nasceram, com o que ainda esta na caixa de cada uma e a idade de
+ * hoje. O que ja foi entregue saiu da caixa, e a ninhada toda entregue sai do card
+ */
 export function ninhadas(casal: Pick<CasalDoCard, 'identificacao' | 'partos'>, hoje: string) {
   return casal.partos.flatMap((parto) => {
     if (parto.dtPartoReal === null) return []
 
     const nascimento = dataISO(parto.dtPartoReal)
-    const { m, f } = ofertaBruta(parto)
+    const oferta = ofertaBruta(parto)
+    const { entregue } = separarEntregues(parto.compromissos)
+    const m = Math.max(0, oferta.m - entregue.m)
+    const f = Math.max(0, oferta.f - entregue.f)
+
+    if (m + f === 0 && entregue.m + entregue.f > 0) return []
 
     return [
       {
@@ -97,6 +110,7 @@ export const selecaoDoCasalNoCard = {
         eutanasiadoF: true,
         desmamadoM: true,
         desmamadoF: true,
+        compromissos: compromissosAtivosComPedido,
       },
     },
   },

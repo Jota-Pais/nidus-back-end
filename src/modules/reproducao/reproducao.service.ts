@@ -6,6 +6,7 @@ import {
   compromissosAtivosComPedido,
   disponibilidadeDoParto,
   faltaNaReserva,
+  separarEntregues,
 } from './disponibilidade.ts'
 import {
   calcularCicloInicial,
@@ -78,7 +79,7 @@ export async function casalFicha(idCasal: number) {
 }
 
 /**
- * O objeto ciclo da ficha, com a disponibilidade liquida.
+ * O objeto ciclo da ficha, com a disponibilidade liquida e o reservado separado do ja entregue.
  * Reaproveitado pelos tres eventos e pela ficha da posicao
  */
 export async function cicloFicha(idParto: number) {
@@ -92,6 +93,7 @@ export async function cicloFicha(idParto: number) {
   }
 
   const disponibilidade = disponibilidadeDoParto(parto)
+  const { comprometido, entregue } = separarEntregues(parto.compromissos)
   const dtPartoPrevisto = dataISO(parto.dtPartoPrevisto)
   const dtPartoReal = parto.dtPartoReal === null ? null : dataISO(parto.dtPartoReal)
 
@@ -113,7 +115,8 @@ export async function cicloFicha(idParto: number) {
     desmamadoM: parto.desmamadoM,
     desmamadoF: parto.desmamadoF,
     disponivel: disponibilidade.disponivel,
-    comprometido: disponibilidade.comprometido,
+    comprometido,
+    entregue,
     /** reserva acima do que a ninhada tem depois do desmame ou da correcao; null quando cabe */
     falta: faltaNaReserva(parto),
   }

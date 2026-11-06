@@ -56,7 +56,7 @@ export type PedidoDeTransicao = {
 
 /**
  * PATCH /api/caixas/:id/estado - arrastar o card para outra coluna. Se algum parto da caixa
- * tem compromisso ativo, a mudanca so passa com 'confirmar: true'
+ * tem compromisso ativo ainda nao entregue, a mudanca so passa com 'confirmar: true'
  */
 export async function moverCaixa(idCaixa: number, dados: PedidoDeTransicao, idUsuario: number) {
   const caixa = await prisma.caixa.findUnique({
@@ -70,8 +70,9 @@ export async function moverCaixa(idCaixa: number, dados: PedidoDeTransicao, idUs
 
   const estadoNovo = exigirCodigo(estadoCaixa, dados.estado, 'Estado')
 
+  // o compromisso entregue continua ativo, mas os animais dele ja sairam da caixa
   const compromissos = await prisma.compromisso.count({
-    where: { dtCancelamento: null, parto: { casal: { idCaixa } } },
+    where: { dtCancelamento: null, remessa: { dtRealizada: null }, parto: { casal: { idCaixa } } },
   })
 
   if (compromissos > 0 && !dados.confirmar) {
