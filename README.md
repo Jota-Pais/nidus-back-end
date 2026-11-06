@@ -142,9 +142,11 @@ recriar o schema quando o histórico diverge, e o banco é o de produção.
 | `POST /api/sessao` | Login com `{ email, senha }`. Abre a sessão no cookie `nidus_sessao`, que dura 12 h |
 | `GET /api/sessao` | Quem está logado |
 | `DELETE /api/sessao` | Logout. A sessão some da memória |
-| `POST /api/acesso/codigo` | `{ email }`: manda um código de 6 números para o e-mail da UFSC. Vale 15 minutos e responde `{ validadeEmMinutos }` |
+| `POST /api/acesso/codigo` | `{ email }`: manda um código de 6 números para o e-mail, de qualquer domínio. Vale 15 minutos e responde `{ validadeEmMinutos }` |
 | `POST /api/acesso/verificacao` | `{ email, codigo }`: confere o código sem gastar e responde `{ novo }`, `true` quando o e-mail ainda não tem conta |
 | `POST /api/acesso/senha` | `{ email, codigo, senha, nome? }`: gasta o código, grava a senha e abre a sessão como o login. Sem conta, cria um pesquisador, e o `nome` passa a ser obrigatório |
+
+O gestor não define a senha de ninguém: `POST /api/usuarios/:id/redefinicao-de-senha` manda à pessoa o mesmo código por e-mail, e a conta criada pelo gestor nasce sem senha e já recebe o código.
 
 O ID-UFSC entra depois dos testes práticos. Até lá, quem não tem senha, ou
 esqueceu, pede o código pela tela `/definir-senha` do front.

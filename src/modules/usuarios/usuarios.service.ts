@@ -4,7 +4,7 @@ import { prisma } from '../../shared/prisma.ts'
 import { exigirCodigo, perfil as dicPerfil } from '../../shared/traducao.ts'
 import type { Perfil } from '../../shared/traducao.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
-import { hashSenha } from '../login/senha.ts'
+import { pedirCodigo } from '../login/acesso.service.ts'
 import { revogarSessoesDoUsuario } from '../login/sessao.ts'
 
 function paraApi(usuario: {
@@ -35,7 +35,6 @@ export type NovoUsuario = {
   nome: string
   email: string
   perfil: Perfil
-  senha: string
 }
 
 export async function criarUsuario(dados: NovoUsuario, gestor: UsuarioDaSessao) {
@@ -48,15 +47,12 @@ export async function criarUsuario(dados: NovoUsuario, gestor: UsuarioDaSessao) 
     throw erroDeRegra('EMAIL_EM_USO', `Ja existe uma conta com o e-mail ${email}.`)
   }
 
-  const hash = await hashSenha(dados.senha)
-
   const criado = await prisma.$transaction(async (tx) => {
     const usuario = await tx.usuario.create({
       data: {
         nome: dados.nome,
         email,
         perfil: exigirCodigo(dicPerfil, dados.perfil, 'Perfil'),
-        hashSenha: hash,
       },
     })
 
@@ -72,7 +68,18 @@ export async function criarUsuario(dados: NovoUsuario, gestor: UsuarioDaSessao) 
     return usuario
   })
 
-  return paraApi(criado)
+  // A conta nasce sem senha: a pessoa define a dela pelo primeiro acesso, com o codigo que chega
+  // por e-mail. Se o envio falhar (limite de pedidos, servico fora), a conta fica e o gestor
+  // manda de novo pela redefinicao
+  const codigoEnviado = await pedirCodigo(email).then(
+    () => true,
+    (erro: unknown) => {
+      console.error(`[usuarios] o codigo para ${email} nao foi enviado:`, erro)
+      return false
+    },
+  )
+
+  return { ...paraApi(criado), codigoEnviado }
 }
 
 export type AlteracaoDeUsuario = {
@@ -137,30 +144,32 @@ export async function alterarUsuario(
   return paraApi(atualizado)
 }
 
-export async function definirSenhaDoUsuario(id: number, senha: string, gestor: UsuarioDaSessao) {
+/**
+ * O gestor nao define a senha de ninguem: so faz o codigo do "esqueci a senha" chegar ao e-mail
+ * da pessoa. A senha atual e as sessoes ficam como estao ate ela definir a nova. O codigo nao
+ * volta na resposta
+ */
+export async function enviarRedefinicaoDeSenha(id: number, gestor: UsuarioDaSessao) {
   const usuario = await prisma.usuario.findUnique({ where: { id } })
 
   if (usuario === null) {
     throw naoEncontrado('Usuario')
   }
 
-  const hash = await hashSenha(senha)
-
-  await prisma.$transaction(async (tx) => {
-    await tx.usuario.update({ where: { id }, data: { hashSenha: hash } })
-
-    await registrarHistorico(tx, {
-      idUsuario: gestor.id,
-      entidade: 'usuario',
-      idEntidade: id,
-      acao: 'nova_senha',
-      descricao: `Senha de ${usuario.nome} redefinida pelo gestor`,
-    })
-  })
-
-  if (id !== gestor.id) {
-    revogarSessoesDoUsuario(id)
+  // A conta inativa nao recebe codigo: pedirCodigo responderia igual, mas o e-mail nao sairia
+  if (!usuario.ativo) {
+    throw erroDeRegra('CONTA_INATIVA', 'A conta esta desativada. Reative-a antes de enviar o codigo.')
   }
 
-  return { id, temSenha: true }
+  const { validadeEmMinutos } = await pedirCodigo(usuario.email)
+
+  await registrarHistorico(prisma, {
+    idUsuario: gestor.id,
+    entidade: 'usuario',
+    idEntidade: id,
+    acao: 'redefinicao_senha',
+    descricao: `Codigo para redefinir a senha de ${usuario.nome} enviado por e-mail`,
+  })
+
+  return { email: usuario.email, validadeEmMinutos }
 }

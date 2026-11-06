@@ -20,7 +20,7 @@ describe('so o gestor administra', () => {
       request(tecnico).get('/api/usuarios'),
       request(tecnico).post('/api/usuarios').send({}),
       request(tecnico).patch('/api/usuarios/1').send({ ativo: false }),
-      request(tecnico).post('/api/usuarios/1/senha').send({ senha: '12345678' }),
+      request(tecnico).post('/api/usuarios/1/redefinicao-de-senha'),
       request(tecnico).post('/api/projetos').send({}),
       request(tecnico).put('/api/projetos/1').send({}),
       request(tecnico).post('/api/catalogo/linhagens').send({}),
@@ -64,17 +64,18 @@ describe('forma da entrada', () => {
     expect(correcao.body.erro.campos).toHaveProperty('motivo')
   })
 
-  it('conta nova com senha curta ou e-mail invalido e VALIDACAO', async () => {
-    const gestor = app('gestor')
-    const curta = await request(gestor)
+  it('conta nova com e-mail invalido e VALIDACAO', async () => {
+    const email = await request(app('gestor'))
       .post('/api/usuarios')
-      .send({ nome: 'Bia', email: 'bia@ufsc.br', perfil: 'tecnico', senha: '123' })
-    const email = await request(gestor)
-      .post('/api/usuarios')
-      .send({ nome: 'Bia', email: 'bia', perfil: 'tecnico', senha: '12345678' })
+      .send({ nome: 'Bia', email: 'bia', perfil: 'tecnico' })
 
-    expect(curta.status).toBe(400)
     expect(email.status).toBe(400)
+  })
+
+  it('a rota antiga de senha do gestor nao existe mais', async () => {
+    const resposta = await request(app('gestor')).post('/api/usuarios/1/senha').send({ senha: '12345678' })
+
+    expect(resposta.status).toBe(404)
   })
 
   it('estoque sem especie e VALIDACAO', async () => {
