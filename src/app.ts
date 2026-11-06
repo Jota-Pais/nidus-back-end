@@ -8,7 +8,7 @@ import { historicoRoutes } from './modules/historico/historico.routes.ts'
 import { estanteRoutes } from './modules/infra/infra.routes.ts'
 import { autenticacaoPorCookie } from './modules/login/autenticacao.ts'
 import { acessoRoutes, sessaoRoutes } from './modules/login/login.routes.ts'
-import { buscaRoutes, estoqueRoutes } from './modules/motor/motor.routes.ts'
+import { buscaRoutes, estoqueRoutes, viabilidadeRoutes } from './modules/motor/motor.routes.ts'
 import { casalRoutes, partoRoutes } from './modules/reproducao/reproducao.routes.ts'
 import { usuarioRoutes } from './modules/usuarios/usuarios.routes.ts'
 import { rotaNaoEncontrada, tratadorDeErros } from './shared/middlewares/erro.ts'
@@ -65,6 +65,8 @@ export function criarApp({
   app.use('/api/quadro', quadroRoutes)
   app.use('/api/caixas', caixaRoutes)
   app.use('/api/projetos', projetoRoutes)
+  // antes das solicitacoes, para o '/viabilidade' nao cair numa rota de id
+  app.use('/api/solicitacoes/viabilidade', viabilidadeRoutes)
   app.use('/api/solicitacoes', solicitacaoRoutes)
   app.use('/api/busca', buscaRoutes)
   app.use('/api/historico', historicoRoutes)

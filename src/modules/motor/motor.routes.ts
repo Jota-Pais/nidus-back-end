@@ -1,11 +1,14 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { OPERA_A_COLONIA, exigirPerfil } from '../../shared/middlewares/autorizacao.ts'
+import { solicitacaoNova } from '../demanda/demanda.routes.ts'
 import { consultarEstoque } from './estoque.service.ts'
 import { buscarAtendimento } from './motor.service.ts'
+import { avaliarViabilidade } from './viabilidade.service.ts'
 
 export const buscaRoutes = Router()
 export const estoqueRoutes = Router()
+export const viabilidadeRoutes = Router()
 
 /** query string chega sempre como texto: 'z.coerce' faz a conversao */
 export const filtroDaBusca = z
@@ -39,4 +42,12 @@ const filtroDoEstoque = z.object({ especie: z.string().trim().min(1) })
 
 estoqueRoutes.get('/', exigirPerfil(), async (req, res) => {
   res.json(await consultarEstoque(filtroDoEstoque.parse(req.query).especie))
+})
+
+/**
+ * POST /api/solicitacoes/viabilidade - quem pede confere, antes de enviar, se o CPMR consegue
+ * atender. O corpo e o mesmo do pedido; a resposta e so o veredito, sem numero de estoque
+ */
+viabilidadeRoutes.post('/', exigirPerfil(), async (req, res) => {
+  res.json(await avaliarViabilidade(solicitacaoNova.parse(req.body)))
 })
