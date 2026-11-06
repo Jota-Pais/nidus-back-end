@@ -6,7 +6,7 @@
 /** parto previsto = acasalamento + 23 dias */
 export const GESTACAO_DIAS = 23
 
-/** desmame previsto = parto + 22 dias */
+/** desmame previsto = parto real + 22 dias (o previsto, enquanto nao nasce) */
 export const ALEITAMENTO_DIAS = 22
 
 /** proximo acasalamento = parto real anterior + 6 dias */

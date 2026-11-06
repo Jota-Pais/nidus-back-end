@@ -3,7 +3,11 @@
 import { registrarHistorico } from '../historico/historico.service.ts'
 import { codigoDaPosicao } from '../infra/endereco.ts'
 import { compromissosAtivos, disponibilidadeDoParto } from './disponibilidade.ts'
-import { calcularCicloInicial, calcularProximoCiclo } from './cadeiaTemporal.ts'
+import {
+  calcularCicloInicial,
+  calcularDesmamePrevisto,
+  calcularProximoCiclo,
+} from './cadeiaTemporal.ts'
 import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { prisma } from '../../shared/prisma.ts'
@@ -84,19 +88,23 @@ export async function cicloFicha(idParto: number) {
   }
 
   const disponibilidade = disponibilidadeDoParto(parto)
+  const dtPartoPrevisto = dataISO(parto.dtPartoPrevisto)
+  const dtPartoReal = parto.dtPartoReal === null ? null : dataISO(parto.dtPartoReal)
 
   return {
     id: parto.id,
     ordem: parto.ordem,
     dtAcasalamento: dataISO(parto.dtAcasalamento),
-    dtPartoPrevisto: dataISO(parto.dtPartoPrevisto),
-    dtPartoReal: parto.dtPartoReal === null ? null : dataISO(parto.dtPartoReal),
+    dtPartoPrevisto,
+    dtPartoReal,
     nascidoM: parto.nascidoM,
     nascidoF: parto.nascidoF,
     dtSelecao: parto.dtSelecao === null ? null : dataISO(parto.dtSelecao),
     eutanasiadoM: parto.eutanasiadoM,
     eutanasiadoF: parto.eutanasiadoF,
-    dtDesmamePrevisto: dataISO(parto.dtDesmamePrevisto),
+    // derivado, e nao a coluna: parto gravado antes de o desmame contar do real ainda guarda
+    // o desmame contado do previsto
+    dtDesmamePrevisto: calcularDesmamePrevisto(dtPartoPrevisto, dtPartoReal),
     dtDesmameReal: parto.dtDesmameReal === null ? null : dataISO(parto.dtDesmameReal),
     desmamadoM: parto.desmamadoM,
     desmamadoF: parto.desmamadoF,
@@ -295,6 +303,9 @@ export async function registrarNascimento(
       where: { id: idParto },
       data: {
         dtPartoReal: paraData(dados.dtPartoReal),
+        dtDesmamePrevisto: paraData(
+          calcularDesmamePrevisto(dataISO(parto.dtPartoPrevisto), dados.dtPartoReal),
+        ),
         nascidoM: dados.nascidoM,
         nascidoF: dados.nascidoF,
         idUsuarioParto: idUsuario,

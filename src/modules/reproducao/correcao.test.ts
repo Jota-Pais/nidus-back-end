@@ -106,6 +106,20 @@ describe('correcao do parto', () => {
     })
   })
 
+  it('mudar a data do parto recalcula o desmame previsto dele a partir do parto real', async () => {
+    await corrigirNascimento(
+      1,
+      { dtPartoReal: '2026-09-23', nascidoM: 5, nascidoF: 5, motivo: 'data digitada errada' },
+      1,
+      agora,
+    )
+
+    expect(banco.atualizados[0]).toMatchObject({
+      where: { id: 1 },
+      data: { dtDesmamePrevisto: d('2026-10-15') },
+    })
+  })
+
   it('com o parto seguinte ja registrado a data nao muda mais', async () => {
     banco.proximo = { id: 2, dtPartoReal: d('2026-10-20') }
 

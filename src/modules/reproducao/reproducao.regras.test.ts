@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  cicloFicha,
   encerrarCasal,
   registrarDesmame,
   registrarNascimento,
@@ -10,6 +11,7 @@ const banco = vi.hoisted(() => ({
   parto: null as Record<string, unknown> | null,
   casal: null as Record<string, unknown> | null,
   gravou: false,
+  partoAtualizado: null as Record<string, unknown> | null,
 }))
 
 vi.mock('../../shared/prisma.ts', () => ({
@@ -26,8 +28,18 @@ vi.mock('../../shared/prisma.ts', () => ({
         banco.gravou = true
       },
     },
-    $transaction: async () => {
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => {
       banco.gravou = true
+      return fn({
+        parto: {
+          update: async ({ data }: { data: Record<string, unknown> }) => {
+            banco.partoAtualizado = data
+          },
+          create: async () => undefined,
+        },
+        casal: { update: async () => undefined },
+        historico: { create: async () => undefined },
+      })
     },
   },
 }))
@@ -54,6 +66,7 @@ const recusa = (status: number, codigo: string) => expect.objectContaining({ sta
 beforeEach(() => {
   banco.gravou = false
   banco.casal = null
+  banco.partoAtualizado = null
 })
 
 describe('nascimento', () => {
@@ -83,6 +96,55 @@ describe('nascimento', () => {
     await expect(
       registrarNascimento(1, { dtPartoReal: '2026-10-31', nascidoM: 5, nascidoF: 5 }, 1, agora),
     ).rejects.toEqual(recusa(400, 'VALIDACAO'))
+  })
+
+  it('o desmame previsto passa a contar do parto real', async () => {
+    // previsto 24/09, desmame previsto 16/10; nasceu 20/10, depois do desmame que se esperava
+    banco.parto = {
+      ...pendente,
+      dtPartoPrevisto: d('2026-09-24'),
+      dtDesmamePrevisto: d('2026-10-16'),
+      compromissos: [],
+    }
+
+    await registrarNascimento(1, { dtPartoReal: '2026-10-20', nascidoM: 5, nascidoF: 5 }, 1, agora)
+
+    expect(banco.partoAtualizado).toMatchObject({ dtDesmamePrevisto: d('2026-11-11') })
+  })
+})
+
+describe('ficha do parto', () => {
+  it('o desmame previsto de parto ja nascido sai do parto real, e nao do previsto', async () => {
+    // parto gravado antes da correcao: desmame previsto ainda contado do previsto
+    banco.parto = {
+      ...partoNascido,
+      dtPartoPrevisto: d('2026-09-24'),
+      dtPartoReal: d('2026-10-20'),
+      dtDesmamePrevisto: d('2026-10-16'),
+      dtDesmameReal: null,
+      desmamadoM: null,
+      desmamadoF: null,
+      compromissos: [],
+    }
+
+    expect((await cicloFicha(1)).dtDesmamePrevisto).toBe('2026-11-11')
+  })
+
+  it('o desmame previsto de parto que ainda nao nasceu sai do parto previsto', async () => {
+    banco.parto = {
+      ...partoNascido,
+      dtPartoPrevisto: d('2026-09-24'),
+      dtPartoReal: null,
+      nascidoM: null,
+      nascidoF: null,
+      dtDesmamePrevisto: d('2026-10-16'),
+      dtDesmameReal: null,
+      desmamadoM: null,
+      desmamadoF: null,
+      compromissos: [],
+    }
+
+    expect((await cicloFicha(1)).dtDesmamePrevisto).toBe('2026-10-16')
   })
 })
 

@@ -20,6 +20,14 @@ export type CicloCalculado = {
   dtDesmamePrevisto: string
 }
 
+/**
+ * Desmame previsto: do parto real quando ja nasceu, senao do parto previsto. A idade conta
+ * do nascimento real, e o desmame tambem
+ */
+export function calcularDesmamePrevisto(dtPartoPrevisto: string, dtPartoReal: string | null): string {
+  return somarDias(dtPartoReal ?? dtPartoPrevisto, ALEITAMENTO_DIAS)
+}
+
 /** O primeiro ciclo do casal, a partir do acasalamento digitado */
 export function calcularCicloInicial(dtFormacao: string): CicloCalculado {
   const dtPartoPrevisto = somarDias(dtFormacao, GESTACAO_DIAS)
@@ -27,7 +35,7 @@ export function calcularCicloInicial(dtFormacao: string): CicloCalculado {
   return {
     dtAcasalamento: dtFormacao,
     dtPartoPrevisto,
-    dtDesmamePrevisto: somarDias(dtPartoPrevisto, ALEITAMENTO_DIAS),
+    dtDesmamePrevisto: calcularDesmamePrevisto(dtPartoPrevisto, null),
   }
 }
 
@@ -39,6 +47,6 @@ export function calcularProximoCiclo(dtPartoRealAnterior: string): CicloCalculad
   return {
     dtAcasalamento,
     dtPartoPrevisto,
-    dtDesmamePrevisto: somarDias(dtPartoPrevisto, ALEITAMENTO_DIAS),
+    dtDesmamePrevisto: calcularDesmamePrevisto(dtPartoPrevisto, null),
   }
 }

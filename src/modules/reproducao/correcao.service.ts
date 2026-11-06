@@ -3,7 +3,7 @@ import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { dataISO, hojeISO, paraData } from '../../shared/traducao.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
-import { calcularProximoCiclo } from './cadeiaTemporal.ts'
+import { calcularDesmamePrevisto, calcularProximoCiclo } from './cadeiaTemporal.ts'
 import { compromissosAtivos, ofertaBruta } from './disponibilidade.ts'
 import type { ContagemDoCiclo } from './disponibilidade.ts'
 import { cicloFicha } from './reproducao.service.ts'
@@ -122,6 +122,9 @@ export async function corrigirNascimento(
       where: { id: idParto },
       data: {
         dtPartoReal: paraData(dados.dtPartoReal),
+        dtDesmamePrevisto: paraData(
+          calcularDesmamePrevisto(dataISO(parto.dtPartoPrevisto), dados.dtPartoReal),
+        ),
         nascidoM: dados.nascidoM,
         nascidoF: dados.nascidoF,
       },
