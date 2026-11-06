@@ -386,9 +386,10 @@ export async function alocarSolicitacao(
     totalF > qtdF + qtdQualquer ||
     totalM + totalF > qtdM + qtdF + qtdQualquer
   ) {
-    throw campoInvalido(
-      'itens',
-      `A alocacao passa do pedido (${qtdM} machos, ${qtdF} femeas e ${qtdQualquer} de qualquer sexo).`,
+    // regra, e nao campo: quem aloca pela busca nao tem campo para corrigir e precisa do motivo
+    throw erroDeRegra(
+      'PEDIDO_EXCEDIDO',
+      `A alocacao passa do pedido: foram ${descreverQuantidade({ m: totalM, f: totalF, qualquer: 0 })} para um pedido de ${descreverQuantidade({ m: qtdM, f: qtdF, qualquer: qtdQualquer })}.`,
     )
   }
 

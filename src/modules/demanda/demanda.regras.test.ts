@@ -127,7 +127,12 @@ describe('alocacao', () => {
       { idParto: 10, machos: 1, femeas: 0 },
     ]
 
-    await expect(alocarSolicitacao(7, itens, tecnica)).rejects.toEqual(recusa(400, 'VALIDACAO'))
+    // a mensagem e a que a busca mostra: tem de dizer o motivo, e nao "confira os campos"
+    const passou = alocarSolicitacao(7, itens, tecnica)
+
+    await expect(passou).rejects.toEqual(recusa(409, 'PEDIDO_EXCEDIDO'))
+    await expect(passou).rejects.toThrow('A alocacao passa do pedido: foram 3 machos para um pedido de 2 machos e 2 femeas.')
+    expect(banco.transacoes).toBe(0)
   })
 
   it('parto de outra linhagem e recusado', async () => {
