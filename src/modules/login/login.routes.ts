@@ -84,22 +84,21 @@ sessaoRoutes.delete('/', exigirPerfil(), (req, res) => {
  */
 export const acessoRoutes = Router()
 
-/** O e-mail da UFSC, com as regras da tela do front. O maximo e o da coluna usuario.email */
-const emailDaUfsc = z
+/** O e-mail de quem pede acesso, de qualquer dominio. O maximo e o da coluna usuario.email */
+const emailDeAcesso = z
   .string()
   .trim()
   .toLowerCase()
   .max(160, 'O e-mail passa de 160 caracteres.')
-  // Obrigatorio junto da regex: ela sozinha aceita 'eu,voce@ufsc.br', que no envio vira uma
-  // lista de destinatarios
-  .email('E-mail invalido. Use o formato nome@ufsc.br.')
-  .regex(/^[^@\s]+@([a-z0-9-]+\.)*ufsc\.br$/, 'Use o seu e-mail da UFSC, terminado em ufsc.br.')
+  // E a unica regra do formato: barra 'eu,voce@exemplo.com', que no envio vira uma lista de
+  // destinatarios
+  .email('E-mail invalido.')
 
 const codigoDeSeisDigitos = z.string().regex(/^\d{6}$/, 'O codigo tem 6 numeros.')
 
-const pedidoDeCodigo = z.object({ email: emailDaUfsc })
+const pedidoDeCodigo = z.object({ email: emailDeAcesso })
 
-const codigoParaConferir = z.object({ email: emailDaUfsc, codigo: codigoDeSeisDigitos })
+const codigoParaConferir = z.object({ email: emailDeAcesso, codigo: codigoDeSeisDigitos })
 
 const novaSenha = codigoParaConferir.extend({
   // o mesmo minimo do 'npm run db:senha'

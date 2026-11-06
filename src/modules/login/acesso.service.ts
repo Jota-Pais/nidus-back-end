@@ -1,4 +1,4 @@
-// Primeiro acesso e senha esquecida: um codigo vai para o e-mail da UFSC, e com ele a pessoa
+// Primeiro acesso e senha esquecida: um codigo vai para o e-mail da pessoa, e com ele ela
 // define a senha. E o caminho para ter senha ate o ID-UFSC entrar
 
 import { randomInt } from 'node:crypto'

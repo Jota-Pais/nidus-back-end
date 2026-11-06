@@ -327,8 +327,9 @@ describe('POST /api/acesso/codigo', () => {
     'eu,voce@ufsc.br',
     'eu@ufsc.br;voce@ufsc.br',
     'eu@ufsc.br voce@ufsc.br',
-    'eu@gmail.com',
-    'eu@ufsc.br.exemplo.com',
+    'eu@gmail.com voce@gmail.com',
+    'eu@gmail',
+    'sem-arroba.com',
     `${'a'.repeat(160)}@ufsc.br`,
   ])('recusa %s com 400 no campo email, sem gravar nem enviar', async (email) => {
     const resposta = await pedir(email)
@@ -340,15 +341,15 @@ describe('POST /api/acesso/codigo', () => {
     expect(enviarCodigoDeAcesso).not.toHaveBeenCalled()
   })
 
-  it('aceita subdominio da UFSC, maiuscula e espaco, e grava e envia em minusculas', async () => {
+  it('aceita e-mail de qualquer dominio, maiuscula e espaco, e grava e envia em minusculas', async () => {
     expect((await pedir('  Novo@UFSC.br ')).status).toBe(200)
-    expect((await pedir('aluno@grad.ufsc.br')).status).toBe(200)
+    expect((await pedir('aluno@gmail.com')).status).toBe(200)
 
-    expect(falso.tabelas.codigoAcesso.map((l) => l.email)).toEqual(['novo@ufsc.br', 'aluno@grad.ufsc.br'])
+    expect(falso.tabelas.codigoAcesso.map((l) => l.email)).toEqual(['novo@ufsc.br', 'aluno@gmail.com'])
     // um destinatario por envio, o endereco sozinho
     expect(vi.mocked(enviarCodigoDeAcesso).mock.calls.map(([email]) => email)).toEqual([
       'novo@ufsc.br',
-      'aluno@grad.ufsc.br',
+      'aluno@gmail.com',
     ])
   })
 

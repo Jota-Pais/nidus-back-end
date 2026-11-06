@@ -14,7 +14,7 @@ export const TEMPO_LIMITE_DO_ENVIO_EM_MS = 10_000
 export const NOME_DO_REMETENTE = 'Nidus'
 
 type Mensagem = {
-  /** UM destinatario, ja validado pela rota (e-mail da UFSC, sem lista) */
+  /** UM destinatario, ja validado pela rota (sem lista) */
   para: string
   assunto: string
   texto: string
