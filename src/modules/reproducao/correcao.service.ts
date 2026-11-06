@@ -6,7 +6,7 @@ import { registrarHistorico } from '../historico/historico.service.ts'
 import { calcularDesmamePrevisto, calcularProximoCiclo } from './cadeiaTemporal.ts'
 import { compromissosAtivosComPedido, faltaNaReserva } from './disponibilidade.ts'
 import type { ContagemDoCiclo } from './disponibilidade.ts'
-import { cicloFicha } from './reproducao.service.ts'
+import { cicloFicha, contagemInvalida } from './reproducao.service.ts'
 import type { Desmame, Nascimento, Selecao } from './reproducao.service.ts'
 
 export type ComMotivo<T> = T & { motivo: string }
@@ -96,10 +96,15 @@ export async function corrigirNascimento(
 
   const vivosM = dados.nascidoM - (parto.eutanasiadoM ?? 0)
   const vivosF = dados.nascidoF - (parto.eutanasiadoF ?? 0)
+  const nascidoAbaixo = {
+    m: vivosM < (parto.desmamadoM ?? 0) || vivosM < 0,
+    f: vivosF < (parto.desmamadoF ?? 0) || vivosF < 0,
+  }
 
-  if (vivosM < (parto.desmamadoM ?? 0) || vivosF < (parto.desmamadoF ?? 0) || vivosM < 0 || vivosF < 0) {
-    throw campoInvalido(
+  if (nascidoAbaixo.m || nascidoAbaixo.f) {
+    throw contagemInvalida(
       'nascido',
+      nascidoAbaixo,
       'O nascido nao pode ficar abaixo da selecao e do desmame ja registrados.',
     )
   }
@@ -210,15 +215,22 @@ export async function corrigirSelecao(
   const vivosF = parto.nascidoF - dados.eutanasiadoF
 
   if (vivosM < 0 || vivosF < 0) {
-    throw campoInvalido(
+    throw contagemInvalida(
       'eutanasiado',
+      { m: vivosM < 0, f: vivosF < 0 },
       `Nao pode passar do nascido (${parto.nascidoM} M, ${parto.nascidoF} F).`,
     )
   }
 
-  if (vivosM < (parto.desmamadoM ?? 0) || vivosF < (parto.desmamadoF ?? 0)) {
-    throw campoInvalido(
+  const abaixoDoDesmame = {
+    m: vivosM < (parto.desmamadoM ?? 0),
+    f: vivosF < (parto.desmamadoF ?? 0),
+  }
+
+  if (abaixoDoDesmame.m || abaixoDoDesmame.f) {
+    throw contagemInvalida(
       'eutanasiado',
+      abaixoDoDesmame,
       'Com essa selecao sobrariam menos animais do que os ja desmamados.',
     )
   }
@@ -294,10 +306,12 @@ export async function corrigirDesmame(
 
   const vivosM = parto.nascidoM - (parto.eutanasiadoM ?? 0)
   const vivosF = parto.nascidoF - (parto.eutanasiadoF ?? 0)
+  const desmamePassou = { m: dados.desmamadoM > vivosM, f: dados.desmamadoF > vivosF }
 
-  if (dados.desmamadoM > vivosM || dados.desmamadoF > vivosF) {
-    throw campoInvalido(
+  if (desmamePassou.m || desmamePassou.f) {
+    throw contagemInvalida(
       'desmamado',
+      desmamePassou,
       `Nao pode passar do nascido menos a selecao (${vivosM} M, ${vivosF} F).`,
     )
   }

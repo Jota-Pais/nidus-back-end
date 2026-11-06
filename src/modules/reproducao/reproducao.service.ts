@@ -128,6 +128,19 @@ function campoInvalido(campo: string, mensagem: string) {
   })
 }
 
+/**
+ * Contagem que passou do limite, com a mensagem no campo de cada sexo que passou
+ * ('desmamadoM', 'desmamadoF'...): o formulario destaca o campo certo
+ */
+export function contagemInvalida(campo: string, passou: { m: boolean; f: boolean }, mensagem: string) {
+  return new ErroDeAplicacao(400, 'VALIDACAO', 'Confira os campos destacados.', {
+    campos: {
+      ...(passou.m ? { [`${campo}M`]: mensagem } : {}),
+      ...(passou.f ? { [`${campo}F`]: mensagem } : {}),
+    },
+  })
+}
+
 export type PosicaoVazia = {
   idEstante: number
   face: 'frontal' | 'traseira'
@@ -398,12 +411,17 @@ export async function registrarSelecao(idParto: number, dados: Selecao, idUsuari
     throw campoInvalido('dtSelecao', 'A selecao nao pode ser antes do parto.')
   }
 
-  if (dados.eutanasiadoM > parto.nascidoM || dados.eutanasiadoF > parto.nascidoF) {
-    throw new ErroDeAplicacao(400, 'VALIDACAO', 'Confira os campos destacados.', {
-      campos: {
-        eutanasiado: `Nao pode passar do nascido (${parto.nascidoM} M, ${parto.nascidoF} F).`,
-      },
-    })
+  const eutanasiaPassou = {
+    m: dados.eutanasiadoM > parto.nascidoM,
+    f: dados.eutanasiadoF > parto.nascidoF,
+  }
+
+  if (eutanasiaPassou.m || eutanasiaPassou.f) {
+    throw contagemInvalida(
+      'eutanasiado',
+      eutanasiaPassou,
+      `Nao pode passar do nascido (${parto.nascidoM} M, ${parto.nascidoF} F).`,
+    )
   }
 
   await prisma.$transaction(async (tx) => {
@@ -459,10 +477,12 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
 
   const vivosM = parto.nascidoM - (parto.eutanasiadoM ?? 0)
   const vivosF = parto.nascidoF - (parto.eutanasiadoF ?? 0)
+  const desmamePassou = { m: dados.desmamadoM > vivosM, f: dados.desmamadoF > vivosF }
 
-  if (dados.desmamadoM > vivosM || dados.desmamadoF > vivosF) {
-    throw campoInvalido(
+  if (desmamePassou.m || desmamePassou.f) {
+    throw contagemInvalida(
       'desmamado',
+      desmamePassou,
       `Nao pode passar do nascido menos a selecao (${vivosM} M, ${vivosF} F).`,
     )
   }

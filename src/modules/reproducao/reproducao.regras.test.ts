@@ -70,6 +70,13 @@ const partoNascido = {
 
 const recusa = (status: number, codigo: string) => expect.objectContaining({ status, codigo })
 
+/** a recusa de VALIDACAO com a mensagem exatamente nestes campos do formulario */
+const nosCampos = (...campos: string[]) =>
+  expect.objectContaining({
+    status: 400,
+    extras: { campos: Object.fromEntries(campos.map((campo) => [campo, expect.any(String)])) },
+  })
+
 beforeEach(() => {
   banco.gravou = false
   banco.casal = null
@@ -174,6 +181,14 @@ describe('selecao', () => {
     ).rejects.toEqual(recusa(409, 'SEQUENCIA_INVALIDA'))
   })
 
+  it('eutanasia acima do nascido aponta o campo do sexo que passou', async () => {
+    banco.parto = partoNascido
+
+    await expect(
+      registrarSelecao(1, { dtSelecao: '2026-09-24', eutanasiadoM: 1, eutanasiadoF: 6 }, 1),
+    ).rejects.toEqual(nosCampos('eutanasiadoF'))
+  })
+
   it('segunda selecao do mesmo parto e recusada', async () => {
     banco.parto = { ...partoNascido, dtSelecao: d('2026-09-25') }
 
@@ -192,6 +207,17 @@ describe('desmame', () => {
       registrarDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 5, desmamadoF: 4 }, 1),
     ).rejects.toEqual(recusa(400, 'VALIDACAO'))
     expect(banco.gravou).toBe(false)
+  })
+
+  it('acima do nascido menos a selecao aponta o campo do sexo que passou', async () => {
+    banco.parto = { ...partoNascido, eutanasiadoM: 1, eutanasiadoF: 1 }
+
+    await expect(
+      registrarDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 5, desmamadoF: 4 }, 1),
+    ).rejects.toEqual(nosCampos('desmamadoM'))
+    await expect(
+      registrarDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 5, desmamadoF: 5 }, 1),
+    ).rejects.toEqual(nosCampos('desmamadoM', 'desmamadoF'))
   })
 
   it('antes do parto e recusado', async () => {

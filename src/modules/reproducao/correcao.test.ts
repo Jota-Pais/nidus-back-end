@@ -40,6 +40,13 @@ const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 const agora = new Date('2026-10-30T15:00:00.000Z')
 const recusa = (status: number, codigo: string) => expect.objectContaining({ status, codigo })
 
+/** a recusa de VALIDACAO com a mensagem exatamente nestes campos do formulario */
+const nosCampos = (...campos: string[]) =>
+  expect.objectContaining({
+    status: 400,
+    extras: { campos: Object.fromEntries(campos.map((campo) => [campo, expect.any(String)])) },
+  })
+
 const partoRegistrado = {
   id: 1,
   idCasal: 1,
@@ -80,7 +87,7 @@ describe('correcao do parto', () => {
   it('nascido nao pode ficar abaixo do que ja foi selecionado e desmamado', async () => {
     await expect(
       corrigirNascimento(1, { dtPartoReal: '2026-09-24', nascidoM: 4, nascidoF: 5, motivo: 'x' }, 1, agora),
-    ).rejects.toEqual(recusa(400, 'VALIDACAO'))
+    ).rejects.toEqual(nosCampos('nascidoM'))
     expect(banco.atualizados).toEqual([])
   })
 
@@ -172,7 +179,7 @@ describe('correcao da selecao e do desmame', () => {
   it('selecao que deixaria menos animais do que os desmamados e recusada', async () => {
     await expect(
       corrigirSelecao(1, { dtSelecao: '2026-09-25', eutanasiadoM: 2, eutanasiadoF: 1, motivo: 'x' }, 1),
-    ).rejects.toEqual(recusa(400, 'VALIDACAO'))
+    ).rejects.toEqual(nosCampos('eutanasiadoM'))
   })
 
   it('selecao corrigida grava antes e depois', async () => {
@@ -191,7 +198,7 @@ describe('correcao da selecao e do desmame', () => {
   it('desmame acima do nascido menos a selecao e recusado', async () => {
     await expect(
       corrigirDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 5, desmamadoF: 4, motivo: 'x' }, 1),
-    ).rejects.toEqual(recusa(400, 'VALIDACAO'))
+    ).rejects.toEqual(nosCampos('desmamadoM'))
   })
 
   it('desmame ainda nao registrado nao se corrige', async () => {
