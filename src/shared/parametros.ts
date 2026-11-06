@@ -1,7 +1,7 @@
 // Parametros biologicos da colonia, como no 'config/settings.py' do sistema do cliente:
-// rato e camundongo usam os mesmos numeros. O codigo le daqui, e so daqui. O banco repete
-// um numero so: o 4 e 4 de ESPERADOS_POR_CASAL, no trigger compromisso_respeita_oferta
-// (migration 'enxuga_o_banco'). Mudou aqui, muda la tambem
+// rato e camundongo usam os mesmos numeros. O codigo le daqui, e so daqui. O banco nao
+// repete nenhum: no trigger compromisso_respeita_oferta, parto que nao nasceu oferece 0
+// (migration 'parto_nao_nascido_oferta_zero')
 
 /** parto previsto = acasalamento + 23 dias */
 export const GESTACAO_DIAS = 23
