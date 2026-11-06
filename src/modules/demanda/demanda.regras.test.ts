@@ -7,8 +7,11 @@ vi.mock('../../shared/email.ts', () => ({ avisarPedidoDecidido: vi.fn().mockReso
 
 const banco = vi.hoisted(() => ({
   linhagem: null as Record<string, unknown> | null,
+  /** o que o teste muda no pedido de 2 M e 2 F, 28 dias, entrega em 01/12 */
+  solicitacao: {} as Record<string, unknown>,
   partos: [] as Record<string, unknown>[],
   aprovadas: 1,
+  transacoes: 0,
 }))
 
 vi.mock('../../shared/prisma.ts', () => ({
@@ -40,16 +43,19 @@ vi.mock('../../shared/prisma.ts', () => ({
         linhagem: { nome: 'Wistar' },
         usuarioSolicitante: { email: 'paula@ufsc.br' },
         remessas: [{ id: 1 }],
+        ...banco.solicitacao,
       }),
     },
     parto: { findMany: async () => banco.partos },
-    $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
-      fn({
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+      banco.transacoes += 1
+      return fn({
         solicitacao: { updateMany: async () => ({ count: banco.aprovadas }) },
         compromisso: { create: async () => ({}) },
         caixa: { updateMany: async () => ({ count: 0 }) },
         historico: { create: async () => ({}) },
-      }),
+      })
+    },
   },
 }))
 
@@ -68,6 +74,7 @@ const pedido = {
   observacoes: null,
 }
 
+/** nascido em 03/11: 28 dias na entrega de 01/12, a idade pedida. Tem 4 M e 4 F livres */
 const parto = (idLinhagem: number, caixa = { ativa: true, estado: 'R' }) => ({
   id: 10,
   ordem: 2,
@@ -77,19 +84,26 @@ const parto = (idLinhagem: number, caixa = { ativa: true, estado: 'R' }) => ({
   eutanasiadoF: 1,
   desmamadoM: null,
   desmamadoF: null,
-  dtPartoReal: new Date('2026-10-01T00:00:00.000Z'),
+  dtPartoReal: new Date('2026-11-03T00:00:00.000Z'),
   dtDesmameReal: null,
   compromissos: [],
   casal: { idCaixa: 4, idLinhagem, ativo: true, caixa, linhagem: { idEspecie: 1 } },
 })
+
+const nascidoEm = (data: string) => ({ ...parto(3), dtPartoReal: new Date(`${data}T00:00:00.000Z`) })
+
+/** o pedido inteiro: 2 machos e 2 femeas do mesmo parto */
+const inteiro = [{ idParto: 10, machos: 2, femeas: 2 }]
 
 const recusa = (status: number, codigo: string) => expect.objectContaining({ status, codigo })
 
 beforeEach(() => {
   vi.clearAllMocks()
   banco.linhagem = { id: 3, idEspecie: 1, ativa: true }
+  banco.solicitacao = {}
   banco.partos = [parto(3)]
   banco.aprovadas = 1
+  banco.transacoes = 0
 })
 
 describe('nova solicitacao', () => {
@@ -138,6 +152,28 @@ describe('alocacao', () => {
     await expect(
       alocarSolicitacao(7, [{ idParto: 10, machos: 1, femeas: 1 }], tecnica),
     ).rejects.toEqual(recusa(409, 'DISPONIBILIDADE_EXCEDIDA'))
+  })
+
+  it('filhote fora da idade pedida e recusado e nada e gravado', async () => {
+    // pedido de 100 a 120 dias e filhote com 12 dias na entrega
+    banco.solicitacao = { idadeMinDias: 100, idadeMaxDias: 120 }
+    banco.partos = [nascidoEm('2026-11-19')]
+
+    await expect(alocarSolicitacao(7, inteiro, tecnica)).rejects.toEqual(recusa(409, 'DISPONIBILIDADE_EXCEDIDA'))
+    expect(banco.transacoes).toBe(0)
+    expect(avisarPedidoDecidido).not.toHaveBeenCalled()
+  })
+
+  it('a idade vale com a mesma tolerancia da busca: 28 dias aceita de 25 a 31', async () => {
+    const alocar = (nascimento: string) => {
+      banco.partos = [nascidoEm(nascimento)]
+      return alocarSolicitacao(7, inteiro, tecnica)
+    }
+
+    await expect(alocar('2026-10-30')).rejects.toEqual(recusa(409, 'DISPONIBILIDADE_EXCEDIDA')) // 32 dias
+    await expect(alocar('2026-10-31')).resolves.toMatchObject({ status: 'aprovada' }) // 31 dias
+    await expect(alocar('2026-11-06')).resolves.toMatchObject({ status: 'aprovada' }) // 25 dias
+    await expect(alocar('2026-11-07')).rejects.toEqual(recusa(409, 'DISPONIBILIDADE_EXCEDIDA')) // 24 dias
   })
 
   it('dois cliques ao mesmo tempo: o segundo nao grava', async () => {

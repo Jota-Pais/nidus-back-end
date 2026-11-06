@@ -6,6 +6,8 @@ import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
+import { faixaDoPedido } from '../motor/motor.ts'
+import { diasEntre } from '../motor/motor.service.ts'
 import { ACAO_DEVOLUCAO, devolvidosDesde, faltaDosPedidos } from './devolucao.service.ts'
 import { SITUACAO_DO_PROJETO } from './projeto.service.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
@@ -386,6 +388,10 @@ export async function alocarSolicitacao(
     },
   })
 
+  // a idade na entrega segue a faixa aceita da busca de atendimento (secao 1.6)
+  const entrega = dataISO(solicitacao.dtDesejada)
+  const faixa = faixaDoPedido({ min: solicitacao.idadeMinDias, max: solicitacao.idadeMaxDias })
+
   // confere antes de gravar: nenhum item pode passar do que o parto ainda tem livre
   for (const item of itens) {
     const parto = partos.find((p) => p.id === item.idParto)
@@ -412,6 +418,15 @@ export async function alocarSolicitacao(
       throw erroDeRegra(
         'DISPONIBILIDADE_EXCEDIDA',
         `O ${parto.ordem}o parto da caixa ainda nao nasceu: so da para reservar animal que ja existe.`,
+      )
+    }
+
+    const idadeNaEntrega = diasEntre(dataISO(parto.dtPartoReal), entrega)
+
+    if (idadeNaEntrega < faixa.min || idadeNaEntrega > faixa.max) {
+      throw erroDeRegra(
+        'DISPONIBILIDADE_EXCEDIDA',
+        `O ${parto.ordem}o parto da caixa tem ${idadeNaEntrega} dias na entrega, fora da idade aceita no pedido (${faixa.min} a ${faixa.max} dias).`,
       )
     }
 

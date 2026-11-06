@@ -30,7 +30,7 @@ export type PedidoDeBusca = {
   excluir?: number[] | undefined
 }
 
-function diasEntre(de: string, ate: string): number {
+export function diasEntre(de: string, ate: string): number {
   return Math.round((Date.parse(`${ate}T00:00:00Z`) - Date.parse(`${de}T00:00:00Z`)) / 86_400_000)
 }
 
