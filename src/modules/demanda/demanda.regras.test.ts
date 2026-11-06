@@ -170,6 +170,21 @@ describe('alocacao', () => {
     await expect(alocar('2026-11-07')).rejects.toEqual(recusa(409, 'DISPONIBILIDADE_EXCEDIDA')) // 24 dias
   })
 
+  it('o animal tem de estar desmamado ate a entrega, como na busca', async () => {
+    // pedido de 21 dias aceita de 20 a 22: com 20 dias na entrega, o desmame previsto (nascimento
+    // + 22) cai depois da entrega de 01/12
+    banco.solicitacao = { idadeMinDias: 21, idadeMaxDias: 21 }
+    banco.partos = [nascidoEm('2026-11-11')]
+
+    await expect(alocarSolicitacao(7, inteiro, tecnica)).rejects.toThrow('desmamado')
+    expect(banco.transacoes).toBe(0)
+
+    // com o desmame real gravado antes da entrega, ja pode
+    banco.partos = [{ ...nascidoEm('2026-11-11'), dtDesmameReal: new Date('2026-11-30T00:00:00.000Z') }]
+
+    await expect(alocarSolicitacao(7, inteiro, tecnica)).resolves.toMatchObject({ status: 'aprovada' })
+  })
+
   it('dois cliques ao mesmo tempo: o segundo nao grava', async () => {
     banco.aprovadas = 0
 

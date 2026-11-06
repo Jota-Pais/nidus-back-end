@@ -34,6 +34,11 @@ export function diasEntre(de: string, ate: string): number {
   return Math.round((Date.parse(`${ate}T00:00:00Z`) - Date.parse(`${de}T00:00:00Z`)) / 86_400_000)
 }
 
+/** O dia em que o animal ja esta desmamado: o desmame real ou, sem ele, nascimento + aleitamento */
+export function dataDoDesmame(nascimento: string, dtDesmameReal: Date | null): string {
+  return dtDesmameReal ? dataISO(dtDesmameReal) : somarDias(nascimento, ALEITAMENTO_DIAS)
+}
+
 /** GET /api/busca */
 export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new Date()) {
   const hoje = hojeISO(agora)
@@ -96,10 +101,7 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
         if (idadeNaEntrega < faixa.min || idadeNaEntrega > faixa.max) return []
 
         // o animal tem de estar desmamado ate a entrega
-        const desmame = parto.dtDesmameReal
-          ? dataISO(parto.dtDesmameReal)
-          : somarDias(nascimento, ALEITAMENTO_DIAS)
-        if (desmame > referencia) return []
+        if (dataDoDesmame(nascimento, parto.dtDesmameReal) > referencia) return []
 
         const { disponivel } = disponibilidadeDoParto(parto)
         if (disponivel.m + disponivel.f === 0) return []

@@ -12,7 +12,7 @@ import {
   situacaoDaCaixa,
 } from '../infra/fluxoDoKanban.ts'
 import { faixaDoPedido } from '../motor/motor.ts'
-import { diasEntre } from '../motor/motor.service.ts'
+import { dataDoDesmame, diasEntre } from '../motor/motor.service.ts'
 import { ACAO_DEVOLUCAO, devolvidosDesde, faltaDosPedidos } from './devolucao.service.ts'
 import { SITUACAO_DO_PROJETO } from './projeto.service.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
@@ -424,7 +424,8 @@ export async function alocarSolicitacao(
     },
   })
 
-  // a idade na entrega segue a faixa aceita da busca de atendimento (secao 1.6)
+  // a idade na entrega segue a faixa aceita da busca de atendimento (secao 1.6), e o animal tem
+  // de estar desmamado ate a entrega
   const entrega = dataISO(solicitacao.dtDesejada)
   const faixa = faixaDoPedido({ min: solicitacao.idadeMinDias, max: solicitacao.idadeMaxDias })
 
@@ -457,12 +458,21 @@ export async function alocarSolicitacao(
       )
     }
 
-    const idadeNaEntrega = diasEntre(dataISO(parto.dtPartoReal), entrega)
+    const nascimento = dataISO(parto.dtPartoReal)
+    const idadeNaEntrega = diasEntre(nascimento, entrega)
 
     if (idadeNaEntrega < faixa.min || idadeNaEntrega > faixa.max) {
       throw erroDeRegra(
         'DISPONIBILIDADE_EXCEDIDA',
         `O ${parto.ordem}o parto da caixa tem ${idadeNaEntrega} dias na entrega, fora da idade aceita no pedido (${faixa.min} a ${faixa.max} dias).`,
+      )
+    }
+
+    // e desmamado ate a entrega, tambem como na busca
+    if (dataDoDesmame(nascimento, parto.dtDesmameReal) > entrega) {
+      throw erroDeRegra(
+        'DISPONIBILIDADE_EXCEDIDA',
+        `O ${parto.ordem}o parto da caixa ainda nao estara desmamado na entrega.`,
       )
     }
 
