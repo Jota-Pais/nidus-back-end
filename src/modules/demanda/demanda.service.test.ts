@@ -93,8 +93,7 @@ beforeEach(() => {
 })
 
 describe('protocolo CEUA do pedido', () => {
-  it('protocolo que nao existe e 409 PROJETO_INVALIDO no campo protocoloCeua', async () => {
-    const mensagem = 'Protocolo CEUA nao encontrado. Confira o numero ou fale com o bioterio.'
+  it('protocolo fora do cadastro vale: o pedido guarda o numero, sem projeto', async () => {
     const comoPesquisadora: RequestHandler = (req, _res, next) => {
       req.usuario = pesquisadora
       next()
@@ -104,42 +103,28 @@ describe('protocolo CEUA do pedido', () => {
       .post('/api/solicitacoes')
       .send({ ...pedido, protocoloCeua: '23080.999999/2026-38', dataEntrega: '2099-01-01' })
 
-    expect(resposta.status).toBe(409)
-    expect(resposta.body.erro).toEqual({
-      codigo: 'PROJETO_INVALIDO',
-      mensagem,
-      campos: { protocoloCeua: mensagem },
-    })
-    expect(banco.gravado.solicitacao).toEqual([])
+    expect(resposta.status).toBe(201)
+    expect(banco.gravado.solicitacao).toEqual([
+      expect.objectContaining({ protocoloCeua: '23080.999999/2026-38', idProjeto: null }),
+    ])
   })
 
-  it('projeto de outra pessoa e projeto vencido tambem caem no campo protocoloCeua', async () => {
+  it('projeto de outra pessoa ou vencido nao barra o pedido: a equipe confere ao analisar', async () => {
     banco.projetos = [{ ...projetoDaPaula, idUsuarioResponsavel: 7 }]
-    await expect(criarSolicitacao(pedido, pesquisadora, agora)).rejects.toMatchObject({
-      status: 409,
-      codigo: 'PROJETO_INVALIDO',
-      extras: { campos: { protocoloCeua: 'Este projeto CEUA nao esta no seu nome.' } },
-    })
+    await expect(criarSolicitacao(pedido, pesquisadora, agora)).resolves.toEqual({ id: 42 })
 
     banco.projetos = [{ ...projetoDaPaula, dtVigenciaFim: new Date('2026-10-29T00:00:00.000Z') }]
-    await expect(criarSolicitacao(pedido, pesquisadora, agora)).rejects.toMatchObject({
-      status: 409,
-      codigo: 'PROJETO_INVALIDO',
-      extras: { campos: { protocoloCeua: `O projeto ${PROTOCOLO} nao esta vigente.` } },
-    })
-  })
-
-  it('o tecnico pede com o projeto de outra pessoa', async () => {
-    await expect(criarSolicitacao(pedido, tecnica, agora)).resolves.toEqual({ id: 42 })
+    await expect(criarSolicitacao(pedido, pesquisadora, agora)).resolves.toEqual({ id: 42 })
   })
 })
 
 describe('pedido gravado', () => {
-  it('grava o nome digitado, a faixa, o qualquer e as observacoes no projeto do protocolo', async () => {
+  it('grava o protocolo, o nome digitado, a faixa, o qualquer e as observacoes, ligado ao projeto cadastrado', async () => {
     await expect(criarSolicitacao(pedido, pesquisadora, agora)).resolves.toEqual({ id: 42 })
 
     expect(banco.gravado.solicitacao).toEqual([
       expect.objectContaining({
+        protocoloCeua: PROTOCOLO,
         idProjeto: projetoDaPaula.id,
         idUsuarioSolicitante: pesquisadora.id,
         nomePesquisador: 'Paula Lima',
@@ -188,7 +173,7 @@ describe('lista de solicitacoes', () => {
     status: 'EN',
     observacoes: 'Machos do mesmo parto.',
     dtCriacao: new Date('2026-11-05T13:00:00.000Z'),
-    projeto: { numero: PROTOCOLO },
+    protocoloCeua: PROTOCOLO,
     usuarioSolicitante: { email: 'paula@ufsc.br' },
     especie: { nome: 'Rato' },
     linhagem: { id: 3, nome: 'Wistar' },

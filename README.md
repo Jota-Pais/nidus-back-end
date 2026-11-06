@@ -51,15 +51,15 @@ cada parto repete: mudou num, muda no outro. Os pares genéticos ficam no banco.
   projeto usam a mesma regra (`src/modules/demanda/protocolo.ts`): o que o
   gestor cadastra, o pesquisador consegue pedir
 - **Pedido** (`POST /api/solicitacoes`) - o pesquisador digita o nome e o
-  protocolo CEUA; o e-mail é o da conta. O back procura
-  o protocolo em `etica.projeto` e não cria projeto: o projeto entra pela equipe
-  do biotério (por enquanto, pelo `db:usuarios`). O pedido traz machos, fêmeas e
+  protocolo CEUA; o e-mail é o da conta. O protocolo vale
+  pelo formato: o pedido guarda o número digitado e não depende de projeto
+  cadastrado, e a equipe do biotério confere com a CEUA ao analisar. Quando o
+  número já está em `etica.projeto`, o pedido fica ligado ao projeto. O pedido traz machos, fêmeas e
   animais de qualquer sexo (até 9999 cada, ao menos um no total), a idade de 21 a
   300 dias como faixa `idadeMin..idadeMax` (a exata é `idadeMin = idadeMax`), a
   data de entrega (a partir de hoje, pelo dia de Brasília), o cronograma e
-  observações opcionais (até 500 caracteres). Protocolo que não
-  existe, de outra pessoa ou fora de vigência dá `409 PROJETO_INVALIDO` com
-  `campos.protocoloCeua`
+  observações opcionais (até 500 caracteres). Protocolo fora dos dois
+  formatos dá `400 VALIDACAO` com `campos.protocoloCeua`
 - **Faixa aceita** (`GET /api/busca`, com `idadeMin`, `idadeMax` e `qualquer`) -
   a tolerância da seção 1.6 da spec vale nas pontas: de `faixaAceita(idadeMin).min`
   a `faixaAceita(idadeMax).max`. A idade exata aceita o mesmo de antes (28 aceita

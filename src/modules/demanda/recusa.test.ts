@@ -37,7 +37,7 @@ beforeEach(() => {
     idadeMinDias: 21,
     idadeMaxDias: 28,
     dtDesejada: new Date('2026-12-01T00:00:00.000Z'),
-    projeto: { numero: '23080.000001/2026-54' },
+    protocoloCeua: '23080.000001/2026-54',
     linhagem: { nome: 'Wistar' },
     usuarioSolicitante: { email: 'paula@ufsc.br' },
   }

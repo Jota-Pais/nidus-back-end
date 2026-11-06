@@ -23,7 +23,7 @@ const pedido = (id: number) => ({
   idadeMaxDias: 28,
   dtDesejada: new Date('2026-12-15T00:00:00.000Z'),
   dtCriacao: new Date('2026-11-01T02:00:00.000Z'),
-  projeto: { numero: '23080.001234/2026-11' },
+  protocoloCeua: '23080.001234/2026-11',
   linhagem: { nome: 'Wistar' },
   usuarioSolicitante: { email: `pessoa${id}@ufsc.br` },
 })

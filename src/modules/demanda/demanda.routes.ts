@@ -76,7 +76,7 @@ export const solicitacaoNova = z
       .trim()
       .min(1, 'Informe o nome do pesquisador.')
       .max(120, 'O nome passa de 120 caracteres.'),
-    /** o numero do projeto em etica.projeto */
+    /** so o formato: o pedido nao depende de projeto cadastrado */
     protocoloCeua: numeroCeua,
     idLinhagem: z.number().int().positive(),
     machos: animais,

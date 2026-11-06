@@ -311,7 +311,11 @@ model Projeto {
 
 model Solicitacao {
   id                   Int @id @default(autoincrement())
-  idProjeto            Int @map("id_projeto")
+  /// O protocolo CEUA que a pessoa digitou, conferido so no formato
+  /// (src/modules/demanda/protocolo.ts). A equipe tecnica confere o resto ao analisar.
+  protocoloCeua        String @map("protocolo_ceua") @db.VarChar(30)
+  /// O projeto cadastrado com esse numero, quando existe. O pedido nao depende dele.
+  idProjeto            Int? @map("id_projeto")
   idUsuarioSolicitante Int @map("id_usuario_solicitante")
   idEspecie            Int @map("id_especie")
   idLinhagem           Int @map("id_linhagem")
@@ -337,8 +341,7 @@ model Solicitacao {
   dtCriacao    DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
   dtManutencao DateTime? @map("dt_manutencao") @db.Timestamptz(6)
 
-  /// O protocolo CEUA digitado no pedido so resolve este id: o projeto ja existe.
-  projeto            Projeto  @relation(fields: [idProjeto], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  projeto            Projeto? @relation(fields: [idProjeto], references: [id], onDelete: NoAction, onUpdate: NoAction)
   usuarioSolicitante Usuario  @relation(fields: [idUsuarioSolicitante], references: [id], onDelete: NoAction, onUpdate: NoAction)
   especie            Especie  @relation(fields: [idEspecie], references: [id], onDelete: NoAction, onUpdate: NoAction)
   /// FK COMPOSTA: linhagem coerente com a especie. Wistar e de rato;

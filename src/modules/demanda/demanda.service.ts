@@ -24,10 +24,7 @@ import {
   partoNaoVaiAcontecer,
 } from '../reproducao/disponibilidade.ts'
 
-/**
- * O pesquisador so ve os proprios pedidos e so pede no projeto que esta no nome dele; tecnico e
- * gestor veem todos e pedem em qualquer projeto
- */
+/** O pesquisador so ve os proprios pedidos e os proprios projetos; tecnico e gestor veem todos */
 const doPesquisador = (usuario: UsuarioDaSessao) => usuario.perfil === 'pesquisador'
 
 /** GET /api/projetos */
@@ -86,7 +83,6 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
     where: doPesquisador(usuario) ? { idUsuarioSolicitante: usuario.id } : {},
     orderBy: { id: 'desc' },
     include: {
-      projeto: { select: { numero: true } },
       usuarioSolicitante: { select: { email: true } },
       especie: { select: { nome: true } },
       linhagem: { select: { id: true, nome: true } },
@@ -125,7 +121,7 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
       prazoResposta: s.status === 'EN' ? somarDias(hojeISO(s.dtCriacao), PRAZO_DE_RESPOSTA_EM_DIAS) : null,
       dataAceite: dataDa(s.id, 'alocacao'),
       dataRecusa: s.status === 'RE' ? dataDa(s.id, 'recusa') : null,
-      protocoloCeua: s.projeto.numero,
+      protocoloCeua: s.protocoloCeua,
       // o nome e o que a pessoa digitou no pedido; o e-mail e o da conta que pediu
       pesquisador: s.nomePesquisador,
       email: s.usuarioSolicitante.email,
@@ -148,7 +144,7 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
 
 export type NovaSolicitacao = {
   nomePesquisador: string
-  /** o numero do projeto em etica.projeto: o processo 23080.XXXXXX/AAAA-XX ou o do Sistema CEUA */
+  /** o processo 23080.XXXXXX/AAAA-XX ou o numero do Sistema CEUA, ja conferido no formato */
   protocoloCeua: string
   idLinhagem: number
   machos: number
@@ -162,31 +158,19 @@ export type NovaSolicitacao = {
   observacoes: string | null
 }
 
-/** 409 do protocolo, com o campo, para o front mostrar a mensagem embaixo dele */
-const protocoloInvalido = (mensagem: string) =>
-  erroDeRegra('PROJETO_INVALIDO', mensagem, { campos: { protocoloCeua: mensagem } })
-
 /** POST /api/solicitacoes - o pedido do pesquisador, com a primeira remessa */
 export async function criarSolicitacao(
   dados: NovaSolicitacao,
   usuario: UsuarioDaSessao,
   agora: Date = new Date(),
 ) {
-  // esta rota nao cria projeto: procura pelo numero o que ja esta no banco
-  const projeto = await prisma.projeto.findUnique({ where: { numero: dados.protocoloCeua } })
-
-  if (projeto === null) {
-    throw protocoloInvalido('Protocolo CEUA nao encontrado. Confira o numero ou fale com o bioterio.')
-  }
-
-  // a cota da CEUA e liberacao por pessoa e projeto, nao saldo (combinado com o cliente em 20/09)
-  if (doPesquisador(usuario) && projeto.idUsuarioResponsavel !== usuario.id) {
-    throw protocoloInvalido('Este projeto CEUA nao esta no seu nome.')
-  }
-
-  if (projeto.situacao !== 'V' || dataISO(projeto.dtVigenciaFim) < hojeISO(agora)) {
-    throw protocoloInvalido(`O projeto ${projeto.numero} nao esta vigente.`)
-  }
+  // O protocolo vale pelo formato, que a rota ja conferiu: o pedido nao depende de projeto
+  // cadastrado, e a equipe tecnica confere com a CEUA ao analisar. Quando o numero ja esta no
+  // cadastro, o pedido fica ligado ao projeto
+  const projeto = await prisma.projeto.findUnique({
+    where: { numero: dados.protocoloCeua },
+    select: { id: true },
+  })
 
   const linhagem = await prisma.linhagem.findUnique({ where: { id: dados.idLinhagem } })
 
@@ -205,7 +189,8 @@ export async function criarSolicitacao(
   const criada = await prisma.$transaction(async (tx) => {
     const solicitacao = await tx.solicitacao.create({
       data: {
-        idProjeto: projeto.id,
+        protocoloCeua: dados.protocoloCeua,
+        idProjeto: projeto?.id ?? null,
         idUsuarioSolicitante: usuario.id,
         nomePesquisador: dados.nomePesquisador,
         idEspecie: linhagem.idEspecie,
@@ -274,7 +259,6 @@ function somarPorParto(itens: ItemDeAlocacao[]): ItemDeAlocacao[] {
 
 /** O que a solicitacao traz junto para o aviso ao pesquisador */
 const PARA_O_AVISO = {
-  projeto: { select: { numero: true } },
   linhagem: { select: { nome: true } },
   usuarioSolicitante: { select: { email: true } },
 } satisfies Prisma.SolicitacaoInclude
@@ -293,7 +277,7 @@ function avisarPesquisador(
   avisarPedidoDecidido(
     solicitacao.usuarioSolicitante.email,
     {
-      protocoloCeua: solicitacao.projeto.numero,
+      protocoloCeua: solicitacao.protocoloCeua,
       linhagem: solicitacao.linhagem.nome,
       machos: solicitacao.qtdM,
       femeas: solicitacao.qtdF,
