@@ -105,7 +105,9 @@ async function enviarPelaBrevo({ para, assunto, texto, segredos = [] }: Mensagem
 
 /**
  * O codigo de acesso. O texto e o mesmo para o primeiro acesso e para a senha esquecida, com
- * conta ou sem: o e-mail nao diz se a conta existe
+ * conta ou sem: o e-mail nao diz se a conta existe. O link abre a tela ja no campo do codigo:
+ * quem recebe sem ter pedido (a conta que o gestor cria) nao precisa pedir outro, que anularia
+ * este e mandaria mais um e-mail. O codigo fica fora do link, que vai parar em historico e log
  */
 export async function enviarCodigoDeAcesso(
   email: string,
@@ -124,6 +126,9 @@ export async function enviarCodigoDeAcesso(
       'Olá!',
       '',
       `Seu código para definir a senha do Nidus é ${codigo}.`,
+      '',
+      'Para digitar o código, abra:',
+      `${env.CORS_ORIGEM}/definir-senha?email=${encodeURIComponent(email)}`,
       '',
       `Ele vale por ${validadeEmMinutos} minutos e serve uma vez só. Se você não pediu este ` +
         'código, ignore este e-mail: sem ele, ninguém muda a sua senha.',

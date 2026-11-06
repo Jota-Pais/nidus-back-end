@@ -98,6 +98,9 @@ describe('codigo de acesso, em production, pela Brevo', () => {
     const { textContent } = chamadaUnica().corpo
     expect(textContent).toContain('código para definir a senha do Nidus é 012345')
     expect(textContent).toContain('vale por 15 minutos')
+    // o link abre a tela no campo do codigo, com o e-mail, e sem o codigo
+    expect(textContent).toContain('https://thenidus.vercel.app/definir-senha?email=fulano%40ufsc.br')
+    expect(textContent).not.toMatch(/definir-senhaS*012345/)
     expect(textContent).toContain('Se você não pediu este código, ignore este e-mail')
     // e nada que diga se a conta existe: o mesmo texto vai para quem tem conta e quem nao tem
     expect(textContent).not.toMatch(/conta/i)

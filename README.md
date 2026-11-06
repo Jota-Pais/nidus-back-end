@@ -149,7 +149,8 @@ recriar o schema quando o histórico diverge, e o banco é o de produção.
 O gestor não define a senha de ninguém: `POST /api/usuarios/:id/redefinicao-de-senha` manda à pessoa o mesmo código por e-mail, e a conta criada pelo gestor nasce sem senha e já recebe o código.
 
 O ID-UFSC entra depois dos testes práticos. Até lá, quem não tem senha, ou
-esqueceu, pede o código pela tela `/definir-senha` do front.
+esqueceu, pede o código pela tela `/definir-senha` do front. O e-mail do código traz o
+link `/definir-senha?email=...`, que abre a tela já no campo do código.
 
 - O login compara o e-mail em minúsculas e sem espaço nas pontas, que é como o
   primeiro acesso grava. Quem tiver e-mail com maiúscula em `login.usuario` deixa
