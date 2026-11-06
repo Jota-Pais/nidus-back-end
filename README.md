@@ -25,8 +25,9 @@ O que mora aqui:
   com parto, eutanásia de seleção e desmame. As datas previstas saem sozinhas:
   parto = acasalamento + 23 dias, desmame = parto + 22, próximo acasalamento =
   parto real + 6
-- **Solicitações** - o pedido do pesquisador, sempre num projeto CEUA vigente:
-  machos, fêmeas e animais de qualquer sexo, com idade exata ou faixa de idade
+- **Solicitações** - o pedido do pesquisador, com o protocolo CEUA dele, sem
+  depender de projeto cadastrado: machos, fêmeas e animais de qualquer sexo, com
+  idade exata ou faixa de idade
 - **Busca de atendimento** - dado um pedido, quais caixas atendem: primeiro o que
   já desmamou, depois o que já nasceu, por último o parto previsto. Dentro de
   cada grupo, na faixa de idade, primeiro o que está dentro da faixa pedida e
