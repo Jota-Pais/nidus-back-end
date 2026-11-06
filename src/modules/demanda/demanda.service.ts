@@ -6,6 +6,11 @@ import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
+import {
+  colunaDepoisDaEntrega,
+  selecaoDoPartoDaCaixa,
+  situacaoDaCaixa,
+} from '../infra/fluxoDoKanban.ts'
 import { faixaDoPedido } from '../motor/motor.ts'
 import { diasEntre } from '../motor/motor.service.ts'
 import { ACAO_DEVOLUCAO, devolvidosDesde, faltaDosPedidos } from './devolucao.service.ts'
@@ -14,6 +19,7 @@ import { somarDias } from '../reproducao/cadeiaTemporal.ts'
 import {
   codigoDaEspecie,
   dataISO,
+  estadoCaixa,
   exigirCodigo,
   hojeISO,
   paraData,
@@ -577,9 +583,65 @@ export async function registrarEntrega(
       descricao: `Entrega da solicitacao #${idSolicitacao} em ${dtEntrega}`,
       dados: { dtEntrega },
     })
+
+    await moverCaixasDaEntrega(tx, idSolicitacao, idUsuario)
   })
 
   return { idSolicitacao, status: statusSolicitacao.paraApi('CO'), dtEntrega }
+}
+
+/**
+ * Depois da entrega, a caixa que ela esvaziou vai para Enviado, e a que ficou em Pre-reserva sem
+ * nada a entregar volta para Livres (regra em fluxoDoKanban.ts). Le as caixas ja com a remessa
+ * entregue, dentro da mesma transacao
+ */
+async function moverCaixasDaEntrega(
+  tx: Prisma.TransactionClient,
+  idSolicitacao: number,
+  idUsuario: number,
+) {
+  const caixas = await tx.caixa.findMany({
+    where: {
+      ativa: true,
+      casais: {
+        some: {
+          partos: {
+            some: { compromissos: { some: { dtCancelamento: null, remessa: { idSolicitacao } } } },
+          },
+        },
+      },
+    },
+    select: {
+      id: true,
+      codigo: true,
+      estado: true,
+      casais: { select: { ativo: true, partos: { select: selecaoDoPartoDaCaixa } } },
+    },
+  })
+
+  for (const caixa of caixas) {
+    const depois = colunaDepoisDaEntrega(
+      caixa.estado,
+      caixa.casais.some((casal) => casal.ativo),
+      situacaoDaCaixa(caixa.casais.flatMap((casal) => casal.partos)),
+    )
+
+    if (depois === null) continue
+
+    const antes = estadoCaixa.paraApi(caixa.estado)
+    const novo = estadoCaixa.paraApi(depois)
+
+    await tx.caixa.update({ where: { id: caixa.id }, data: { estado: depois } })
+
+    await registrarHistorico(tx, {
+      idUsuario,
+      entidade: 'caixa',
+      idEntidade: caixa.id,
+      acao: 'mudanca_de_coluna',
+      descricao: `Caixa ${caixa.codigo}: ${antes} -> ${novo}, na entrega da solicitacao #${idSolicitacao}`,
+      dados: { antes, depois: novo, entrega: idSolicitacao },
+    })
+  }
 }
 
 /** idUsuario null quando a recusa e automatica, sem ninguem da equipe por tras */

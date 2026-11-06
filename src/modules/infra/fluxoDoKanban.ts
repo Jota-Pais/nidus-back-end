@@ -136,3 +136,22 @@ export function conferirTransicao(antes: string, depois: string, caixa: Situacao
     )
   }
 }
+
+/**
+ * A coluna da caixa depois de uma entrega, ou null quando ela fica onde esta. A caixa que a
+ * entrega esvaziou (casal encerrado, nenhum animal na caixa e nada a entregar) vai para Enviado.
+ * A caixa em Pre-reserva que ficou sem nada a entregar volta para Livres, o inverso da alocacao
+ */
+export function colunaDepoisDaEntrega(
+  estado: string,
+  temCasalAtivo: boolean,
+  caixa: SituacaoDaCaixa,
+): 'X' | 'R' | null {
+  const aEntregar = caixa.aEntregar.m + caixa.aEntregar.f
+  const vazia = caixa.naCaixa.m + caixa.naCaixa.f === 0
+
+  if (estado !== 'X' && !temCasalAtivo && vazia && aEntregar === 0) return 'X'
+  if (estado === 'P' && aEntregar === 0) return 'R'
+
+  return null
+}
