@@ -54,9 +54,47 @@ export type PedidoDeTransicao = {
   confirmar: boolean
 }
 
+/** O nome da coluna nas mensagens, como a tela mostra */
+const ROTULO_DA_COLUNA: Record<string, string> = {
+  R: 'Livres',
+  P: 'Pre-reserva',
+  E: 'Estoque',
+  T: 'Reserva',
+  X: 'Enviado',
+}
+
 /**
- * PATCH /api/caixas/:id/estado - arrastar o card para outra coluna. Se algum parto da caixa
- * tem compromisso ativo ainda nao entregue, a mudanca so passa com 'confirmar: true'
+ * O fluxo do kanban da spec do cliente (secao 1.9) no que vale para o Nidus, onde toda caixa e
+ * de casal: Enviado e a ultima coluna, so a caixa em Estoque ou Reserva vai para Enviado, e
+ * Reserva e Enviado exigem a caixa vinculada a uma solicitacao, que aqui e ter animal alocado
+ */
+function conferirTransicao(antes: string, depois: string, temVinculo: boolean) {
+  if (antes === 'X') {
+    throw erroDeRegra(
+      'TRANSICAO_INVALIDA',
+      'Esta caixa ja foi enviada: Enviado e a ultima coluna do kanban.',
+    )
+  }
+
+  if (depois === 'X' && antes !== 'E' && antes !== 'T') {
+    throw erroDeRegra(
+      'TRANSICAO_INVALIDA',
+      `A caixa em ${ROTULO_DA_COLUNA[antes]} nao vai direto para Enviado: so vai para Enviado a caixa em Estoque ou Reserva.`,
+    )
+  }
+
+  if ((depois === 'X' || depois === 'T') && !temVinculo) {
+    throw erroDeRegra(
+      'TRANSICAO_INVALIDA',
+      `Esta caixa nao tem animal alocado a uma solicitacao, e sem esse vinculo nao vai para ${ROTULO_DA_COLUNA[depois]}.`,
+    )
+  }
+}
+
+/**
+ * PATCH /api/caixas/:id/estado - arrastar o card para outra coluna. Confere o fluxo do kanban
+ * e, se algum parto da caixa tem compromisso ativo ainda nao entregue, a mudanca so passa com
+ * 'confirmar: true'
  */
 export async function moverCaixa(idCaixa: number, dados: PedidoDeTransicao, idUsuario: number) {
   const caixa = await prisma.caixa.findUnique({
@@ -70,12 +108,18 @@ export async function moverCaixa(idCaixa: number, dados: PedidoDeTransicao, idUs
 
   const estadoNovo = exigirCodigo(estadoCaixa, dados.estado, 'Estado')
 
-  // o compromisso entregue continua ativo, mas os animais dele ja sairam da caixa
-  const compromissos = await prisma.compromisso.count({
-    where: { dtCancelamento: null, remessa: { dtRealizada: null }, parto: { casal: { idCaixa } } },
+  // o compromisso entregue continua ativo e vinculando a caixa a solicitacao, mas os animais
+  // dele ja sairam da caixa
+  const compromissos = await prisma.compromisso.findMany({
+    where: { dtCancelamento: null, parto: { casal: { idCaixa } } },
+    select: { remessa: { select: { dtRealizada: true } } },
   })
 
-  if (compromissos > 0 && !dados.confirmar) {
+  conferirTransicao(caixa.estado, estadoNovo, compromissos.length > 0)
+
+  const aEntregar = compromissos.filter((c) => c.remessa.dtRealizada === null).length
+
+  if (aEntregar > 0 && !dados.confirmar) {
     throw erroDeRegra(
       'TRANSICAO_CONTRARIA_COMPROMISSO',
       'Esta caixa tem animais comprometidos que esta mudanca pode afetar. Confirmar mesmo assim?',

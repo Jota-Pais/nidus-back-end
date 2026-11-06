@@ -82,3 +82,97 @@ describe('mudanca de coluna com animal comprometido', () => {
     expect(banco.gravado).toEqual({ estado: 'R' })
   })
 })
+
+describe('fluxo do kanban (spec do cliente, secao 1.9)', () => {
+  it('livres e pre-reserva alternam sem vinculo', async () => {
+    naColuna('R')
+    await expect(moverCaixa(7, { estado: 'pre_reserva', confirmar: false }, 1)).resolves.toMatchObject({
+      estado: 'pre_reserva',
+    })
+
+    naColuna('P')
+    await expect(moverCaixa(7, { estado: 'livres', confirmar: false }, 1)).resolves.toMatchObject({
+      estado: 'livres',
+    })
+  })
+
+  it('enviado e a ultima coluna: a caixa enviada nao sai dela', async () => {
+    naColuna('X')
+    banco.compromissos = [entregue]
+
+    for (const estado of ['livres', 'pre_reserva', 'estoque', 'reserva'] as const) {
+      await expect(moverCaixa(7, { estado, confirmar: true }, 1)).rejects.toEqual(recusa('TRANSICAO_INVALIDA'))
+    }
+    expect(banco.gravado).toBeNull()
+  })
+
+  it('caixa em livres ou pre-reserva nao vai direto para enviado', async () => {
+    banco.compromissos = [entregue]
+
+    for (const estado of ['R', 'P']) {
+      naColuna(estado)
+      await expect(moverCaixa(7, { estado: 'enviado', confirmar: true }, 1)).rejects.toEqual(
+        recusa('TRANSICAO_INVALIDA'),
+      )
+    }
+    expect(banco.gravado).toBeNull()
+  })
+
+  it('caixa sem animal alocado a solicitacao nao vai para enviado', async () => {
+    for (const estado of ['E', 'T']) {
+      naColuna(estado)
+      await expect(moverCaixa(7, { estado: 'enviado', confirmar: true }, 1)).rejects.toEqual(
+        recusa('TRANSICAO_INVALIDA'),
+      )
+    }
+    expect(banco.gravado).toBeNull()
+  })
+
+  it('caixa sem animal alocado a solicitacao nao vai para reserva', async () => {
+    for (const estado of ['R', 'P', 'E']) {
+      naColuna(estado)
+      await expect(moverCaixa(7, { estado: 'reserva', confirmar: true }, 1)).rejects.toEqual(
+        recusa('TRANSICAO_INVALIDA'),
+      )
+    }
+    expect(banco.gravado).toBeNull()
+  })
+
+  it('estoque com solicitacao vinculada vai para reserva', async () => {
+    naColuna('E')
+    banco.compromissos = [pendente]
+
+    await expect(moverCaixa(7, { estado: 'reserva', confirmar: true }, 1)).resolves.toMatchObject({
+      estado: 'reserva',
+    })
+  })
+
+  it('reserva com a entrega registrada vai para enviado sem pedir confirmacao', async () => {
+    naColuna('T')
+    banco.compromissos = [entregue]
+
+    await expect(moverCaixa(7, { estado: 'enviado', confirmar: false }, 3)).resolves.toEqual({
+      idCaixa: 7,
+      estado: 'enviado',
+    })
+    expect(banco.historico).toMatchObject({
+      idUsuario: 3,
+      acao: 'mudanca_de_coluna',
+      dados: { antes: 'reserva', depois: 'enviado' },
+    })
+  })
+
+  it('estoque ou reserva com animal ainda nao entregue so vai para enviado confirmando', async () => {
+    banco.compromissos = [pendente]
+
+    for (const estado of ['E', 'T']) {
+      naColuna(estado)
+      await expect(moverCaixa(7, { estado: 'enviado', confirmar: false }, 1)).rejects.toEqual(
+        recusa('TRANSICAO_CONTRARIA_COMPROMISSO'),
+      )
+      await expect(moverCaixa(7, { estado: 'enviado', confirmar: true }, 1)).resolves.toMatchObject({
+        estado: 'enviado',
+      })
+    }
+  })
+})
