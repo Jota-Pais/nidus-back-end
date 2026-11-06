@@ -49,6 +49,25 @@ describe('o pesquisador nao opera a colonia', () => {
 
     expect(respostas.map((resposta) => resposta.status)).toEqual([403, 403, 403, 403])
   })
+
+  it('nao le a colonia: estoque, busca, kanban, estantes, caixas, projetos nem historico', async () => {
+    // ele so ve o proprio pedido (GET /api/solicitacoes) e o catalogo do formulario
+    const pesquisador = app('pesquisador')
+    const respostas = await Promise.all([
+      request(pesquisador).get('/api/estoque').query({ especie: 'rato' }),
+      request(pesquisador)
+        .get('/api/busca')
+        .query({ especie: 'rato', machos: 1, femeas: 1, qualquer: 0, idadeMin: 28, idadeMax: 28 }),
+      request(pesquisador).get('/api/quadro').query({ especie: 'rato' }),
+      request(pesquisador).get('/api/estantes'),
+      request(pesquisador).get('/api/estantes/1/grade'),
+      request(pesquisador).get('/api/caixas/1'),
+      request(pesquisador).get('/api/projetos'),
+      request(pesquisador).get('/api/historico'),
+    ])
+
+    expect(respostas.map((resposta) => resposta.status)).toEqual(Array(8).fill(403))
+  })
 })
 
 describe('forma da entrada', () => {
@@ -79,7 +98,7 @@ describe('forma da entrada', () => {
   })
 
   it('estoque sem especie e VALIDACAO', async () => {
-    const resposta = await request(app('pesquisador')).get('/api/estoque')
+    const resposta = await request(app('tecnico')).get('/api/estoque')
 
     expect(resposta.status).toBe(400)
   })

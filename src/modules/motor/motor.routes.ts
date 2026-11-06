@@ -40,7 +40,8 @@ buscaRoutes.get('/', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
 
 const filtroDoEstoque = z.object({ especie: z.string().trim().min(1) })
 
-estoqueRoutes.get('/', exigirPerfil(), async (req, res) => {
+/** GET /api/estoque - o que a colonia tem livre, so para quem opera a colonia */
+estoqueRoutes.get('/', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   res.json(await consultarEstoque(filtroDoEstoque.parse(req.query).especie))
 })
 
