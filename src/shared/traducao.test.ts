@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   codigoDaEspecie,
-  cronograma,
   dataISO,
   estadoCaixa,
   exigirCodigo,
@@ -18,7 +17,6 @@ const dicionarios = [
   { nome: 'estadoCaixa', dic: estadoCaixa, codigos: ['R', 'P', 'T', 'E', 'X'] },
   { nome: 'perfil', dic: perfil, codigos: ['P', 'T', 'G'] },
   { nome: 'face', dic: face, codigos: ['1', '2'] },
-  { nome: 'cronograma', dic: cronograma, codigos: ['U', 'S', 'Q', 'M'] },
 ]
 
 describe('traducao do char(1)', () => {
@@ -36,8 +34,6 @@ describe('traducao do char(1)', () => {
     expect(estadoCaixa.termos).toEqual(['livres', 'pre_reserva', 'estoque', 'reserva', 'enviado'])
     expect(perfil.termos).toEqual(['pesquisador', 'tecnico', 'gestor'])
     expect(face.termos).toEqual(['frontal', 'traseira'])
-    // os quatro que a rota aceita e o formulario Solicitar animais oferece
-    expect(cronograma.termos).toEqual(['unica', 'semanal', 'quinzenal', 'mensal'])
   })
 
   it('trata codigo fora do dominio como bug, nao como entrada invalida', () => {

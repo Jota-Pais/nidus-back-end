@@ -90,7 +90,6 @@ export const solicitacaoNova = z
       .max(IDADE.maxima, `A idade maxima e ${IDADE.maxima} dias.`),
     idadeMax: z.number().int().max(IDADE.maxima, `A idade maxima e ${IDADE.maxima} dias.`),
     dataEntrega: z.iso.date('Data invalida. Use aaaa-mm-dd.'),
-    cronograma: z.enum(['unica', 'semanal', 'quinzenal', 'mensal']),
     /** vazia, ausente ou null (o que o GET devolve sem observacoes) vira null */
     observacoes: z
       .string()

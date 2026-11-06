@@ -39,7 +39,6 @@ const pedido = {
   idadeMin: 21,
   idadeMax: 30,
   dataEntrega: somarDias(hojeISO(), 100),
-  cronograma: 'unica',
 }
 
 describe('POST /api/solicitacoes/viabilidade', () => {

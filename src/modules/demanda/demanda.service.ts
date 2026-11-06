@@ -10,7 +10,6 @@ import { SITUACAO_DO_PROJETO } from './projeto.service.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
 import {
   codigoDaEspecie,
-  cronograma,
   dataISO,
   exigirCodigo,
   hojeISO,
@@ -134,7 +133,6 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
       idadeMin: s.idadeMinDias,
       idadeMax: s.idadeMaxDias,
       dataEntrega: dataISO(s.dtDesejada),
-      cronograma: cronograma.paraApi(s.regime),
       observacoes: s.observacoes,
       status: statusSolicitacao.paraApi(s.status),
       motivoRecusa: s.status === 'RE' ? motivoDaRecusa(s.id) : null,
@@ -154,7 +152,6 @@ export type NovaSolicitacao = {
   idadeMin: number
   idadeMax: number
   dataEntrega: string
-  cronograma: string
   observacoes: string | null
 }
 
@@ -201,7 +198,6 @@ export async function criarSolicitacao(
         idadeMinDias: dados.idadeMin,
         idadeMaxDias: dados.idadeMax,
         dtDesejada: paraData(dados.dataEntrega),
-        regime: exigirCodigo(cronograma, dados.cronograma, 'Cronograma'),
         status: 'EN',
         observacoes: dados.observacoes,
       },

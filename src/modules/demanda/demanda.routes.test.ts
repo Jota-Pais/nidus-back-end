@@ -29,7 +29,6 @@ const pedido = {
   idadeMax: 28,
   // a entrega nao pode estar no passado: o teste anda junto com o calendario
   dataEntrega: somarDias(hojeISO(), 30),
-  cronograma: 'unica',
 }
 
 /** os erros de campo de um corpo recusado, como a API manda em VALIDACAO */

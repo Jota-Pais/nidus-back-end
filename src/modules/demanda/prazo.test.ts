@@ -125,7 +125,6 @@ describe('datas na lista de solicitacoes', () => {
     ...pedido(id),
     status,
     nomePesquisador: 'Paula',
-    regime: 'U',
     observacoes: null,
     dtCriacao: new Date('2026-11-01T02:00:00.000Z'),
     especie: { nome: 'Rato' },

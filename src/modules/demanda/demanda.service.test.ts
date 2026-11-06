@@ -83,7 +83,6 @@ const pedido: NovaSolicitacao = {
   idadeMin: 21,
   idadeMax: 40,
   dataEntrega: '2026-12-15',
-  cronograma: 'unica',
   observacoes: 'Machos do mesmo parto.',
 }
 
@@ -133,7 +132,6 @@ describe('pedido gravado', () => {
         qtdQualquer: 10,
         idadeMinDias: 21,
         idadeMaxDias: 40,
-        regime: 'U',
         status: 'EN',
         observacoes: 'Machos do mesmo parto.',
       }),
@@ -169,7 +167,6 @@ describe('lista de solicitacoes', () => {
     idadeMinDias: 21,
     idadeMaxDias: 40,
     dtDesejada: new Date('2026-12-15T00:00:00.000Z'),
-    regime: 'U',
     status: 'EN',
     observacoes: 'Machos do mesmo parto.',
     dtCriacao: new Date('2026-11-05T13:00:00.000Z'),
@@ -202,7 +199,6 @@ describe('lista de solicitacoes', () => {
       idadeMin: 21,
       idadeMax: 40,
       dataEntrega: '2026-12-15',
-      cronograma: 'unica',
       observacoes: 'Machos do mesmo parto.',
       status: 'enviada',
       motivoRecusa: null,

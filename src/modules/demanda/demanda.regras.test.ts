@@ -65,7 +65,6 @@ const pedido = {
   idadeMin: 28,
   idadeMax: 28,
   dataEntrega: '2026-11-20',
-  cronograma: 'unica',
   observacoes: null,
 }
 

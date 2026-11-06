@@ -55,14 +55,6 @@ export const statusSolicitacao = dicionario({
   CA: 'cancelada',
 } as const)
 
-/** demanda.solicitacao.regime - entrega unica ou cronograma */
-export const cronograma = dicionario({
-  U: 'unica',
-  S: 'semanal',
-  Q: 'quinzenal',
-  M: 'mensal',
-} as const)
-
 /** login.usuario.perfil - os tres perfis de acesso. */
 export const perfil = dicionario({
   P: 'pesquisador',

@@ -330,7 +330,8 @@ model Solicitacao {
   idadeMinDias   Int      @map("idade_min_dias") @db.SmallInt
   idadeMaxDias   Int      @map("idade_max_dias") @db.SmallInt
   dtDesejada     DateTime @map("dt_desejada") @db.Date
-  /// U unica | S semanal | Q quinzenal | M mensal | A avulsas
+  /// U unica | S semanal | Q quinzenal | M mensal | A avulsas. Por enquanto o pedido nao
+  /// escolhe cronograma e fica sempre U: quem quer varias entregas faz um pedido por data.
   regime         String   @default("U") @db.Char(1)
   /// RA rascunho | EN enviada | AN em analise | AP aprovada |
   /// RE recusada | AJ ajustada | AT em atendimento | CO concluida | CA cancelada

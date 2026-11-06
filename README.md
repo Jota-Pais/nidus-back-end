@@ -57,7 +57,7 @@ cada parto repete: mudou num, muda no outro. Os pares genéticos ficam no banco.
   número já está em `etica.projeto`, o pedido fica ligado ao projeto. O pedido traz machos, fêmeas e
   animais de qualquer sexo (até 9999 cada, ao menos um no total), a idade de 21 a
   300 dias como faixa `idadeMin..idadeMax` (a exata é `idadeMin = idadeMax`), a
-  data de entrega (a partir de hoje, pelo dia de Brasília), o cronograma e
+  data de entrega (a partir de hoje, pelo dia de Brasília) e
   observações opcionais (até 500 caracteres). Protocolo fora dos dois
   formatos dá `400 VALIDACAO` com `campos.protocoloCeua`
 - **Faixa aceita** (`GET /api/busca`, com `idadeMin`, `idadeMax` e `qualquer`) -
