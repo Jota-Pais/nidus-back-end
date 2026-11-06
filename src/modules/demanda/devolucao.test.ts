@@ -7,7 +7,7 @@ import { devolverParaAnalise, faltaDosPedidos } from './devolucao.service.ts'
 const banco = vi.hoisted(() => ({
   solicitacao: null as Record<string, unknown> | null,
   reservas: [] as Record<string, unknown>[],
-  aindaReservadas: [] as Record<string, unknown>[],
+  aindaReservadas: [] as { parto: unknown; remessa: { dtRealizada: Date | null } }[],
   devolvidas: 1,
   canceladas: null as Record<string, unknown> | null,
   caixas: null as Record<string, unknown> | null,
@@ -25,7 +25,11 @@ vi.mock('../../shared/prisma.ts', () => ({
           updateMany: async (consulta: Record<string, unknown>) => {
             banco.canceladas = consulta
           },
-          findMany: async () => banco.aindaReservadas,
+          // como o banco: com o filtro da remessa sem data de entrega, o entregue nao volta
+          findMany: async ({ where }: { where: { remessa?: { dtRealizada?: null } } }) =>
+            where.remessa?.dtRealizada === null
+              ? banco.aindaReservadas.filter((c) => c.remessa.dtRealizada === null)
+              : banco.aindaReservadas,
         },
         caixa: {
           updateMany: async (consulta: Record<string, unknown>) => {
@@ -104,11 +108,21 @@ describe('devolver para analise o pedido com reserva em falta', () => {
   })
 
   it('a caixa que ainda tem reserva de outro pedido fica como esta', async () => {
-    banco.aindaReservadas = [{ parto: { casal: { idCaixa: 3 } } }]
+    banco.aindaReservadas = [{ parto: { casal: { idCaixa: 3 } }, remessa: { dtRealizada: null } }]
 
     await devolverParaAnalise(12, tecnica)
 
     expect(banco.caixas).toBeNull()
+  })
+
+  it('a reserva de outro pedido ja entregue nao prende a caixa em Pre-reserva, como na entrega', async () => {
+    banco.aindaReservadas = [
+      { parto: { casal: { idCaixa: 3 } }, remessa: { dtRealizada: new Date('2026-11-05T00:00:00.000Z') } },
+    ]
+
+    await devolverParaAnalise(12, tecnica)
+
+    expect(banco.caixas).toEqual({ where: { id: { in: [3] }, estado: 'P' }, data: { estado: 'R' } })
   })
 
   it('so o pedido aceito volta para analise', async () => {

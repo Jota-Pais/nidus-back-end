@@ -155,8 +155,14 @@ export async function devolverParaAnalise(idSolicitacao: number, usuario: Usuari
       data: { dtCancelamento: new Date(), motivoCancelamento: MOTIVO_DO_CANCELAMENTO },
     })
 
+    // a mesma conta da entrega (colunaDepoisDaEntrega): so prende a caixa o que ainda falta
+    // entregar. O compromisso entregue continua ativo, mas a remessa dele tem data realizada
     const aindaReservadas = await tx.compromisso.findMany({
-      where: { dtCancelamento: null, parto: { casal: { idCaixa: { in: caixas } } } },
+      where: {
+        dtCancelamento: null,
+        remessa: { dtRealizada: null },
+        parto: { casal: { idCaixa: { in: caixas } } },
+      },
       select: { parto: { select: { casal: { select: { idCaixa: true } } } } },
     })
     const semReserva = caixas.filter(
