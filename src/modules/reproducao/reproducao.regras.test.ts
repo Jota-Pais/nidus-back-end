@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   cicloFicha,
   encerrarCasal,
+  formarCasal,
   registrarDesmame,
   registrarNascimento,
   registrarSelecao,
@@ -12,10 +13,14 @@ const banco = vi.hoisted(() => ({
   casal: null as Record<string, unknown> | null,
   gravou: false,
   partoAtualizado: null as Record<string, unknown> | null,
+  linhagem: null as Record<string, unknown> | null,
 }))
 
 vi.mock('../../shared/prisma.ts', () => ({
   prisma: {
+    linhagem: { findUnique: async () => banco.linhagem },
+    caixa: { findUnique: async () => ({ id: 1, idEspecie: 1, estado: 'R' }) },
+    grupoGeneticoPar: { findFirst: async () => ({ id: 1 }) },
     parto: {
       findUnique: async () => banco.parto,
       update: async () => {
@@ -191,6 +196,26 @@ describe('desmame', () => {
     await expect(
       registrarDesmame(1, { dtDesmameReal: '2026-10-17', desmamadoM: 4, desmamadoF: 4 }, 1),
     ).rejects.toEqual(recusa(409, 'SEQUENCIA_INVALIDA'))
+    expect(banco.gravou).toBe(false)
+  })
+})
+
+describe('formacao do casal', () => {
+  it('linhagem inativa nao forma casal novo', async () => {
+    banco.linhagem = { id: 2, nome: 'Wistar', idEspecie: 1, ativa: false }
+
+    await expect(
+      formarCasal(
+        { idCaixa: 1, idLinhagem: 2, grupoMacho: 'A', grupoFemea: 'B', dtFormacao: '2026-11-06' },
+        1,
+      ),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        status: 400,
+        codigo: 'VALIDACAO',
+        extras: { campos: { idLinhagem: expect.stringContaining('inativa') } },
+      }),
+    )
     expect(banco.gravou).toBe(false)
   })
 })

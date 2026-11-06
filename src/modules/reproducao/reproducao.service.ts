@@ -167,6 +167,11 @@ export async function formarCasal(dados: NovoCasal, idUsuario: number) {
     throw naoEncontrado('Linhagem')
   }
 
+  // a mesma regra do pedido: linhagem inativa nao aparece no catalogo e nao recebe nada novo
+  if (!linhagem.ativa) {
+    throw campoInvalido('idLinhagem', 'Esta linhagem esta inativa e nao forma casal novo.')
+  }
+
   const naPosicao = dados.posicao === undefined ? null : await caixaNaPosicao(dados.posicao)
   const caixaExistente =
     dados.idCaixa === undefined
