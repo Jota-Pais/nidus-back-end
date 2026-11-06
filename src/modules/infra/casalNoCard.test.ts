@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { casalNoCard, ninhadas, partoAtual, partoPrevisto } from './casalNoCard.ts'
+import { casalNoCard, ninhadas, partoAtual, partoPrevisto, selecaoDoCasalNoCard } from './casalNoCard.ts'
 
 const dia = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 
@@ -44,29 +44,29 @@ describe('parto previsto - o P:dd/mm do card', () => {
 
 describe('casalNoCard', () => {
   it('nao mostra casal encerrado sem ninhada', () => {
-    expect(casalNoCard({ identificacao: 'AB', ativo: false, partos: [] }, 'R')).toBeNull()
-    expect(casalNoCard({ identificacao: 'AB', ativo: false, partos: [parto('2026-10-01')] }, 'R')).toBeNull()
-    expect(casalNoCard(undefined, 'R')).toBeNull()
+    expect(casalNoCard([{ identificacao: 'AB', ativo: false, partos: [] }], 'R')).toBeNull()
+    expect(casalNoCard([{ identificacao: 'AB', ativo: false, partos: [parto('2026-10-01')] }], 'R')).toBeNull()
+    expect(casalNoCard([], 'R')).toBeNull()
   })
 
   it('mostra a ninhada do 5o parto depois do encerramento automatico', () => {
     const partos = ['06-01', '06-30', '07-29', '08-28', '09-26'].map((d) => parto(`2026-${d}`, `2026-${d}`))
-    const casal = casalNoCard({ identificacao: 'AB', ativo: false, partos }, 'R', '2026-11-06')
+    const casal = casalNoCard([{ identificacao: 'AB', ativo: false, partos }], 'R', '2026-11-06')
     expect(casal).toMatchObject({ identificacao: 'AB', partoAtual: 5, partoPrevisto: null, encerrado: true })
   })
 
   it('casal encerrado com a caixa ja enviada some do card', () => {
     const partos = [parto('2026-06-01', '2026-06-01')]
-    expect(casalNoCard({ identificacao: 'AB', ativo: false, partos }, 'X')).toBeNull()
+    expect(casalNoCard([{ identificacao: 'AB', ativo: false, partos }], 'X')).toBeNull()
   })
 
   it('casal encerrado a mao nao mostra a previsao do parto que nao vai acontecer', () => {
     const partos = [parto('2026-06-01', '2026-06-01'), parto('2026-06-30')]
-    expect(casalNoCard({ identificacao: 'AB', ativo: false, partos }, 'E')?.partoPrevisto).toBeNull()
+    expect(casalNoCard([{ identificacao: 'AB', ativo: false, partos }], 'E')?.partoPrevisto).toBeNull()
   })
 
   it('tira o espaco que o char(2) do banco deixa', () => {
-    const casal = casalNoCard({ identificacao: 'AB ', ativo: true, partos: [parto('2026-10-20')] }, 'R')
+    const casal = casalNoCard([{ identificacao: 'AB ', ativo: true, partos: [parto('2026-10-20')] }], 'R')
     expect(casal).toEqual({
       identificacao: 'AB',
       partoAtual: 1,
@@ -74,6 +74,34 @@ describe('casalNoCard', () => {
       encerrado: false,
       ninhadas: [],
     })
+  })
+
+  it('a consulta do card e da grade traz todos os casais da caixa, o ativo primeiro', () => {
+    expect(selecaoDoCasalNoCard).not.toHaveProperty('take')
+    expect(selecaoDoCasalNoCard.orderBy[0]).toEqual({ ativo: 'desc' })
+  })
+
+  it('casal novo na caixa nao esconde as ninhadas que o casal encerrado deixou nela', () => {
+    // o primeiro da lista e o casal da caixa (o ativo); os outros vieram antes dele
+    const novo = { identificacao: 'CD', ativo: true, partos: [parto('2026-11-20')] }
+    const encerrado = {
+      identificacao: 'AB',
+      ativo: false,
+      partos: [parto('2026-10-27', '2026-10-27', { m: 3, f: 4 }, 5)],
+    }
+
+    const casal = casalNoCard([novo, encerrado], 'R', '2026-11-06')
+
+    expect(casal).toMatchObject({ identificacao: 'CD', partoAtual: 1, partoPrevisto: '2026-11-20' })
+    expect(casal?.ninhadas).toEqual([{ casal: 'AB', parto: 5, m: 3, f: 4, idadeDias: 10 }])
+  })
+
+  it('casal novo encerrado sem ninhada ainda mostra a ninhada do casal de antes', () => {
+    const novo = { identificacao: 'CD', ativo: false, partos: [parto('2026-11-20')] }
+    const encerrado = { identificacao: 'AB', ativo: false, partos: [parto('2026-10-27', '2026-10-27', { m: 3, f: 4 }, 5)] }
+
+    expect(casalNoCard([novo, encerrado], 'E', '2026-11-06')?.ninhadas).toHaveLength(1)
+    expect(casalNoCard([novo, encerrado], 'X', '2026-11-06')).toBeNull()
   })
 })
 
@@ -85,9 +113,9 @@ describe('ninhadas - os animais que existem na caixa', () => {
       parto('2026-12-01', null, undefined, 3),
     ]
 
-    expect(ninhadas(partos, '2026-11-06')).toEqual([
-      { parto: 1, m: 1, f: 0, idadeDias: 10 },
-      { parto: 2, m: 2, f: 0, idadeDias: 0 },
+    expect(ninhadas({ identificacao: 'AB', partos }, '2026-11-06')).toEqual([
+      { casal: 'AB', parto: 1, m: 1, f: 0, idadeDias: 10 },
+      { casal: 'AB', parto: 2, m: 2, f: 0, idadeDias: 0 },
     ])
   })
 
@@ -95,9 +123,9 @@ describe('ninhadas - os animais que existem na caixa', () => {
     const desmamado = { ...parto('2026-10-01', '2026-10-01', { m: 6, f: 5 }), desmamadoM: 4, desmamadoF: 4 }
     const selecionado = { ...parto('2026-10-20', '2026-10-20', { m: 6, f: 5 }, 2), eutanasiadoM: 1, eutanasiadoF: 2 }
 
-    expect(ninhadas([desmamado, selecionado], '2026-11-06')).toEqual([
-      { parto: 1, m: 4, f: 4, idadeDias: 36 },
-      { parto: 2, m: 5, f: 3, idadeDias: 17 },
+    expect(ninhadas({ identificacao: 'AB', partos: [desmamado, selecionado] }, '2026-11-06')).toEqual([
+      { casal: 'AB', parto: 1, m: 4, f: 4, idadeDias: 36 },
+      { casal: 'AB', parto: 2, m: 5, f: 3, idadeDias: 17 },
     ])
   })
 })

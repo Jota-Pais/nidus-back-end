@@ -98,7 +98,7 @@ export async function montarGrade(id: number) {
                   id: caixa.id,
                   estado: estadoCaixa.paraApi(caixa.estado),
                   linhagem: casal?.linhagem.nome ?? null,
-                  casal: casalNoCard(casal, caixa.estado),
+                  casal: casalNoCard(caixa.casais, caixa.estado),
                 },
         })
       }

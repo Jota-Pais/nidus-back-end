@@ -42,7 +42,7 @@ export async function montarQuadro(codigoEspecie: string) {
       codigo: codigoDaPosicao(caixa.face, caixa.linha, caixa.coluna, caixa.estante.colunas),
       numeroVisivel: caixa.estante.numeroVisivel,
       linhagem: casal?.linhagem.nome ?? null,
-      casal: casalNoCard(casal, caixa.estado),
+      casal: casalNoCard(caixa.casais, caixa.estado),
     })
   }
 

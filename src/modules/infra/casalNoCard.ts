@@ -1,6 +1,7 @@
 // O que o kanban e a grade mostram do casal de uma caixa, como na spec do cliente
 // (secao 1.13): a identificacao, o parto atual (a bolinha colorida), o proximo parto
-// previsto (o "P:dd/mm") e os animais que existem na caixa, por ninhada e com a idade
+// previsto (o "P:dd/mm") e os animais que existem na caixa, por ninhada e com a idade,
+// inclusive os que um casal encerrado deixou nela
 
 import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { dataISO, hojeISO } from '../../shared/traducao.ts'
@@ -34,42 +35,52 @@ function diasEntre(de: string, ate: string): number {
   return Math.round((Date.parse(`${ate}T00:00:00Z`) - Date.parse(`${de}T00:00:00Z`)) / 86_400_000)
 }
 
-/** As ninhadas que ja nasceram, com o que existe de cada uma e a idade de hoje */
-export function ninhadas(partos: PartoDoCard[], hoje: string) {
-  return partos.flatMap((parto) => {
+/** As ninhadas do casal que ja nasceram, com o que existe de cada uma e a idade de hoje */
+export function ninhadas(casal: Pick<CasalDoCard, 'identificacao' | 'partos'>, hoje: string) {
+  return casal.partos.flatMap((parto) => {
     if (parto.dtPartoReal === null) return []
 
     const nascimento = dataISO(parto.dtPartoReal)
     const { m, f } = ofertaBruta(parto)
 
-    return [{ parto: parto.ordem, m, f, idadeDias: diasEntre(nascimento, hoje) }]
+    return [
+      {
+        casal: casal.identificacao.trim(),
+        parto: parto.ordem,
+        m,
+        f,
+        idadeDias: diasEntre(nascimento, hoje),
+      },
+    ]
   })
 }
 
-/** null sem casal, ou com casal encerrado que nao deixou ninhada ou cuja caixa ja foi enviada */
-export function casalNoCard(
-  casal: CasalDoCard | undefined,
-  estado: string,
-  hoje: string = hojeISO(),
-) {
+/**
+ * 'casais' vem na ordem de 'selecaoDoCasalNoCard': o primeiro e o casal da caixa (o ativo, ou o
+ * mais recente), e os outros vieram antes dele. As ninhadas sao as de todos, das mais antigas para
+ * as mais novas: casal novo na caixa nao esconde a ninhada que o casal encerrado deixou nela, que
+ * o estoque e a busca ja contam. null sem casal, ou sem casal ativo e sem ninhada, ou com a caixa
+ * ja enviada
+ */
+export function casalNoCard(casais: CasalDoCard[], estado: string, hoje: string = hojeISO()) {
+  const [casal] = casais
   if (casal === undefined) return null
 
-  const temNinhada = casal.partos.some((parto) => parto.dtPartoReal !== null)
-  if (!casal.ativo && (!temNinhada || estado === 'X')) return null
+  const todas = [...casais].reverse().flatMap((c) => ninhadas(c, hoje))
+  if (!casal.ativo && (todas.length === 0 || estado === 'X')) return null
 
   return {
     identificacao: casal.identificacao.trim(),
     partoAtual: partoAtual(casal.partos),
     partoPrevisto: casal.ativo ? partoPrevisto(casal.partos) : null,
     encerrado: !casal.ativo,
-    ninhadas: ninhadas(casal.partos, hoje),
+    ninhadas: todas,
   }
 }
 
-/** O select do Prisma que alimenta 'casalNoCard': o casal ativo (ou o mais recente) e todos os partos dele */
+/** O select do Prisma que alimenta 'casalNoCard': todos os casais da caixa, o ativo (ou o mais recente) primeiro, com os partos */
 export const selecaoDoCasalNoCard = {
   orderBy: [{ ativo: 'desc' as const }, { dtFormacao: 'desc' as const }, { id: 'desc' as const }],
-  take: 1,
   select: {
     identificacao: true,
     ativo: true,

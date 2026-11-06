@@ -6,15 +6,31 @@ import { codigoDaPosicao } from './endereco.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { codigoDaEspecie, estadoCaixa } from '../../shared/traducao.ts'
 
-async function partosDoCasal(idCasal: number) {
+async function partosDoCasal(idCasal: number, soNascidos = false) {
   const partos = await prisma.parto.findMany({
-    where: { idCasal },
+    where: { idCasal, ...(soNascidos ? { dtPartoReal: { not: null } } : {}) },
     orderBy: { ordem: 'asc' },
     select: { id: true },
   })
 
   // No maximo 5 partos por casal: N+1 aqui e uma ficha aberta por vez, nao uma lista
   return Promise.all(partos.map((parto) => cicloFicha(parto.id)))
+}
+
+/**
+ * Os casais que vieram antes do atual e deixaram ninhada na caixa, com os partos que nasceram.
+ * Casal novo nao esconde essas ninhadas: o estoque e a busca contam, e e na ficha que a equipe
+ * registra a selecao e o desmame delas
+ */
+async function casaisAnteriores(idCasais: number[]) {
+  const anteriores = await Promise.all(
+    idCasais.map(async (idCasal) => {
+      const [casal, partos] = await Promise.all([casalFicha(idCasal), partosDoCasal(idCasal, true)])
+      return { casal, partos }
+    }),
+  )
+
+  return anteriores.filter((anterior) => anterior.partos.length > 0)
 }
 
 interface EventoDaFicha {
@@ -88,10 +104,10 @@ export async function montarFicha(idCaixa: number) {
     include: {
       estante: { select: { numeroVisivel: true, sala: true, colunas: true } },
       especie: { select: { nome: true } },
-      // O casal mais recente, ativo ou nao: a ficha e historico
+      // O casal ativo (ou o mais recente, a ficha e historico) primeiro, e depois os que
+      // vieram antes dele
       casais: {
         orderBy: [{ ativo: 'desc' }, { dtFormacao: 'desc' }, { id: 'desc' }],
-        take: 1,
         select: { id: true },
       },
     },
@@ -101,16 +117,23 @@ export async function montarFicha(idCaixa: number) {
     throw naoEncontrado('Caixa')
   }
 
-  const casalRecente = caixa.casais[0]
+  const [casalRecente, ...casaisDeAntes] = caixa.casais
 
-  const [casal, partos, eventos] =
+  const [casal, partos, eventosDoRecente, anteriores] =
     casalRecente === undefined
-      ? [null, [], []]
+      ? [null, [], [], []]
       : await Promise.all([
           casalFicha(casalRecente.id),
           partosDoCasal(casalRecente.id),
           eventosDoCasal(casalRecente.id),
+          casaisAnteriores(casaisDeAntes.map((c) => c.id)),
         ])
+
+  // os eventos das ninhadas de antes tambem: o desmame delas e registrado nesta ficha
+  const eventosDeAntes = await Promise.all(anteriores.map((anterior) => eventosDoCasal(anterior.casal.id)))
+  const eventos = [...eventosDoRecente, ...eventosDeAntes.flat()].sort((a, b) =>
+    a.dataHora.localeCompare(b.dataHora),
+  )
 
   return {
     caixa: {
@@ -128,6 +151,8 @@ export async function montarFicha(idCaixa: number) {
     },
     casal,
     partos,
+    /** os casais de antes que deixaram ninhada na caixa, cada um com os partos que nasceram */
+    anteriores,
     eventos,
   }
 }
