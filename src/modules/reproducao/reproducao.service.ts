@@ -2,7 +2,11 @@
 
 import { registrarHistorico } from '../historico/historico.service.ts'
 import { codigoDaPosicao } from '../infra/endereco.ts'
-import { compromissosAtivos, disponibilidadeDoParto } from './disponibilidade.ts'
+import {
+  compromissosAtivosComPedido,
+  disponibilidadeDoParto,
+  faltaNaReserva,
+} from './disponibilidade.ts'
 import {
   calcularCicloInicial,
   calcularDesmamePrevisto,
@@ -80,7 +84,7 @@ export async function casalFicha(idCasal: number) {
 export async function cicloFicha(idParto: number) {
   const parto = await prisma.parto.findUnique({
     where: { id: idParto },
-    include: { compromissos: compromissosAtivos },
+    include: { compromissos: compromissosAtivosComPedido },
   })
 
   if (parto === null) {
@@ -110,6 +114,8 @@ export async function cicloFicha(idParto: number) {
     desmamadoF: parto.desmamadoF,
     disponivel: disponibilidade.disponivel,
     comprometido: disponibilidade.comprometido,
+    /** reserva acima do que a ninhada tem depois do desmame ou da correcao; null quando cabe */
+    falta: faltaNaReserva(parto),
   }
 }
 

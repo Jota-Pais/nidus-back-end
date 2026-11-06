@@ -4,7 +4,7 @@ import { prisma } from '../../shared/prisma.ts'
 import { dataISO, hojeISO, paraData } from '../../shared/traducao.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
 import { calcularDesmamePrevisto, calcularProximoCiclo } from './cadeiaTemporal.ts'
-import { compromissosAtivos, ofertaBruta } from './disponibilidade.ts'
+import { compromissosAtivosComPedido, faltaNaReserva } from './disponibilidade.ts'
 import type { ContagemDoCiclo } from './disponibilidade.ts'
 import { cicloFicha } from './reproducao.service.ts'
 import type { Desmame, Nascimento, Selecao } from './reproducao.service.ts'
@@ -21,7 +21,7 @@ async function partoParaCorrigir(idParto: number) {
   const parto = await prisma.parto.findUnique({
     where: { id: idParto },
     include: {
-      compromissos: compromissosAtivos,
+      compromissos: compromissosAtivosComPedido,
       casal: { select: { id: true, dtEncerramento: true } },
     },
   })
@@ -33,17 +33,20 @@ async function partoParaCorrigir(idParto: number) {
   return parto
 }
 
+/** O aviso da correcao que deixa a ninhada com menos animais do que o reservado. A correcao grava */
 function alertaDeCompromisso(
   contagem: ContagemDoCiclo,
-  compromissos: { qtdM: number; qtdF: number }[],
+  compromissos: { qtdM: number; qtdF: number; remessa: { idSolicitacao: number } }[],
 ): string | null {
-  const oferta = ofertaBruta(contagem)
-  const m = compromissos.reduce((soma, c) => soma + c.qtdM, 0)
-  const f = compromissos.reduce((soma, c) => soma + c.qtdF, 0)
+  const falta = faltaNaReserva({ ...contagem, compromissos })
 
-  if (m <= oferta.m && f <= oferta.f) return null
+  if (falta === null) return null
 
-  return `Os compromissos deste parto (${m} M, ${f} F) passam do que ele tem agora (${oferta.m} M, ${oferta.f} F). Revise as solicitacoes alocadas nele.`
+  const pedidos = falta.pedidos
+    .map((pedido) => `#${pedido.idSolicitacao} (${pedido.m} M, ${pedido.f} F)`)
+    .join(', ')
+
+  return `A ninhada ficou com menos animais do que o reservado: faltam ${falta.m} M e ${falta.f} F. Pedidos com reserva nela: ${pedidos}. Na lista de solicitacoes, o pedido em falta pode ser devolvido para analise.`
 }
 
 function contagemDo(parto: ContagemDoCiclo): ContagemDoCiclo {

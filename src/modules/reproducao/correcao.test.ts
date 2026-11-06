@@ -137,7 +137,7 @@ describe('correcao do parto', () => {
       dtDesmameReal: null,
       desmamadoM: null,
       desmamadoF: null,
-      compromissos: [{ qtdM: 5, qtdF: 0 }],
+      compromissos: [{ qtdM: 5, qtdF: 0, remessa: { idSolicitacao: 12 } }],
     }
 
     const resposta = await corrigirNascimento(
@@ -147,7 +147,24 @@ describe('correcao do parto', () => {
       agora,
     )
 
-    expect(resposta.alerta).toContain('5 M')
+    // grava o que aconteceu, e o aviso diz quanto falta e qual pedido
+    expect(banco.atualizados[0]?.data).toMatchObject({ nascidoM: 3 })
+    expect(resposta.alerta).toContain('faltam 2 M e 0 F')
+    expect(resposta.alerta).toContain('#12 (5 M, 0 F)')
+  })
+
+  it('desmame corrigido abaixo do reservado grava e avisa o pedido em falta', async () => {
+    banco.parto = { ...partoRegistrado, compromissos: [{ qtdM: 4, qtdF: 4, remessa: { idSolicitacao: 7 } }] }
+
+    const resposta = await corrigirDesmame(
+      1,
+      { dtDesmameReal: '2026-10-16', desmamadoM: 4, desmamadoF: 3, motivo: 'uma femea morreu' },
+      1,
+    )
+
+    expect(banco.atualizados[0]?.data).toMatchObject({ desmamadoF: 3 })
+    expect(resposta.alerta).toContain('faltam 0 M e 1 F')
+    expect(resposta.alerta).toContain('#7')
   })
 })
 

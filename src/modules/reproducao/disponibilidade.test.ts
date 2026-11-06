@@ -4,6 +4,7 @@ import {
   calcularDisponibilidade,
   calcularGrauCerteza,
   disponibilidadeDoParto,
+  faltaNaReserva,
   ofertaBruta,
 } from './disponibilidade.ts'
 
@@ -117,5 +118,27 @@ describe('disponibilidade do parto lido do banco', () => {
 
   it('parto sem compromisso tem a oferta inteira livre', () => {
     expect(disponibilidadeDoParto({ ...confirmado, compromissos: [] }).disponivel).toEqual({ m: 4, f: 4 })
+  })
+})
+
+describe('reserva em falta', () => {
+  const reserva = (idSolicitacao: number, qtdM: number, qtdF: number) => ({ qtdM, qtdF, remessa: { idSolicitacao } })
+
+  it('parto que ainda nao nasceu nao tem ninhada para faltar', () => {
+    expect(faltaNaReserva({ ...projetado, compromissos: [reserva(1, 4, 4)] })).toBeNull()
+  })
+
+  it('soma o reservado de cada pedido e diz quanto passa do que a ninhada tem', () => {
+    // confirmado: 4 M e 5 F desmamados
+    const parto = { ...confirmado, compromissos: [reserva(9, 3, 1), reserva(4, 2, 0), reserva(9, 0, 2)] }
+
+    expect(faltaNaReserva(parto)).toEqual({
+      m: 1,
+      f: 0,
+      pedidos: [
+        { idSolicitacao: 4, m: 2, f: 0 },
+        { idSolicitacao: 9, m: 3, f: 3 },
+      ],
+    })
   })
 })

@@ -63,6 +63,8 @@ const partoNascido = {
   eutanasiadoM: null,
   eutanasiadoF: null,
   dtDesmameReal: null,
+  desmamadoM: null,
+  desmamadoF: null,
   casal: { ativo: true },
 }
 
@@ -135,6 +137,16 @@ describe('ficha do parto', () => {
     expect((await cicloFicha(1)).dtDesmamePrevisto).toBe('2026-11-11')
   })
 
+  it('sem reserva passando do que a ninhada tem, nao ha falta', async () => {
+    banco.parto = {
+      ...partoNascido,
+      dtPartoPrevisto: d('2026-09-24'),
+      compromissos: [{ qtdM: 5, qtdF: 5, remessa: { idSolicitacao: 12 } }],
+    }
+
+    expect((await cicloFicha(1)).falta).toBeNull()
+  })
+
   it('o desmame previsto de parto que ainda nao nasceu sai do parto previsto', async () => {
     banco.parto = {
       ...partoNascido,
@@ -188,6 +200,34 @@ describe('desmame', () => {
     await expect(
       registrarDesmame(1, { dtDesmameReal: '2026-09-20', desmamadoM: 4, desmamadoF: 4 }, 1),
     ).rejects.toEqual(recusa(400, 'VALIDACAO'))
+  })
+
+  it('com menos animais do que o reservado grava, e a resposta diz quanto falta e de quais pedidos', async () => {
+    // 4 machos reservados para o pedido #12 e 1 para o #15; so 2 machos desmamaram
+    banco.parto = {
+      ...partoNascido,
+      dtPartoPrevisto: d('2026-09-24'),
+      compromissos: [
+        { qtdM: 4, qtdF: 0, remessa: { idSolicitacao: 12 } },
+        { qtdM: 1, qtdF: 0, remessa: { idSolicitacao: 15 } },
+      ],
+    }
+
+    await registrarDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 2, desmamadoF: 5 }, 1)
+
+    // grava o que aconteceu de verdade
+    expect(banco.partoAtualizado).toMatchObject({ desmamadoM: 2, desmamadoF: 5 })
+
+    // e a ficha do parto, a mesma que a rota devolve, diz o que falta
+    banco.parto = { ...banco.parto, desmamadoM: 2, desmamadoF: 5, dtDesmameReal: d('2026-10-16') }
+    expect((await cicloFicha(1)).falta).toEqual({
+      m: 3,
+      f: 0,
+      pedidos: [
+        { idSolicitacao: 12, m: 4, f: 0 },
+        { idSolicitacao: 15, m: 1, f: 0 },
+      ],
+    })
   })
 
   it('segundo desmame do mesmo parto e recusado', async () => {

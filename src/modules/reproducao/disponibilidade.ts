@@ -88,6 +88,51 @@ export const compromissosAtivos = {
   select: { qtdM: true, qtdF: true },
 }
 
+/** Os compromissos ativos com o pedido de cada um: para dizer qual pedido ficou em falta */
+export const compromissosAtivosComPedido = {
+  where: { dtCancelamento: null },
+  select: { qtdM: true, qtdF: true, remessa: { select: { idSolicitacao: true } } },
+}
+
+/** Quanto a reserva passa do que a ninhada tem, e o reservado de cada pedido nela */
+export type FaltaNaReserva = PorSexo & { pedidos: (PorSexo & { idSolicitacao: number })[] }
+
+/**
+ * A reserva ativa que passa do que o parto tem agora: o desmame e a correcao gravam o que
+ * aconteceu de verdade, mesmo abaixo do reservado, e isto e o que fica em falta. null quando
+ * a reserva cabe, ou quando o parto ainda nao nasceu e nao tem ninhada para faltar
+ */
+export function faltaNaReserva(
+  parto: ContagemDoCiclo & {
+    compromissos: { qtdM: number; qtdF: number; remessa: { idSolicitacao: number } }[]
+  },
+): FaltaNaReserva | null {
+  if (parto.nascidoM === null || parto.nascidoF === null) return null
+
+  const oferta = ofertaBruta(parto)
+  const reservado = parto.compromissos.reduce(
+    (soma, c) => ({ m: soma.m + c.qtdM, f: soma.f + c.qtdF }),
+    { m: 0, f: 0 },
+  )
+  const m = Math.max(0, reservado.m - oferta.m)
+  const f = Math.max(0, reservado.f - oferta.f)
+
+  if (m === 0 && f === 0) return null
+
+  const porPedido = new Map<number, PorSexo>()
+
+  for (const c of parto.compromissos) {
+    const somado = porPedido.get(c.remessa.idSolicitacao) ?? { m: 0, f: 0 }
+    porPedido.set(c.remessa.idSolicitacao, { m: somado.m + c.qtdM, f: somado.f + c.qtdF })
+  }
+
+  const pedidos = [...porPedido.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([idSolicitacao, qtd]) => ({ idSolicitacao, ...qtd }))
+
+  return { m, f, pedidos }
+}
+
 /** Um parto lido com 'compromissos: compromissosAtivos' */
 export type PartoComCompromissos = ContagemDoCiclo & {
   compromissos: { qtdM: number; qtdF: number }[]
