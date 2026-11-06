@@ -179,3 +179,13 @@ export function separarEntregues(compromissos: CompromissoComEntrega[]): {
     entregue: somarCompromissos(compromissos.filter((c) => c.remessa.dtRealizada !== null)),
   }
 }
+
+/** O que do parto ainda esta na caixa: o que existe menos o que ja foi entregue */
+export function naCaixa(
+  parto: ContagemDoCiclo & { compromissos: CompromissoComEntrega[] },
+): PorSexo {
+  const oferta = ofertaBruta(parto)
+  const { entregue } = separarEntregues(parto.compromissos)
+
+  return { m: Math.max(0, oferta.m - entregue.m), f: Math.max(0, oferta.f - entregue.f) }
+}

@@ -7,7 +7,7 @@ import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { dataISO, hojeISO } from '../../shared/traducao.ts'
 import {
   compromissosAtivosComPedido,
-  ofertaBruta,
+  naCaixa,
   separarEntregues,
 } from '../reproducao/disponibilidade.ts'
 import type { CompromissoComEntrega, ContagemDoCiclo } from '../reproducao/disponibilidade.ts'
@@ -49,10 +49,8 @@ export function ninhadas(casal: Pick<CasalDoCard, 'identificacao' | 'partos'>, h
     if (parto.dtPartoReal === null) return []
 
     const nascimento = dataISO(parto.dtPartoReal)
-    const oferta = ofertaBruta(parto)
+    const { m, f } = naCaixa(parto)
     const { entregue } = separarEntregues(parto.compromissos)
-    const m = Math.max(0, oferta.m - entregue.m)
-    const f = Math.max(0, oferta.f - entregue.f)
 
     if (m + f === 0 && entregue.m + entregue.f > 0) return []
 
