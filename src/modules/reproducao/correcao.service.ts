@@ -79,7 +79,7 @@ export async function corrigirNascimento(
     throw contagemInvalida(
       'nascido',
       nascidoAbaixo,
-      'O nascido nao pode ficar abaixo da selecao e do desmame ja registrados.',
+      'O nascido nao pode ficar abaixo da eutanasia e do desmame ja registrados.',
     )
   }
 
@@ -150,7 +150,7 @@ export async function corrigirSelecao(
     parto.nascidoM === null ||
     parto.nascidoF === null
   ) {
-    throw erroDeRegra('SEQUENCIA_INVALIDA', 'A selecao deste parto ainda nao foi registrada.')
+    throw erroDeRegra('SEQUENCIA_INVALIDA', 'A eutanasia deste parto ainda nao foi registrada.')
   }
 
   const vivosM = parto.nascidoM - dados.eutanasiadoM
@@ -173,7 +173,7 @@ export async function corrigirSelecao(
     throw contagemInvalida(
       'eutanasiado',
       abaixoDoDesmame,
-      'Com essa selecao sobrariam menos animais do que os ja desmamados.',
+      'Com essa eutanasia sobrariam menos animais do que os ja desmamados.',
     )
   }
 
@@ -199,7 +199,7 @@ export async function corrigirSelecao(
       entidade: 'parto',
       idEntidade: idParto,
       acao: 'correcao_selecao',
-      descricao: `Correcao da selecao do ${parto.ordem}o parto: ${dados.motivo}`,
+      descricao: `Correcao da eutanasia do ${parto.ordem}o parto: ${dados.motivo}`,
       dados: {
         motivo: dados.motivo,
         antes: {
@@ -246,7 +246,7 @@ export async function corrigirDesmame(
     throw contagemInvalida(
       'desmamado',
       desmamePassou,
-      `Nao pode passar do nascido menos a selecao (${vivosM} M, ${vivosF} F).`,
+      `Nao pode passar do nascido menos a eutanasia (${vivosM} M, ${vivosF} F).`,
     )
   }
 

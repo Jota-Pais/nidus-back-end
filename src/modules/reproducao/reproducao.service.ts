@@ -454,15 +454,15 @@ export async function registrarSelecao(idParto: number, dados: Selecao, idUsuari
   }
 
   if (parto.dtPartoReal === null || parto.nascidoM === null || parto.nascidoF === null) {
-    throw erroDeRegra('SEQUENCIA_INVALIDA', 'Registre o parto antes da selecao.')
+    throw erroDeRegra('SEQUENCIA_INVALIDA', 'Registre o parto antes da eutanasia.')
   }
 
   if (parto.dtDesmameReal !== null) {
-    throw erroDeRegra('SEQUENCIA_INVALIDA', 'O desmame ja foi registrado: a selecao vem antes dele.')
+    throw erroDeRegra('SEQUENCIA_INVALIDA', 'O desmame ja foi registrado: a eutanasia vem antes dele.')
   }
 
   if (parto.dtSelecao !== null) {
-    throw erroDeRegra('SEQUENCIA_INVALIDA', 'A selecao deste parto ja foi registrada.')
+    throw erroDeRegra('SEQUENCIA_INVALIDA', 'A eutanasia deste parto ja foi registrada.')
   }
 
   const eutanasiaPassou = {
@@ -495,7 +495,7 @@ export async function registrarSelecao(idParto: number, dados: Selecao, idUsuari
       entidade: 'parto',
       idEntidade: idParto,
       acao: 'selecao',
-      descricao: `Selecao do ${parto.ordem}o parto em ${dados.dtSelecao}: ${dados.eutanasiadoM} M e ${dados.eutanasiadoF} F`,
+      descricao: `Eutanasia do ${parto.ordem}o parto em ${dados.dtSelecao}: ${dados.eutanasiadoM} M e ${dados.eutanasiadoF} F`,
       dados: { ...dados },
     })
 
@@ -540,7 +540,7 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
     throw contagemInvalida(
       'desmamado',
       desmamePassou,
-      `Nao pode passar do nascido menos a selecao (${vivosM} M, ${vivosF} F).`,
+      `Nao pode passar do nascido menos a eutanasia (${vivosM} M, ${vivosF} F).`,
     )
   }
 

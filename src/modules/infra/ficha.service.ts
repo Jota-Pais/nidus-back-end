@@ -76,7 +76,7 @@ async function eventosDoCasal(idCasal: number): Promise<EventoDaFicha[]> {
       eventos.push({
         dataHora: parto.dtRegistroSelecao.toISOString(),
         tipo: 'selecao',
-        descricao: `Selecao registrada: ${parto.eutanasiadoM} M, ${parto.eutanasiadoF} F eutanasiados.`,
+        descricao: `Eutanasia registrada: ${parto.eutanasiadoM} M, ${parto.eutanasiadoF} F eutanasiados.`,
         autor: parto.usuarioSelecao?.nome ?? 'Desconhecido',
       })
     }
