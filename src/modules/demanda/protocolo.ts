@@ -61,14 +61,11 @@ export function conferirProtocolo(numero: string, hoje: string = hojeISO()): str
   }
 
   if (SISTEMA_CEUA.test(numero)) {
+    // a data nos 6 ultimos digitos e conferida, mas a mensagem nao explica a regra por dentro
     const registro = dataDoRegistro(numero)
 
-    if (registro === null) {
-      return 'Os 6 ultimos digitos do numero do Sistema CEUA nao formam uma data (DDMMAA).'
-    }
-
-    if (registro > hoje) {
-      return 'Os 6 ultimos digitos do numero do Sistema CEUA sao uma data futura.'
+    if (registro === null || registro > hoje) {
+      return 'Protocolo no formato incorreto.'
     }
 
     return null
