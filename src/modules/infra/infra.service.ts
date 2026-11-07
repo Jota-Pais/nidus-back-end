@@ -6,6 +6,7 @@ import { codigoDaEspecie, estadoCaixa, face as faceDic } from '../../shared/trad
 import { registrarHistorico } from '../historico/historico.service.ts'
 import { casalNoCard, selecaoDoCasalNoCard } from './casalNoCard.ts'
 import { codigoDaPosicao } from './endereco.ts'
+import { lerCaixasDeEstoque } from './estoque.service.ts'
 
 type LinhaDeEstante = {
   id: number
@@ -59,9 +60,12 @@ export async function listarEstantes() {
   return { estantes: estantes.map(paraApi) }
 }
 
-/** GET /api/estantes/:id/grade - as duas faces, com posicao vazia como 'caixa: null' */
+/**
+ * GET /api/estantes/:id/grade - as duas faces, com posicao vazia como 'caixa: null'. A caixa de
+ * estoque vem com o sexo e quantos animais tem, na coluna que o reservado da
+ */
 export async function montarGrade(id: number) {
-  const [estante, caixas] = await Promise.all([
+  const [estante, caixas, estoque] = await Promise.all([
     prisma.estante.findFirst({ where: { id, ativa: true } }),
     prisma.caixa.findMany({
       where: { idEstante: id, ativa: true },
@@ -71,10 +75,14 @@ export async function montarGrade(id: number) {
         linha: true,
         coluna: true,
         estado: true,
+        tipo: true,
         casais: selecaoDoCasalNoCard,
       },
     }),
+    lerCaixasDeEstoque(prisma, { idEstante: id, ativa: true }),
   ])
+
+  const estoquePorId = new Map(estoque.map((caixa) => [caixa.id, caixa]))
 
   if (estante === null) {
     throw naoEncontrado('Estante')
@@ -92,6 +100,7 @@ export async function montarGrade(id: number) {
       for (let coluna = 1; coluna <= estante.colunas; coluna += 1) {
         const caixa = caixaPorEndereco.get(`${numeroDaFace}:${linha}:${coluna}`)
         const casal = caixa?.casais[0]
+        const deEstoque = caixa === undefined ? undefined : estoquePorId.get(caixa.id)
 
         posicoes.push({
           linha,
@@ -100,12 +109,21 @@ export async function montarGrade(id: number) {
           caixa:
             caixa === undefined
               ? null
-              : {
-                  id: caixa.id,
-                  estado: estadoCaixa.paraApi(caixa.estado),
-                  linhagem: casal?.linhagem.nome ?? null,
-                  casal: casalNoCard(caixa.casais, caixa.estado),
-                },
+              : deEstoque !== undefined
+                ? {
+                    id: caixa.id,
+                    estado: estadoCaixa.paraApi(deEstoque.estado),
+                    linhagem: deEstoque.linhagem,
+                    casal: null,
+                    estoque: { sexo: deEstoque.sexo, total: deEstoque.total, reservado: deEstoque.reservado },
+                  }
+                : {
+                    id: caixa.id,
+                    estado: estadoCaixa.paraApi(caixa.estado),
+                    linhagem: casal?.linhagem.nome ?? null,
+                    casal: casalNoCard(caixa.casais, caixa.estado),
+                    estoque: null,
+                  },
         })
       }
     }

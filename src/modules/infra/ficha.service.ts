@@ -3,6 +3,7 @@
 import { casalFicha, cicloFicha } from '../reproducao/reproducao.service.ts'
 import { naoEncontrado } from '../../shared/erros.ts'
 import { codigoDaPosicao } from './endereco.ts'
+import { animaisNaCaixaDoCasal, fichaDoEstoque, sexoParaVirarEstoque } from './estoque.service.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { codigoDaEspecie, estadoCaixa } from '../../shared/traducao.ts'
 
@@ -97,8 +98,17 @@ async function eventosDoCasal(idCasal: number): Promise<EventoDaFicha[]> {
   return eventos.sort((a, b) => a.dataHora.localeCompare(b.dataHora))
 }
 
-/** GET /api/caixas/:id - a ficha completa */
+/**
+ * GET /api/caixas/:id - a ficha completa. A caixa de estoque tem a ficha dela, sem casal nem
+ * parto: o que tem, de onde veio e para quem esta reservado
+ */
 export async function montarFicha(idCaixa: number) {
+  const tipo = await prisma.caixa.findUnique({ where: { id: idCaixa }, select: { tipo: true } })
+
+  if (tipo?.tipo === 'E') {
+    return fichaDoEstoque(idCaixa)
+  }
+
   const caixa = await prisma.caixa.findUnique({
     where: { id: idCaixa },
     include: {
@@ -135,7 +145,15 @@ export async function montarFicha(idCaixa: number) {
     a.dataHora.localeCompare(b.dataHora),
   )
 
+  // a caixa do casal encerrado com desmamados de um sexo so pode virar de estoque no lugar
+  const virarEstoque =
+    caixa.ativa && casal?.ativo !== true
+      ? sexoParaVirarEstoque(false, await animaisNaCaixaDoCasal(prisma, caixa.id))
+      : null
+
   return {
+    tipo: 'casal' as const,
+    virarEstoque,
     caixa: {
       id: caixa.id,
       endereco: {

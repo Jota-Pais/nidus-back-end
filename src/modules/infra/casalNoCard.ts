@@ -5,17 +5,19 @@
 
 import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { dataISO, hojeISO } from '../../shared/traducao.ts'
-import {
-  compromissosAtivosComPedido,
-  naCaixa,
-  separarEntregues,
-} from '../reproducao/disponibilidade.ts'
+import { compromissosAtivosComPedido } from '../reproducao/disponibilidade.ts'
 import type { CompromissoComEntrega, ContagemDoCiclo } from '../reproducao/disponibilidade.ts'
+import { naCaixaDoCasal } from './estoque.ts'
 
 type DatasDoParto = { dtPartoPrevisto: Date; dtPartoReal: Date | null }
 
 type PartoDoCard = DatasDoParto &
-  ContagemDoCiclo & { ordem: number; compromissos: CompromissoComEntrega[] }
+  ContagemDoCiclo & {
+    ordem: number
+    compromissos: CompromissoComEntrega[]
+    /** os desmamados que foram para caixas de estoque, que ja nao estao nesta */
+    lotes: { qtd: number; caixa: { sexo: string | null } }[]
+  }
 
 type CasalDoCard = {
   identificacao: string
@@ -38,7 +40,7 @@ export function partoPrevisto(partos: DatasDoParto[]): string | null {
 
 function mamando(parto: PartoDoCard): boolean {
   if (parto.dtPartoReal === null || parto.desmamadoM !== null) return false
-  const { m, f } = naCaixa(parto)
+  const { m, f } = naCaixaDoCasal(parto)
   return m + f > 0
 }
 
@@ -48,17 +50,18 @@ function diasEntre(de: string, ate: string): number {
 
 /**
  * As ninhadas do casal que ja nasceram, com o que ainda esta na caixa de cada uma e a idade de
- * hoje. O que ja foi entregue saiu da caixa, e a ninhada toda entregue sai do card
+ * hoje. O que foi entregue ou foi para uma caixa de estoque saiu desta, e a ninhada que saiu toda
+ * sai do card
  */
 export function ninhadas(casal: Pick<CasalDoCard, 'identificacao' | 'partos'>, hoje: string) {
   return casal.partos.flatMap((parto) => {
     if (parto.dtPartoReal === null) return []
 
     const nascimento = dataISO(parto.dtPartoReal)
-    const { m, f } = naCaixa(parto)
-    const { entregue } = separarEntregues(parto.compromissos)
+    const { m, f } = naCaixaDoCasal(parto)
+    const saiu = parto.desmamadoM !== null || parto.compromissos.some((c) => c.remessa.dtRealizada !== null)
 
-    if (m + f === 0 && entregue.m + entregue.f > 0) return []
+    if (m + f === 0 && saiu) return []
 
     return [
       {
@@ -116,6 +119,7 @@ export const selecaoDoCasalNoCard = {
         desmamadoM: true,
         desmamadoF: true,
         compromissos: compromissosAtivosComPedido,
+        lotes: { select: { qtd: true, caixa: { select: { sexo: true } } } },
       },
     },
   },

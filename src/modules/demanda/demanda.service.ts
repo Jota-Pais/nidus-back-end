@@ -7,11 +7,7 @@ import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
-import {
-  colunaDepoisDaEntrega,
-  selecaoDoPartoDaCaixa,
-  situacaoDaCaixa,
-} from '../infra/fluxoDoKanban.ts'
+import { ajustarColunaDoCasal, baixarEstoqueNaEntrega } from '../infra/estoque.service.ts'
 import { liberarCaixaVazia } from '../infra/liberacaoDaCaixa.ts'
 import { faixaDoPedido } from '../motor/motor.ts'
 import { dataDoDesmame, diasEntre } from '../motor/motor.service.ts'
@@ -586,10 +582,11 @@ export async function alocarSolicitacao(
       })
     }
 
-    await tx.caixa.updateMany({
-      where: { id: { in: partos.map((parto) => parto.casal.idCaixa) }, estado: 'R' },
-      data: { estado: 'P' },
-    })
+    // Pre-reserva so para a caixa do casal onde a reserva pesa: a de animais que ja estao numa
+    // caixa de estoque nao prende a caixa do casal
+    for (const idCaixa of new Set(partos.map((parto) => parto.casal.idCaixa))) {
+      await ajustarColunaDoCasal(tx, idCaixa, usuario.id, `na reserva da solicitacao #${idSolicitacao}`)
+    }
 
     await registrarHistorico(tx, {
       idUsuario: usuario.id,
@@ -653,6 +650,9 @@ export async function registrarEntrega(
       )
     }
 
+    // antes de marcar a remessa: a conta de qual caixa sai cada animal le a reserva a entregar
+    await baixarEstoqueNaEntrega(tx, idSolicitacao, idUsuario)
+
     await tx.remessa.updateMany({
       where: { idSolicitacao, dtRealizada: null },
       data: { dtRealizada: paraData(dtEntrega), status: 'E' },
@@ -674,9 +674,9 @@ export async function registrarEntrega(
 }
 
 /**
- * Depois da entrega, a caixa que ela esvaziou vai para Enviado, e a que ficou em Pre-reserva sem
- * nada a entregar volta para Livres (regra em fluxoDoKanban.ts). Le as caixas ja com a remessa
- * entregue, dentro da mesma transacao
+ * Depois da entrega, a caixa do casal sem casal ativo e sem animal dentro libera a posicao, e a que
+ * ficou sem reserva pesando nela volta de Pre-reserva para Livres. Le as caixas ja com a remessa
+ * entregue, dentro da mesma transacao. A caixa de estoque que esvaziou ja foi para Enviado
  */
 async function moverCaixasDaEntrega(
   tx: Prisma.TransactionClient,
@@ -686,6 +686,7 @@ async function moverCaixasDaEntrega(
   const caixas = await tx.caixa.findMany({
     where: {
       ativa: true,
+      tipo: 'C',
       casais: {
         some: {
           partos: {
@@ -694,38 +695,14 @@ async function moverCaixasDaEntrega(
         },
       },
     },
-    select: {
-      id: true,
-      codigo: true,
-      estado: true,
-      casais: { select: { ativo: true, partos: { select: selecaoDoPartoDaCaixa } } },
-    },
+    select: { id: true, casais: { select: { ativo: true } } },
   })
 
   for (const caixa of caixas) {
-    const depois = colunaDepoisDaEntrega(
-      caixa.estado,
-      caixa.casais.some((casal) => casal.ativo),
-      situacaoDaCaixa(caixa.casais.flatMap((casal) => casal.partos)),
-    )
-
     const semCasalAtivo = !caixa.casais.some((casal) => casal.ativo)
     if (semCasalAtivo && (await liberarCaixaVazia(tx, caixa.id, idUsuario))) continue
-    if (depois === null) continue
 
-    const antes = estadoCaixa.paraApi(caixa.estado)
-    const novo = estadoCaixa.paraApi(depois)
-
-    await tx.caixa.update({ where: { id: caixa.id }, data: { estado: depois } })
-
-    await registrarHistorico(tx, {
-      idUsuario,
-      entidade: 'caixa',
-      idEntidade: caixa.id,
-      acao: 'mudanca_de_coluna',
-      descricao: `Caixa ${caixa.codigo}: ${antes} -> ${novo}, na entrega da solicitacao #${idSolicitacao}`,
-      dados: { antes, depois: novo, entrega: idSolicitacao },
-    })
+    await ajustarColunaDoCasal(tx, caixa.id, idUsuario, `na entrega da solicitacao #${idSolicitacao}`)
   }
 }
 

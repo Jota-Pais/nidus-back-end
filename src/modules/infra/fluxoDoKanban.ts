@@ -1,5 +1,6 @@
-// O fluxo do kanban da caixa de casal. E a secao 1.9 da spec do cliente adaptada ao Nidus, que
-// nao tem caixa agrupada: aqui e a propria caixa do casal que passa por Estoque, Reserva e Enviado
+// O fluxo do kanban da caixa de casal: so Livres e Pre-reserva. Os desmamados saem dela para
+// caixas de estoque (estoque.service.ts), e e a caixa de estoque que fica em Estoque, Reserva e
+// Enviado, sozinha, pelo que tem reservado
 
 import { erroDeRegra } from '../../shared/erros.ts'
 import {
@@ -37,17 +38,10 @@ const ROTULO_DA_COLUNA: Record<string, string> = {
   X: 'Enviado',
 }
 
-/**
- * Para onde cada coluna deixa ir. Livres e Pre-reserva alternam e vao para Estoque; Pre-reserva
- * vai para Reserva; Estoque vai para Reserva ou Enviado; Reserva so para Enviado. Estoque e
- * Reserva nao voltam, e Enviado e a ultima coluna
- */
+/** A caixa de casal alterna Livres e Pre-reserva, e nada mais */
 const DESTINOS: Record<string, string[]> = {
-  R: ['P', 'E'],
-  P: ['R', 'E', 'T'],
-  E: ['T', 'X'],
-  T: ['X'],
-  X: [],
+  R: ['P'],
+  P: ['R'],
 }
 
 const somar = (a: PorSexo, b: PorSexo): PorSexo => ({ m: a.m + b.m, f: a.f + b.f })
@@ -90,68 +84,21 @@ export function situacaoDaCaixa(partos: PartoDaCaixa[]): SituacaoDaCaixa {
   return situacao
 }
 
-function listaDeColunas(estados: string[]): string {
-  const rotulos = estados.map((estado) => ROTULO_DA_COLUNA[estado])
-  return rotulos.length === 1 ? `${rotulos[0]}` : `${rotulos.slice(0, -1).join(', ')} ou ${rotulos.at(-1)}`
-}
-
-/** Recusa, com o motivo, a mudanca de coluna que o fluxo do kanban nao deixa */
-export function conferirTransicao(antes: string, depois: string, caixa: SituacaoDaCaixa) {
-  if (antes === 'X') {
-    throw erroDeRegra(
-      'TRANSICAO_INVALIDA',
-      'Esta caixa ja foi enviada: Enviado e a ultima coluna do kanban.',
-    )
-  }
-
+/** Recusa, com o motivo, a mudanca de coluna da caixa de casal que o kanban nao deixa */
+export function conferirTransicao(antes: string, depois: string) {
   if (antes === depois) return
 
-  const destinos = DESTINOS[antes] ?? []
-
-  if (!destinos.includes(depois)) {
+  if (['E', 'T', 'X'].includes(depois)) {
     throw erroDeRegra(
       'TRANSICAO_INVALIDA',
-      `A caixa em ${ROTULO_DA_COLUNA[antes]} nao vai para ${ROTULO_DA_COLUNA[depois]}: de ${ROTULO_DA_COLUNA[antes]} ela so vai para ${listaDeColunas(destinos)}.`,
+      'A caixa de casal fica em Livres ou Pre-reserva. Os desmamados vao para o estoque pela ficha da caixa, em Passar para o estoque.',
     )
   }
 
-  if (depois === 'E' && !caixa.temDesmamado) {
+  if (!(DESTINOS[antes] ?? []).includes(depois)) {
     throw erroDeRegra(
       'TRANSICAO_INVALIDA',
-      'Esta caixa nao tem ninhada desmamada com animal: so depois do desmame ela vai para Estoque.',
+      `A caixa em ${ROTULO_DA_COLUNA[antes]} nao vai para ${ROTULO_DA_COLUNA[depois]}.`,
     )
   }
-
-  if (antes === 'P' && depois === 'T' && caixa.livre.m + caixa.livre.f > 0) {
-    throw erroDeRegra(
-      'TRANSICAO_INVALIDA',
-      `Esta caixa ainda tem ${caixa.livre.m} M e ${caixa.livre.f} F livres: de Pre-reserva ela so vai para Reserva com todos os animais comprometidos.`,
-    )
-  }
-
-  if ((depois === 'T' || depois === 'X') && !caixa.temVinculo) {
-    throw erroDeRegra(
-      'TRANSICAO_INVALIDA',
-      `Esta caixa nao tem animal alocado a uma solicitacao, e sem esse vinculo nao vai para ${ROTULO_DA_COLUNA[depois]}.`,
-    )
-  }
-}
-
-/**
- * A coluna da caixa depois de uma entrega, ou null quando ela fica onde esta. A caixa que a
- * entrega esvaziou (casal encerrado, nenhum animal na caixa e nada a entregar) vai para Enviado.
- * A caixa em Pre-reserva que ficou sem nada a entregar volta para Livres, o inverso da alocacao
- */
-export function colunaDepoisDaEntrega(
-  estado: string,
-  temCasalAtivo: boolean,
-  caixa: SituacaoDaCaixa,
-): 'X' | 'R' | null {
-  const aEntregar = caixa.aEntregar.m + caixa.aEntregar.f
-  const vazia = caixa.naCaixa.m + caixa.naCaixa.f === 0
-
-  if (estado !== 'X' && !temCasalAtivo && vazia && aEntregar === 0) return 'X'
-  if (estado === 'P' && aEntregar === 0) return 'R'
-
-  return null
 }

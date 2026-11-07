@@ -12,7 +12,8 @@ const banco = vi.hoisted(() => ({
 vi.mock('../../shared/prisma.ts', () => ({
   prisma: {
     parto: {
-      findUnique: async () => banco.parto,
+      // sem caixa de estoque, salvo o teste que traz os lotes
+      findUnique: async () => banco.parto && { lotes: [], ...banco.parto },
       findFirst: async () => banco.proximo,
     },
     $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
@@ -157,7 +158,10 @@ describe('correcao do parto', () => {
   })
 
   it('desmame corrigido abaixo do reservado grava e avisa o pedido em falta', async () => {
-    banco.parto = { ...partoRegistrado, compromissos: [{ qtdM: 4, qtdF: 4, remessa: { idSolicitacao: 7 } }] }
+    banco.parto = {
+      ...partoRegistrado,
+      compromissos: [{ qtdM: 4, qtdF: 4, remessa: { idSolicitacao: 7, dtRealizada: null } }],
+    }
 
     const resposta = await corrigirDesmame(
       1,
@@ -168,6 +172,27 @@ describe('correcao do parto', () => {
     expect(banco.atualizados[0]?.data).toMatchObject({ desmamadoF: 3 })
     expect(resposta.alerta).toContain('faltam 0 M e 1 F')
     expect(resposta.alerta).toContain('#7')
+  })
+
+  it('desmame corrigido nao fica abaixo do que ja foi para o estoque ou foi entregue', async () => {
+    banco.parto = {
+      ...partoRegistrado,
+      compromissos: [{ qtdM: 0, qtdF: 1, remessa: { idSolicitacao: 7, dtRealizada: d('2026-10-20') } }],
+      // 3 machos e 2 femeas ja numa caixa de estoque; 1 femea entregue
+      lotes: [
+        { qtd: 3, caixa: { sexo: 'M' } },
+        { qtd: 2, caixa: { sexo: 'F' } },
+      ],
+    }
+
+    await expect(
+      corrigirDesmame(
+        1,
+        { dtDesmameReal: '2026-10-16', desmamadoM: 2, desmamadoF: 2, motivo: 'contagem errada' },
+        1,
+      ),
+    ).rejects.toEqual(nosCampos('desmamadoM', 'desmamadoF'))
+    expect(banco.atualizados).toEqual([])
   })
 })
 

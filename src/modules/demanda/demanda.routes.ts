@@ -16,6 +16,7 @@ import {
   recusarSolicitacao,
   registrarEntrega,
 } from './demanda.service.ts'
+import { retiradaDaSolicitacao } from '../infra/estoque.service.ts'
 import { desfazerReserva } from './devolucao.service.ts'
 import { SITUACAO_DO_PROJETO, alterarProjeto, criarProjeto } from './projeto.service.ts'
 import { numeroCeua } from './protocolo.ts'
@@ -174,4 +175,11 @@ solicitacaoRoutes.post('/:id/devolucao', exigirPerfil(...OPERA_A_COLONIA), async
   const { id } = idNaRota.parse(req.params)
 
   res.json(await desfazerReserva(id, usuarioDaRequisicao(req)))
+})
+
+/** GET /api/solicitacoes/:id/retirada - de qual caixa tirar os animais do pedido na entrega */
+solicitacaoRoutes.get('/:id/retirada', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+  const { id } = idNaRota.parse(req.params)
+
+  res.json(await retiradaDaSolicitacao(id))
 })

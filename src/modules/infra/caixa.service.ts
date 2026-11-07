@@ -8,15 +8,25 @@ import { registrarHistorico } from '../historico/historico.service.ts'
 import { casalNoCard, selecaoDoCasalNoCard } from './casalNoCard.ts'
 import { conferirTransicao, selecaoDoPartoDaCaixa, situacaoDaCaixa } from './fluxoDoKanban.ts'
 import { codigoDaPosicao } from './endereco.ts'
+import { lerCaixasDeEstoque } from './estoque.service.ts'
 import { idDaEspecie } from './infra.service.ts'
 
-/** 'GET /api/quadro?especie=' - o kanban de uma especie, com as cinco colunas sempre presentes */
+/** Quanto tempo a caixa de estoque enviada ainda aparece na coluna Enviado */
+const DIAS_EM_ENVIADO = 7
+
+/**
+ * 'GET /api/quadro?especie=' - o kanban de uma especie, com as cinco colunas sempre presentes. A
+ * caixa de casal fica em Livres ou Pre-reserva; a de estoque em Estoque ou Reserva, pelo que tem
+ * reservado, e em Enviado por uma semana depois que a entrega a esvazia
+ */
 export async function montarQuadro(codigoEspecie: string) {
   const idEspecie = await idDaEspecie(codigoEspecie)
+  const desde = new Date(Date.now() - DIAS_EM_ENVIADO * 86_400_000)
 
-  const caixas = await prisma.caixa.findMany({
+  const [caixas, estoque] = await Promise.all([
+    prisma.caixa.findMany({
     // so caixa que ja teve casal - caixa vazia nao aparece no kanban
-    where: { idEspecie, ativa: true, casais: { some: {} } },
+    where: { idEspecie, ativa: true, tipo: 'C', casais: { some: {} } },
     orderBy: [{ idEstante: 'asc' }, { face: 'asc' }, { linha: 'asc' }, { coluna: 'asc' }],
     select: {
       id: true,
@@ -27,7 +37,12 @@ export async function montarQuadro(codigoEspecie: string) {
       estante: { select: { numeroVisivel: true, colunas: true } },
       casais: selecaoDoCasalNoCard,
     },
-  })
+  }),
+    lerCaixasDeEstoque(prisma, {
+      idEspecie,
+      OR: [{ ativa: true }, { estado: 'X', dtManutencao: { gte: desde } }],
+    }),
+  ])
 
   const colunas = estadoCaixa.termos.map((estado) => ({
     estado,
@@ -44,7 +59,27 @@ export async function montarQuadro(codigoEspecie: string) {
       numeroVisivel: caixa.estante.numeroVisivel,
       linhagem: casal?.linhagem.nome ?? null,
       casal: casalNoCard(caixa.casais, caixa.estado),
+      estoque: null,
     })
+  }
+
+  for (const caixa of estoque) {
+    colunas
+      .find((c) => c.estado === estadoCaixa.paraApi(caixa.estado))
+      ?.cards.push({
+        idCaixa: caixa.id,
+        codigo: caixa.codigo,
+        numeroVisivel: caixa.numeroVisivel,
+        linhagem: caixa.linhagem,
+        casal: null,
+        estoque: {
+          sexo: caixa.sexo,
+          total: caixa.total,
+          reservado: caixa.reservado,
+          nascimentoDe: caixa.nascimentoDe,
+          nascimentoAte: caixa.nascimentoAte,
+        },
+      })
   }
 
   return { colunas }
@@ -63,11 +98,18 @@ export type PedidoDeTransicao = {
 export async function moverCaixa(idCaixa: number, dados: PedidoDeTransicao, idUsuario: number) {
   const caixa = await prisma.caixa.findUnique({
     where: { id: idCaixa },
-    select: { id: true, ativa: true, estado: true, codigo: true },
+    select: { id: true, ativa: true, estado: true, codigo: true, tipo: true },
   })
 
   if (caixa === null || !caixa.ativa) {
     throw naoEncontrado('Caixa')
+  }
+
+  if (caixa.tipo === 'E') {
+    throw erroDeRegra(
+      'TRANSICAO_INVALIDA',
+      'A caixa de estoque muda de coluna sozinha: fica em Estoque enquanto tem animal livre e vai para Reserva quando todos estao reservados.',
+    )
   }
 
   const estadoNovo = exigirCodigo(estadoCaixa, dados.estado, 'Estado')
@@ -79,7 +121,7 @@ export async function moverCaixa(idCaixa: number, dados: PedidoDeTransicao, idUs
   })
   const situacao = situacaoDaCaixa(partos)
 
-  conferirTransicao(caixa.estado, estadoNovo, situacao)
+  conferirTransicao(caixa.estado, estadoNovo)
 
   if (situacao.aEntregar.m + situacao.aEntregar.f > 0 && !dados.confirmar) {
     throw erroDeRegra(

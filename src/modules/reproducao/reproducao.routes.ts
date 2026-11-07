@@ -5,6 +5,7 @@ import {
   exigirPerfil,
   usuarioDaRequisicao,
 } from '../../shared/middlewares/autorizacao.ts'
+import { destinosDoEstoque, passarParaOEstoque } from '../infra/estoque.service.ts'
 import { corrigirDesmame, corrigirNascimento, corrigirSelecao } from './correcao.service.ts'
 import {
   encerrarCasal,
@@ -149,4 +150,43 @@ partoRoutes.patch('/:id/desmame', exigirPerfil(...OPERA_A_COLONIA), async (req, 
   const dados = desmame.extend(motivoDaCorrecao.shape).parse(req.body)
 
   res.json(await corrigirDesmame(id, dados, usuarioDaRequisicao(req).id))
+})
+
+/** O destino dos desmamados de um sexo: uma caixa de estoque que ja existe, ou uma posicao vazia */
+const destinoDoEstoque = z.union([
+  z.object({ idCaixa: z.number().int().positive() }),
+  z.object({
+    posicao: z.object({
+      idEstante: z.number().int().positive(),
+      face: z.enum(['frontal', 'traseira']),
+      linha: z.number().int().positive(),
+      coluna: z.number().int().positive(),
+    }),
+  }),
+])
+
+const transferencia = z.object({
+  qtd: z.number().int().positive('Informe quantos animais.'),
+  destino: destinoDoEstoque,
+})
+
+const passagemParaOEstoque = z
+  .object({ machos: transferencia.optional(), femeas: transferencia.optional() })
+  .refine((dados) => dados.machos !== undefined || dados.femeas !== undefined, {
+    error: 'Informe os machos, as femeas ou os dois.',
+  })
+
+/** POST /api/partos/:id/estoque - os desmamados saem da caixa do casal para caixas de estoque */
+partoRoutes.post('/:id/estoque', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+  const { id } = idNaRota.parse(req.params)
+  const dados = passagemParaOEstoque.parse(req.body)
+
+  res.status(201).json(await passarParaOEstoque(id, dados, usuarioDaRequisicao(req).id))
+})
+
+/** GET /api/partos/:id/destinos-do-estoque - as caixas de estoque que recebem os desmamados do parto */
+partoRoutes.get('/:id/destinos-do-estoque', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+  const { id } = idNaRota.parse(req.params)
+
+  res.json(await destinosDoEstoque(id))
 })

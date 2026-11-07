@@ -15,7 +15,9 @@ const banco = vi.hoisted(() => ({
   gravou: false,
   partoAtualizado: null as Record<string, unknown> | null,
   linhagem: null as Record<string, unknown> | null,
-  caixa: { id: 1, idEspecie: 1, estado: 'R' },
+  caixa: { id: 1, idEspecie: 1, estado: 'R', tipo: 'C' } as Record<string, unknown>,
+  /** os partos da caixa do casal, para saber se ainda tem ninhada nela */
+  partosDaCaixa: [] as Record<string, unknown>[],
   criados: [] as Record<string, unknown>[],
   liberou: [] as number[],
 }))
@@ -33,7 +35,8 @@ vi.mock('../../shared/prisma.ts', () => ({
     caixa: { findUnique: async () => banco.caixa },
     grupoGeneticoPar: { findFirst: async () => ({ id: 1 }) },
     parto: {
-      findUnique: async () => banco.parto,
+      findUnique: async () => banco.parto && { lotes: [], ...banco.parto },
+      findMany: async () => banco.partosDaCaixa,
       update: async () => {
         banco.gravou = true
       },
@@ -84,6 +87,23 @@ const partoNascido = {
 
 const recusa = (status: number, codigo: string) => expect.objectContaining({ status, codigo })
 
+/** Uma ninhada que ainda esta na caixa do casal, sem nada no estoque. Mamando ate o desmame */
+const ninhadaNaCaixa = (parcial: Record<string, unknown> = {}) => ({
+  id: 9,
+  ordem: 5,
+  dtPartoReal: d('2026-10-01'),
+  nascidoM: 3,
+  nascidoF: 2,
+  eutanasiadoM: null,
+  eutanasiadoF: null,
+  desmamadoM: null,
+  desmamadoF: null,
+  compromissos: [],
+  lotes: [],
+  casal: { identificacao: 'AB', idLinhagem: 2 },
+  ...parcial,
+})
+
 /** a recusa de VALIDACAO com a mensagem exatamente nestes campos do formulario */
 const nosCampos = (...campos: string[]) =>
   expect.objectContaining({
@@ -95,7 +115,8 @@ beforeEach(() => {
   banco.gravou = false
   banco.casal = null
   banco.partoAtualizado = null
-  banco.caixa = { id: 1, idEspecie: 1, estado: 'R' }
+  banco.caixa = { id: 1, idEspecie: 1, estado: 'R', tipo: 'C' }
+  banco.partosDaCaixa = []
   banco.criados = []
   banco.liberou = []
 })
@@ -103,6 +124,52 @@ beforeEach(() => {
 describe('nascimento', () => {
   const pendente = { ...partoNascido, dtPartoReal: null, nascidoM: null, nascidoF: null }
   const agora = new Date('2026-10-30T15:00:00.000Z')
+
+  it('o parto seguinte espera os desmamados de antes sairem da caixa para o estoque', async () => {
+    banco.parto = { ...pendente, id: 2, ordem: 2, dtPartoPrevisto: d('2026-10-24'), compromissos: [] }
+    banco.partosDaCaixa = [ninhadaNaCaixa({ ordem: 1, desmamadoM: 3, desmamadoF: 2 })]
+
+    await expect(
+      registrarNascimento(2, { dtPartoReal: '2026-10-24', nascidoM: 5, nascidoF: 5 }, 1),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        status: 409,
+        codigo: 'CAIXA_COM_ANIMAIS',
+        message: expect.stringContaining('Passe para o estoque antes de registrar este parto'),
+      }),
+    )
+    expect(banco.gravou).toBe(false)
+  })
+
+  it('com a ninhada de antes ainda mamando, pede o desmame dela primeiro', async () => {
+    banco.parto = { ...pendente, id: 2, ordem: 2, dtPartoPrevisto: d('2026-10-24'), compromissos: [] }
+    banco.partosDaCaixa = [ninhadaNaCaixa({ ordem: 1 })]
+
+    await expect(
+      registrarNascimento(2, { dtPartoReal: '2026-10-24', nascidoM: 5, nascidoF: 5 }, 1),
+    ).rejects.toEqual(
+      expect.objectContaining({ codigo: 'CAIXA_COM_ANIMAIS', message: expect.stringContaining('ainda mama') }),
+    )
+  })
+
+  it('com os desmamados de antes ja no estoque, o parto seguinte registra', async () => {
+    banco.parto = { ...pendente, id: 2, ordem: 2, dtPartoPrevisto: d('2026-10-24'), compromissos: [] }
+    banco.partosDaCaixa = [
+      ninhadaNaCaixa({
+        ordem: 1,
+        desmamadoM: 3,
+        desmamadoF: 2,
+        lotes: [
+          { id: 1, idCaixa: 7, qtd: 3, caixa: { sexo: 'M' } },
+          { id: 2, idCaixa: 8, qtd: 2, caixa: { sexo: 'F' } },
+        ],
+      }),
+    ]
+
+    await registrarNascimento(2, { dtPartoReal: '2026-10-24', nascidoM: 5, nascidoF: 5 }, 1)
+
+    expect(banco.partoAtualizado).toMatchObject({ dtPartoReal: d('2026-10-24') })
+  })
 
   it('casal encerrado nao recebe parto', async () => {
     banco.parto = { ...pendente, casal: { ativo: false } }
@@ -320,12 +387,23 @@ describe('formacao do casal', () => {
     expect(banco.gravou).toBe(false)
   })
 
-  it.each([
-    ['E', 'Estoque'],
-    ['T', 'Reserva'],
-  ])('caixa em %s (%s) nao recebe casal novo: ela nao volta para Livres', async (estado, coluna) => {
+  it('caixa de estoque nao recebe casal', async () => {
     banco.linhagem = { id: 2, nome: 'Wistar', idEspecie: 1, ativa: true }
-    banco.caixa = { id: 1, idEspecie: 1, estado }
+    banco.caixa = { id: 1, idEspecie: 1, estado: 'E', tipo: 'E' }
+
+    await expect(
+      formarCasal(
+        { idCaixa: 1, idLinhagem: 2, grupoMacho: 'A', grupoFemea: 'B', dtFormacao: '2026-11-06' },
+        1,
+      ),
+    ).rejects.toEqual(expect.objectContaining({ status: 409, codigo: 'CAIXA_DE_ESTOQUE' }))
+    expect(banco.gravou).toBe(false)
+  })
+
+  it('caixa com desmamados do casal anterior nao recebe casal novo: eles vao para o estoque antes', async () => {
+    banco.linhagem = { id: 2, nome: 'Wistar', idEspecie: 1, ativa: true }
+    banco.caixa = { id: 1, idEspecie: 1, estado: 'R', tipo: 'C' }
+    banco.partosDaCaixa = [ninhadaNaCaixa({ desmamadoM: 3, desmamadoF: 2 })]
 
     await expect(
       formarCasal(
@@ -335,8 +413,8 @@ describe('formacao do casal', () => {
     ).rejects.toEqual(
       expect.objectContaining({
         status: 409,
-        codigo: 'TRANSICAO_INVALIDA',
-        message: expect.stringContaining(coluna),
+        codigo: 'CAIXA_COM_ANIMAIS',
+        message: expect.stringContaining('3 M e 2 F desmamados do 5o parto do casal AB'),
       }),
     )
     expect(banco.gravou).toBe(false)

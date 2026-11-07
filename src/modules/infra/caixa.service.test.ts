@@ -28,10 +28,19 @@ describe('casal em caixa de maternidade ou recria', () => {
   it('aparece no kanban: a consulta nao filtra a finalidade da caixa', async () => {
     await montarQuadro('rato')
 
-    const filtro = consultas.caixa.at(-1)?.where
+    const filtro = consultas.caixa.find((consulta) => consulta.where.tipo === 'C')?.where
 
-    expect(filtro).toMatchObject({ idEspecie: 1, ativa: true, casais: { some: {} } })
+    expect(filtro).toMatchObject({ idEspecie: 1, ativa: true, tipo: 'C', casais: { some: {} } })
     expect(filtro).not.toHaveProperty('finalidade')
+  })
+
+  it('o kanban tambem le as caixas de estoque da especie, as ativas e as enviadas na semana', async () => {
+    await montarQuadro('rato')
+
+    const filtro = consultas.caixa.find((consulta) => consulta.where.tipo === 'E')?.where
+
+    expect(filtro).toMatchObject({ idEspecie: 1, tipo: 'E' })
+    expect(filtro?.OR).toContainEqual({ ativa: true })
   })
 
   it('aparece na busca de atendimento: a consulta nao filtra a finalidade da caixa', async () => {

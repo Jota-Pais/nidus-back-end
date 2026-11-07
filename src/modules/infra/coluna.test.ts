@@ -110,152 +110,28 @@ describe('fluxo do kanban da caixa de casal', () => {
     })
   })
 
-  it('enviado e a ultima coluna: a caixa enviada nao sai dela', async () => {
-    naColuna('X')
-    banco.partos = [desmamado(2, 2, entregue(2, 2))]
-
-    for (const estado of ['livres', 'pre_reserva', 'estoque', 'reserva'] as const) {
-      await expect(moverCaixa(7, { estado, confirmar: true }, 1)).rejects.toEqual(recusa('TRANSICAO_INVALIDA'))
-    }
-    expect(banco.gravado).toBeNull()
-  })
-
-  it('estoque e reserva nao voltam para livres nem pre-reserva', async () => {
+  it('a caixa de casal nao vai para estoque, reserva nem enviado: os desmamados vao pela ficha', async () => {
     banco.partos = [desmamado(2, 2, reservado(2, 2))]
 
-    for (const antes of ['E', 'T']) {
+    for (const antes of ['R', 'P']) {
       naColuna(antes)
-      for (const estado of ['livres', 'pre_reserva'] as const) {
-        await expect(moverCaixa(7, { estado, confirmar: true }, 1)).rejects.toEqual(recusa('TRANSICAO_INVALIDA'))
+      for (const estado of ['estoque', 'reserva', 'enviado'] as const) {
+        await expect(moverCaixa(7, { estado, confirmar: true }, 1)).rejects.toEqual(
+          recusaComMensagem('Passar para o estoque'),
+        )
       }
     }
     expect(banco.gravado).toBeNull()
   })
 
-  it('reserva nao volta para estoque', async () => {
-    naColuna('T')
-    banco.partos = [desmamado(2, 2, reservado(2, 2))]
+  it('a caixa de estoque nao se arrasta: a coluna dela sai do que esta reservado', async () => {
+    banco.caixa = { id: 7, ativa: true, estado: 'E', codigo: 'F2C', tipo: 'E' }
 
-    await expect(moverCaixa(7, { estado: 'estoque', confirmar: true }, 1)).rejects.toEqual(
-      recusaComMensagem('de Reserva ela so vai para Enviado'),
-    )
-    expect(banco.gravado).toBeNull()
-  })
-
-  it('livres e pre-reserva nao vao direto para enviado, e livres nao vai direto para reserva', async () => {
-    banco.partos = [desmamado(2, 2, reservado(2, 2))]
-
-    for (const antes of ['R', 'P']) {
-      naColuna(antes)
-      await expect(moverCaixa(7, { estado: 'enviado', confirmar: true }, 1)).rejects.toEqual(
-        recusa('TRANSICAO_INVALIDA'),
-      )
-    }
-
-    naColuna('R')
-    await expect(moverCaixa(7, { estado: 'reserva', confirmar: true }, 1)).rejects.toEqual(
-      recusaComMensagem('de Livres ela so vai para Pre-reserva ou Estoque'),
-    )
-    expect(banco.gravado).toBeNull()
-  })
-
-  it('vai para estoque so depois do desmame, com animal desmamado na caixa', async () => {
-    naColuna('R')
-    banco.partos = [nascido(3, 3)]
-    await expect(moverCaixa(7, { estado: 'estoque', confirmar: false }, 1)).rejects.toEqual(
-      recusaComMensagem('so depois do desmame'),
-    )
-
-    naColuna('P')
-    banco.partos = [desmamado(2, 2, entregue(2, 2)), nascido(3, 3, reservado(1, 0))]
-    await expect(moverCaixa(7, { estado: 'estoque', confirmar: true }, 1)).rejects.toEqual(
-      recusaComMensagem('so depois do desmame'),
-    )
-    expect(banco.gravado).toBeNull()
-
-    naColuna('R')
-    banco.partos = [desmamado(2, 2)]
-    await expect(moverCaixa(7, { estado: 'estoque', confirmar: false }, 1)).resolves.toMatchObject({
-      estado: 'estoque',
-    })
-
-    naColuna('P')
-    banco.partos = [desmamado(2, 2, entregue(1, 0)), nascido(3, 3, reservado(1, 0))]
-    await expect(moverCaixa(7, { estado: 'estoque', confirmar: true }, 1)).resolves.toMatchObject({
-      estado: 'estoque',
-    })
-  })
-
-  it('pre-reserva vai para reserva so com todos os animais comprometidos', async () => {
-    naColuna('P')
-    banco.partos = [desmamado(2, 2, reservado(1, 2))]
-    await expect(moverCaixa(7, { estado: 'reserva', confirmar: true }, 1)).rejects.toEqual(
-      recusaComMensagem('1 M e 0 F livres'),
-    )
-    expect(banco.gravado).toBeNull()
-
-    banco.partos = [desmamado(2, 2, reservado(2, 2))]
-    await expect(moverCaixa(7, { estado: 'reserva', confirmar: true }, 1)).resolves.toMatchObject({
-      estado: 'reserva',
-    })
-  })
-
-  it('caixa sem animal alocado a solicitacao nao vai para reserva nem para enviado', async () => {
-    naColuna('P')
-    await expect(moverCaixa(7, { estado: 'reserva', confirmar: true }, 1)).rejects.toEqual(
-      recusa('TRANSICAO_INVALIDA'),
-    )
-
-    banco.partos = [desmamado(2, 2)]
-    naColuna('E')
-    for (const estado of ['reserva', 'enviado'] as const) {
+    for (const estado of ['reserva', 'enviado', 'livres'] as const) {
       await expect(moverCaixa(7, { estado, confirmar: true }, 1)).rejects.toEqual(
-        recusaComMensagem('nao tem animal alocado'),
+        recusaComMensagem('muda de coluna sozinha'),
       )
     }
-
-    naColuna('T')
-    await expect(moverCaixa(7, { estado: 'enviado', confirmar: true }, 1)).rejects.toEqual(
-      recusaComMensagem('nao tem animal alocado'),
-    )
     expect(banco.gravado).toBeNull()
-  })
-
-  it('estoque com solicitacao vinculada vai para reserva', async () => {
-    naColuna('E')
-    banco.partos = [desmamado(2, 2, reservado(1, 1))]
-
-    await expect(moverCaixa(7, { estado: 'reserva', confirmar: true }, 1)).resolves.toMatchObject({
-      estado: 'reserva',
-    })
-  })
-
-  it('reserva com a entrega registrada vai para enviado sem pedir confirmacao', async () => {
-    naColuna('T')
-    banco.partos = [desmamado(2, 2, entregue(2, 2))]
-
-    await expect(moverCaixa(7, { estado: 'enviado', confirmar: false }, 3)).resolves.toEqual({
-      idCaixa: 7,
-      estado: 'enviado',
-    })
-    expect(banco.historico).toMatchObject({
-      idUsuario: 3,
-      acao: 'mudanca_de_coluna',
-      dados: { antes: 'reserva', depois: 'enviado' },
-    })
-  })
-
-  it('estoque ou reserva com animal ainda nao entregue so vai para enviado confirmando', async () => {
-    banco.partos = [desmamado(2, 2, reservado(1, 1))]
-
-    for (const estado of ['E', 'T']) {
-      naColuna(estado)
-      await expect(moverCaixa(7, { estado: 'enviado', confirmar: false }, 1)).rejects.toEqual(
-        recusa('TRANSICAO_CONTRARIA_COMPROMISSO'),
-      )
-      await expect(moverCaixa(7, { estado: 'enviado', confirmar: true }, 1)).resolves.toMatchObject({
-        estado: 'enviado',
-      })
-    }
   })
 })

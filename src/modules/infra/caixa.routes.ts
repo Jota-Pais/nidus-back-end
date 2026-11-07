@@ -7,6 +7,7 @@ import {
 } from '../../shared/middlewares/autorizacao.ts'
 import { estadoCaixa } from '../../shared/traducao.ts'
 import { montarQuadro, moverCaixa, mudarDePosicao } from './caixa.service.ts'
+import { virarCaixaDeEstoque } from './estoque.service.ts'
 import { montarFicha } from './ficha.service.ts'
 
 /** /api/quadro e o kanban de uma especie; /api/caixas e a ficha e a mudanca de coluna */
@@ -56,4 +57,11 @@ caixaRoutes.patch('/:id/posicao', exigirPerfil(...OPERA_A_COLONIA), async (req, 
   const { id } = idNaRota.parse(req.params)
 
   res.json(await mudarDePosicao(id, posicaoNova.parse(req.body), usuarioDaRequisicao(req).id))
+})
+
+/** POST /api/caixas/:id/estoque - a caixa do casal encerrado vira caixa de estoque no lugar */
+caixaRoutes.post('/:id/estoque', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+  const { id } = idNaRota.parse(req.params)
+
+  res.json(await virarCaixaDeEstoque(id, usuarioDaRequisicao(req).id))
 })

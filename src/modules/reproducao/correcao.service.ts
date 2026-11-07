@@ -4,7 +4,8 @@ import { prisma } from '../../shared/prisma.ts'
 import { dataISO, paraData } from '../../shared/traducao.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
 import { calcularDesmamePrevisto } from './cadeiaTemporal.ts'
-import { compromissosAtivosComPedido, faltaNaReserva } from './disponibilidade.ts'
+import { compromissosAtivosComPedido, faltaNaReserva, separarEntregues } from './disponibilidade.ts'
+import { noEstoque } from '../infra/estoque.ts'
 import type { ContagemDoCiclo } from './disponibilidade.ts'
 import { cicloFicha, contagemInvalida } from './reproducao.service.ts'
 import type { Desmame, Nascimento, Selecao } from './reproducao.service.ts'
@@ -16,6 +17,7 @@ async function partoParaCorrigir(idParto: number) {
     where: { id: idParto },
     include: {
       compromissos: compromissosAtivosComPedido,
+      lotes: { select: { qtd: true, caixa: { select: { sexo: true } } } },
       casal: { select: { id: true, dtEncerramento: true } },
     },
   })
@@ -247,6 +249,21 @@ export async function corrigirDesmame(
       'desmamado',
       desmamePassou,
       `Nao pode passar do nascido menos a eutanasia (${vivosM} M, ${vivosF} F).`,
+    )
+  }
+
+  // o que ja saiu da caixa do casal (entregue ou na caixa de estoque) aconteceu: o desmame nao
+  // fica abaixo disso
+  const { entregue } = separarEntregues(parto.compromissos)
+  const estoque = noEstoque(parto)
+  const saiu = { m: entregue.m + estoque.m, f: entregue.f + estoque.f }
+  const abaixo = { m: dados.desmamadoM < saiu.m, f: dados.desmamadoF < saiu.f }
+
+  if (abaixo.m || abaixo.f) {
+    throw contagemInvalida(
+      'desmamado',
+      abaixo,
+      `Nao pode ficar abaixo do que ja saiu da caixa do casal, entregue ou no estoque (${saiu.m} M, ${saiu.f} F).`,
     )
   }
 

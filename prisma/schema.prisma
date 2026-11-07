@@ -76,9 +76,15 @@ model Caixa {
   codigo    String @db.VarChar(20)
   /// A segregacao por especie e aplicada no servidor.
   idEspecie Int @map("id_especie")
-  /// Coluna do Kanban (spec do cliente, secao 1.9):
-  /// R livres | P pre-reserva | E estoque | T reserva | X enviado
+  /// Coluna do Kanban. A caixa de casal so alterna R livres e P pre-reserva; a de
+  /// estoque fica em E enquanto tem animal (Estoque ou Reserva sai das reservas, na
+  /// leitura) e vai para X enviado quando a entrega a esvazia
   estado     String @default("R") @db.Char(1)
+  /// C caixa de casal | E caixa de estoque, com os desmamados de um sexo e uma
+  /// linhagem. Qualquer posicao vazia vira uma ou outra
+  tipo       String  @default("C") @db.Char(1)
+  /// So na caixa de estoque: M ou F
+  sexo       String? @db.Char(1)
   ativa      Boolean   @default(true)
   dtCriacao    DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
   dtManutencao DateTime? @map("dt_manutencao") @db.Timestamptz(6)
@@ -86,10 +92,32 @@ model Caixa {
   estante Estante @relation(fields: [idEstante], references: [id], onDelete: NoAction, onUpdate: NoAction)
   especie Especie @relation(fields: [idEspecie], references: [id], onDelete: NoAction, onUpdate: NoAction)
   casais  Casal[]
+  /// Na caixa de estoque, de quais partos vieram os animais
+  lotes   Lote[]
 
   @@index([idEstante, face])
   @@index([estado, idEspecie])
   @@map("caixa")
+  @@schema("infra")
+}
+
+/// Os desmamados de um parto que estao numa caixa de estoque, no sexo da caixa.
+/// `qtd` e o que esta la agora: a entrega desconta. O resto do parto que nao foi
+/// entregue continua na caixa do casal. A reserva segue no parto (demanda.compromisso)
+model Lote {
+  id           Int       @id @default(autoincrement())
+  idCaixa      Int       @map("id_caixa")
+  idParto      Int       @map("id_parto")
+  qtd          Int       @db.SmallInt
+  dtCriacao    DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
+  dtManutencao DateTime? @map("dt_manutencao") @db.Timestamptz(6)
+
+  caixa Caixa @relation(fields: [idCaixa], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  parto Parto @relation(fields: [idParto], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([idCaixa, idParto])
+  @@index([idParto])
+  @@map("lote")
   @@schema("infra")
 }
 
@@ -223,6 +251,8 @@ model Parto {
   usuarioSelecao Usuario? @relation("RegistrouSelecao", fields: [idUsuarioSelecao], references: [id], onDelete: NoAction, onUpdate: NoAction)
   usuarioDesmame Usuario? @relation("RegistrouDesmame", fields: [idUsuarioDesmame], references: [id], onDelete: NoAction, onUpdate: NoAction)
   compromissos   Compromisso[]
+  /// As caixas de estoque para onde foram os desmamados deste parto
+  lotes          Lote[]
 
   @@unique([idCasal, ordem])
   @@map("parto")

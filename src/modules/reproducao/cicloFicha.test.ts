@@ -7,7 +7,8 @@ import { cicloFicha } from './reproducao.service.ts'
 const banco = vi.hoisted(() => ({ parto: null as Record<string, unknown> | null }))
 
 vi.mock('../../shared/prisma.ts', () => ({
-  prisma: { parto: { findUnique: async () => banco.parto } },
+  // sem caixa de estoque: os desmamados estao todos na caixa do casal
+  prisma: { parto: { findUnique: async () => banco.parto && { lotes: [], ...banco.parto } } },
 }))
 
 const dia = (iso: string) => new Date(`${iso}T00:00:00.000Z`)

@@ -17,6 +17,8 @@ import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { dataISO, paraData } from '../../shared/traducao.ts'
 import { liberarCaixaVazia } from '../infra/liberacaoDaCaixa.ts'
+import { naCaixaDoCasal } from '../infra/estoque.ts'
+import { animaisNaCaixaDoCasal, recusaDaCaixaOcupada } from '../infra/estoque.service.ts'
 
 /**
  * Valida o par genetico ANTES do insert, para dar a mensagem rica
@@ -85,7 +87,26 @@ export async function casalFicha(idCasal: number) {
 export async function cicloFicha(idParto: number) {
   const parto = await prisma.parto.findUnique({
     where: { id: idParto },
-    include: { compromissos: compromissosAtivosComPedido },
+    include: {
+      compromissos: compromissosAtivosComPedido,
+      lotes: {
+        where: { qtd: { gt: 0 } },
+        orderBy: { id: 'asc' },
+        select: {
+          idCaixa: true,
+          qtd: true,
+          caixa: {
+            select: {
+              sexo: true,
+              face: true,
+              linha: true,
+              coluna: true,
+              estante: { select: { numeroVisivel: true, colunas: true } },
+            },
+          },
+        },
+      },
+    },
   })
 
   if (parto === null) {
@@ -119,6 +140,16 @@ export async function cicloFicha(idParto: number) {
     entregue,
     /** reserva acima do que a ninhada tem depois do desmame ou da correcao; null quando cabe */
     falta: faltaNaReserva(parto),
+    /** o que ainda esta na caixa do casal: mamando, ou desmamado que nao foi para o estoque */
+    naCaixa: naCaixaDoCasal(parto),
+    /** as caixas de estoque com desmamados deste parto */
+    noEstoque: parto.lotes.map((lote) => ({
+      idCaixa: lote.idCaixa,
+      codigo: codigoDaPosicao(lote.caixa.face, lote.caixa.linha, lote.caixa.coluna, lote.caixa.estante.colunas),
+      numeroVisivel: lote.caixa.estante.numeroVisivel,
+      sexo: lote.caixa.sexo,
+      qtd: lote.qtd,
+    })),
   }
 }
 
@@ -179,13 +210,6 @@ async function caixaNaPosicao(posicao: PosicaoVazia) {
 }
 
 /**
- * As colunas de onde a caixa nao recebe casal novo. O casal novo leva a caixa para Livres, e
- * Estoque e Reserva nao voltam para Livres (fluxoDoKanban.ts). Enviado volta: e assim que a
- * caixa enviada e reaproveitada
- */
-const COLUNA_SEM_VOLTA: Record<string, string> = { E: 'Estoque', T: 'Reserva' }
-
-/**
  * POST /api/casais - forma o casal e ja cria o 1o parto, com as datas previstas. Numa posicao
  * vazia a caixa nasce na mesma transacao, com a especie da linhagem escolhida
  */
@@ -217,13 +241,20 @@ export async function formarCasal(dados: NovoCasal, idUsuario: number) {
     })
   }
 
-  const semVolta = caixaExistente === null ? undefined : COLUNA_SEM_VOLTA[caixaExistente.estado]
-
-  if (semVolta !== undefined) {
+  if (caixaExistente !== null && caixaExistente.tipo === 'E') {
     throw erroDeRegra(
-      'TRANSICAO_INVALIDA',
-      `Esta caixa esta em ${semVolta} e nao volta para Livres: casal novo nao entra em caixa de Estoque ou Reserva.`,
+      'CAIXA_DE_ESTOQUE',
+      'Esta e uma caixa de estoque: casal novo vai numa posicao vazia ou numa caixa de casal sem animal.',
     )
+  }
+
+  // a caixa recebe outra ninhada so depois que a de antes saiu dela
+  if (caixaExistente !== null) {
+    const recusa = recusaDaCaixaOcupada(
+      await animaisNaCaixaDoCasal(prisma, caixaExistente.id),
+      'formar casal novo nela',
+    )
+    if (recusa !== null) throw recusa
   }
 
   await validarParGenetico(dados.grupoMacho, dados.grupoFemea)
@@ -329,6 +360,13 @@ export async function registrarNascimento(
   if (!parto.casal.ativo) {
     throw erroDeRegra('SEQUENCIA_INVALIDA', 'Este casal esta encerrado e nao recebe parto novo.')
   }
+
+  // duas ninhadas nao dividem a caixa: a de antes desmama e vai para o estoque primeiro
+  const recusa = recusaDaCaixaOcupada(
+    (await animaisNaCaixaDoCasal(prisma, parto.casal.idCaixa)).filter((preso) => preso.idParto !== idParto),
+    'registrar este parto',
+  )
+  if (recusa !== null) throw recusa
 
   await prisma.$transaction(async (tx) => {
     await tx.parto.update({

@@ -14,6 +14,7 @@ const parto = (previsto: string, real: string | null = null, nascidos = { m: 0, 
   desmamadoM: null,
   desmamadoF: null,
   compromissos: [] as { qtdM: number; qtdF: number; remessa: { dtRealizada: Date | null } }[],
+  lotes: [] as { qtd: number; caixa: { sexo: string | null } }[],
 })
 
 const reserva = (qtdM: number, qtdF: number, entregue: string | null) => ({
@@ -171,5 +172,33 @@ describe('ninhadas - os animais que existem na caixa', () => {
     expect(ninhadas({ identificacao: 'AB', partos: [toda, outra] }, '2026-11-06')).toEqual([
       { casal: 'AB', parto: 2, m: 3, f: 3, idadeDias: 7 },
     ])
+  })
+})
+
+describe('ninhada que foi para o estoque', () => {
+  const desmamada = (m: number, f: number) => ({
+    ...parto('2026-10-01', '2026-10-01', { m, f }),
+    desmamadoM: m,
+    desmamadoF: f,
+  })
+
+  it('o que foi para uma caixa de estoque ja nao esta na caixa do casal', () => {
+    const parte = { ...desmamada(5, 4), lotes: [{ qtd: 3, caixa: { sexo: 'M' } }] }
+
+    expect(ninhadas({ identificacao: 'AB', partos: [parte] }, '2026-11-06')).toEqual([
+      { casal: 'AB', parto: 1, m: 2, f: 4, idadeDias: 36 },
+    ])
+  })
+
+  it('a ninhada que foi toda para o estoque sai do card do casal', () => {
+    const toda = {
+      ...desmamada(5, 4),
+      lotes: [
+        { qtd: 5, caixa: { sexo: 'M' } },
+        { qtd: 4, caixa: { sexo: 'F' } },
+      ],
+    }
+
+    expect(ninhadas({ identificacao: 'AB', partos: [toda] }, '2026-11-06')).toEqual([])
   })
 })

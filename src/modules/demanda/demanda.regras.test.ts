@@ -8,6 +8,13 @@ vi.mock('../../shared/email.ts', () => ({
   avisarAnimaisReservados: vi.fn().mockResolvedValue(undefined),
 }))
 
+// a coluna da caixa do casal depois da reserva tem o teste dela (estoque.test.ts); aqui e a regra
+// da alocacao
+vi.mock('../infra/estoque.service.ts', async (original) => ({
+  ...(await original<typeof import('../infra/estoque.service.ts')>()),
+  ajustarColunaDoCasal: async () => {},
+}))
+
 const banco = vi.hoisted(() => ({
   linhagem: null as Record<string, unknown> | null,
   /** o que o teste muda no pedido de 2 M e 2 F, 28 dias, entrega em 01/12 */

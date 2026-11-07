@@ -14,6 +14,7 @@ const partoBase = {
   desmamadoM: null,
   desmamadoF: null,
   compromissos: [],
+  lotes: [],
   dtRegistroParto: null,
   dtRegistroSelecao: null,
   dtRegistroDesmame: null,
@@ -79,16 +80,23 @@ vi.mock('../../shared/prisma.ts', () => ({
   },
 }))
 
+/** A ficha da caixa de casal: a de estoque nao tem casal nem parto */
+async function fichaDoCasal() {
+  const ficha = await montarFicha(7)
+  if (ficha.tipo !== 'casal') throw new Error('veio a ficha de estoque')
+  return ficha
+}
+
 describe('ficha da caixa com casal novo', () => {
   it('mostra o casal novo e os partos dele', async () => {
-    const ficha = await montarFicha(7)
+    const ficha = await fichaDoCasal()
 
     expect(ficha.casal?.identificacao).toBe('CD')
     expect(ficha.partos.map((p) => p.id)).toEqual([20])
   })
 
   it('continua mostrando a ninhada que o casal encerrado deixou na caixa', async () => {
-    const ficha = await montarFicha(7)
+    const ficha = await fichaDoCasal()
 
     expect(ficha.anteriores).toEqual([
       {
