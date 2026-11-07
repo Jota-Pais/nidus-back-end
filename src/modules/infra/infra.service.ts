@@ -1,6 +1,6 @@
 // Estantes: lista, grade das duas faces e cadastro
 
-import { erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
+import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { codigoDaEspecie, estadoCaixa, face as faceDic } from '../../shared/traducao.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
@@ -9,7 +9,8 @@ import { codigoDaPosicao } from './endereco.ts'
 
 type LinhaDeEstante = {
   id: number
-  sala: string
+  idSala: number
+  sala: { nome: string }
   fabricante: string
   modelo: string
   numeroVisivel: string
@@ -18,10 +19,14 @@ type LinhaDeEstante = {
   colunas: number
 }
 
+/** O nome da sala vem junto: a grade separa as estantes por ele */
+const comASala = { sala: { select: { nome: true } } } as const
+
 function paraApi(estante: LinhaDeEstante) {
   return {
     id: estante.id,
-    sala: estante.sala,
+    idSala: estante.idSala,
+    sala: estante.sala.nome,
     fabricante: estante.fabricante,
     modelo: estante.modelo,
     numeroVisivel: estante.numeroVisivel,
@@ -47,7 +52,8 @@ export async function idDaEspecie(codigo: string): Promise<number> {
 export async function listarEstantes() {
   const estantes = await prisma.estante.findMany({
     where: { ativa: true },
-    orderBy: [{ sala: 'asc' }, { numeroVisivel: 'asc' }],
+    include: comASala,
+    orderBy: [{ sala: { nome: 'asc' } }, { numeroVisivel: 'asc' }],
   })
 
   return { estantes: estantes.map(paraApi) }
@@ -111,7 +117,7 @@ export async function montarGrade(id: number) {
 }
 
 export type NovaEstante = {
-  sala: string
+  idSala: number
   fabricante: string
   modelo: string
   numeroVisivel: string
@@ -125,18 +131,35 @@ export function capacidadeDerivada(faces: number, linhas: number, colunas: numbe
   return faces * linhas * colunas
 }
 
-/** POST /api/estantes */
-export async function cadastrarEstante(dados: NovaEstante, idUsuario: number) {
+/** A sala escolhida no formulario. Removida ou inexistente e campo invalido, como o responsavel do projeto */
+async function salaDoCorpo(idSala: number) {
+  const sala = await prisma.sala.findFirst({ where: { id: idSala, ativa: true } })
+
+  if (sala === null) {
+    throw new ErroDeAplicacao(400, 'VALIDACAO', 'Confira os campos destacados.', {
+      campos: { idSala: 'Escolha uma sala cadastrada.' },
+    })
+  }
+
+  return sala
+}
+
+/** O numero da etiqueta e unico na sala, entre as estantes ativas */
+async function conferirNumeroLivre(sala: { id: number; nome: string }, numeroVisivel: string) {
   const mesmoNumero = await prisma.estante.findFirst({
-    where: { sala: dados.sala, numeroVisivel: dados.numeroVisivel, ativa: true },
+    where: { idSala: sala.id, numeroVisivel, ativa: true },
   })
 
   if (mesmoNumero !== null) {
-    throw erroDeRegra(
-      'ESTANTE_DUPLICADA',
-      `Ja existe a estante ${dados.numeroVisivel} na sala ${dados.sala}.`,
-    )
+    throw erroDeRegra('ESTANTE_DUPLICADA', `Ja existe a estante ${numeroVisivel} na sala ${sala.nome}.`)
   }
+}
+
+/** POST /api/estantes */
+export async function cadastrarEstante(dados: NovaEstante, idUsuario: number) {
+  const sala = await salaDoCorpo(dados.idSala)
+
+  await conferirNumeroLivre(sala, dados.numeroVisivel)
 
   const criada = await prisma.$transaction(async (tx) => {
     const estante = await tx.estante.create({
@@ -144,6 +167,7 @@ export async function cadastrarEstante(dados: NovaEstante, idUsuario: number) {
         ...dados,
         capacidade: capacidadeDerivada(dados.faces, dados.linhas, dados.colunas),
       },
+      include: comASala,
     })
 
     await registrarHistorico(tx, {
@@ -151,8 +175,8 @@ export async function cadastrarEstante(dados: NovaEstante, idUsuario: number) {
       entidade: 'estante',
       idEntidade: estante.id,
       acao: 'cadastro',
-      descricao: `Estante ${dados.numeroVisivel} cadastrada na ${dados.sala}`,
-      dados: { ...dados },
+      descricao: `Estante ${dados.numeroVisivel} cadastrada na ${sala.nome}`,
+      dados: { ...dados, sala: sala.nome },
     })
 
     return estante

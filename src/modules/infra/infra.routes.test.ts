@@ -42,7 +42,7 @@ describe('autorizacao das rotas de infraestrutura', () => {
   it('cadastrar estante e so do gestor - tecnico recebe 403', async () => {
     // Cadastro de modelo novo e operacao de admin
     const resposta = await request(app('tecnico')).post('/api/estantes').send({
-      sala: 'Sala 2',
+      idSala: 2,
       fabricante: 'ALESCO',
       modelo: 'Modelo 2',
       numeroVisivel: 'E-07',
@@ -66,7 +66,7 @@ describe('autorizacao das rotas de infraestrutura', () => {
 
 describe('validacao de entrada das rotas de infraestrutura', () => {
   it('recusa cadastro sem os campos obrigatorios, com campo a campo', async () => {
-    const resposta = await request(app('gestor')).post('/api/estantes').send({ sala: 'Sala 2' })
+    const resposta = await request(app('gestor')).post('/api/estantes').send({ idSala: 2 })
 
     expect(resposta.status).toBe(400)
     expect(resposta.body.erro.codigo).toBe('VALIDACAO')
@@ -77,7 +77,7 @@ describe('validacao de entrada das rotas de infraestrutura', () => {
     // 2 faces x 20 colunas = 40 letras e o alfabeto tem 26. Sobraria coluna
     // sem letra no endereco.
     const resposta = await request(app('gestor')).post('/api/estantes').send({
-      sala: 'Sala 2',
+      idSala: 2,
       fabricante: 'GENERICA',
       modelo: 'Modelo X',
       numeroVisivel: 'E-99',
@@ -96,11 +96,27 @@ describe('validacao de entrada das rotas de infraestrutura', () => {
     expect(resposta.status).toBe(400)
     expect(resposta.body.erro.codigo).toBe('VALIDACAO')
   })
+
+  it('o cadastro pede a sala pelo id, e o nome solto e recusado', async () => {
+    // A sala virou tabela: mandar so o nome, como antes, criaria estante sem sala
+    const resposta = await request(app('gestor')).post('/api/estantes').send({
+      sala: 'Sala 2',
+      fabricante: 'ALESCO',
+      modelo: 'Modelo 2',
+      numeroVisivel: 'E-07',
+      faces: 2,
+      linhas: 5,
+      colunas: 5,
+    })
+
+    expect(resposta.status).toBe(400)
+    expect(Object.keys(resposta.body.erro.campos)).toContain('idSala')
+  })
 })
 
 describe('capacidade da estante e derivada, nunca do cliente', () => {
   const topologia = {
-    sala: 'Sala 2',
+    idSala: 2,
     fabricante: 'ALESCO',
     modelo: 'Modelo 2',
     numeroVisivel: 'E-07',

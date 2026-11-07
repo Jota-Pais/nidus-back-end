@@ -102,7 +102,7 @@ export async function montarFicha(idCaixa: number) {
   const caixa = await prisma.caixa.findUnique({
     where: { id: idCaixa },
     include: {
-      estante: { select: { numeroVisivel: true, sala: true, colunas: true } },
+      estante: { select: { numeroVisivel: true, sala: { select: { nome: true } }, colunas: true } },
       especie: { select: { nome: true } },
       // O casal ativo (ou o mais recente, a ficha e historico) primeiro, e depois os que
       // vieram antes dele
@@ -140,7 +140,7 @@ export async function montarFicha(idCaixa: number) {
       id: caixa.id,
       endereco: {
         numeroVisivel: caixa.estante.numeroVisivel,
-        sala: caixa.estante.sala,
+        sala: caixa.estante.sala.nome,
         codigo: codigoDaPosicao(caixa.face, caixa.linha, caixa.coluna, caixa.estante.colunas),
       },
       especie: codigoDaEspecie(caixa.especie.nome),

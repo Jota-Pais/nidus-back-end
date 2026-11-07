@@ -24,9 +24,12 @@ export const paresGeneticos = [
   { grupoMacho: 'E', grupoFemea: 'A' },
 ] as const
 
+/** As 3 salas de criacao de hoje. Depois da carga, o gestor muda nos Cadastros. */
+export const salas = ['Sala 1', 'Sala 2', 'Sala 3'] as const
+
 /**
- * Os quatro modelos de estante, com uma estante real de cada um para a
- * infraestrutura de hoje: 3 salas de criacao.
+ * Os quatro modelos de estante, com uma estante real de cada um. `sala` e o nome
+ * de uma das `salas` acima: a carga troca pelo id dela.
  *
  * `capacidade` e derivada (faces x linhas x colunas) e o banco cobra isso no
  * CHECK `estante_capacidade_derivada` - por isso ela nao esta escrita aqui.

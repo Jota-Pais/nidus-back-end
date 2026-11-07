@@ -17,7 +17,7 @@ const idNaRota = z.object({
 /** corpo do cadastro. 'capacidade' nao esta aqui, e por isso o Zod a descarta */
 export const estanteNova = z
   .object({
-    sala: z.string().trim().min(1).max(60),
+    idSala: z.number().int().positive(),
     fabricante: z.string().trim().min(1).max(60),
     modelo: z.string().trim().min(1).max(60),
     numeroVisivel: z.string().trim().min(1).max(30),

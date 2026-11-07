@@ -58,7 +58,7 @@ vi.mock('../../shared/prisma.ts', () => ({
         linha: 1,
         coluna: 1,
         estado: 'R',
-        estante: { numeroVisivel: 'E1', sala: 'Sala 1', colunas: 10 },
+        estante: { numeroVisivel: 'E1', sala: { nome: 'Sala 1' }, colunas: 10 },
         especie: { nome: 'Rato' },
         casais: casais.map(({ id }) => ({ id })),
       }),
