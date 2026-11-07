@@ -43,7 +43,7 @@ const POR_INVARIANTE: Record<string, Traducao> = {
   },
   parto_id_casal_ordem_key: {
     codigo: 'SEQUENCIA_INVALIDA',
-    mensagem: 'Este parto ja foi registrado.',
+    mensagem: 'Este parto ja foi aberto por outro registro de acasalamento. Atualize a ficha.',
   },
   // CHECK
   parto_ordem_ciclo: {

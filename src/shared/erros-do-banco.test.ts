@@ -118,7 +118,7 @@ describe('invariante do banco vira 409', () => {
 
     expect(traduzido?.status).toBe(409)
     expect(traduzido?.codigo).toBe('SEQUENCIA_INVALIDA')
-    expect(traduzido?.message).toBe('Este parto ja foi registrado.')
+    expect(traduzido?.message).toBe('Este parto ja foi aberto por outro registro de acasalamento. Atualize a ficha.')
   })
 
   it('sexto parto vira LIMITE_PARTOS_ATINGIDO', () => {

@@ -322,7 +322,7 @@ export async function registrarNascimento(
   if (parto.dtPartoReal !== null) {
     throw erroDeRegra(
       'SEQUENCIA_INVALIDA',
-      'Este parto ja tem data real registrada. Correcao de registro ainda nao esta disponivel.',
+      'Este parto ja tem data real registrada. Para mudar, use Corrigir no parto.',
     )
   }
 
