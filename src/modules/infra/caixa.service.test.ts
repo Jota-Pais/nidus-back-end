@@ -42,8 +42,17 @@ describe('casal em caixa de maternidade ou recria', () => {
 
     const filtro = consultas.caixa.at(-1)?.where
 
-    expect(filtro).toMatchObject({ idEspecie: 1, ativa: true, casais: { some: {} } })
+    expect(filtro).toMatchObject({ idEspecie: 1, casais: { some: {} } })
     expect(filtro).not.toHaveProperty('finalidade')
+  })
+
+  it('a busca tambem oferece o desmamado de caixa ja liberada', async () => {
+    await buscarAtendimento(
+      { especie: 'rato', machos: 2, femeas: 2, qualquer: 0, idadeMin: 28, idadeMax: 28 },
+      new Date('2026-10-29T12:00:00.000Z'),
+    )
+
+    expect(consultas.caixa.at(-1)?.where.OR).toContainEqual({ ativa: false })
   })
 })
 

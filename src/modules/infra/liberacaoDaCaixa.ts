@@ -1,6 +1,18 @@
 import type { Prisma } from '@prisma/client'
 import { registrarHistorico } from '../historico/historico.service.ts'
+import { naCaixa } from '../reproducao/disponibilidade.ts'
 import { selecaoDoPartoDaCaixa, situacaoDaCaixa } from './fluxoDoKanban.ts'
+import type { PartoDaCaixa } from './fluxoDoKanban.ts'
+
+export const caixaComEstoque = {
+  OR: [{ ativa: true, estado: { in: ['R', 'P', 'E'] } }, { ativa: false }],
+}
+
+function temFilhoteMamando(parto: PartoDaCaixa): boolean {
+  if (parto.nascidoM === null || parto.desmamadoM !== null) return false
+  const resta = naCaixa(parto)
+  return resta.m + resta.f > 0
+}
 
 export async function liberarCaixaVazia(
   tx: Prisma.TransactionClient,
@@ -19,11 +31,10 @@ export async function liberarCaixaVazia(
 
   if (caixa === null || !caixa.ativa || caixa.casais.some((casal) => casal.ativo)) return false
 
-  const situacao = situacaoDaCaixa(caixa.casais.flatMap((casal) => casal.partos))
-  const resta =
-    situacao.naCaixa.m + situacao.naCaixa.f + situacao.aEntregar.m + situacao.aEntregar.f
+  const partos = caixa.casais.flatMap((casal) => casal.partos)
+  const { aEntregar } = situacaoDaCaixa(partos)
 
-  if (resta > 0) return false
+  if (aEntregar.m + aEntregar.f > 0 || partos.some(temFilhoteMamando)) return false
 
   await tx.caixa.update({ where: { id: caixa.id }, data: { ativa: false, estado: 'R' } })
 
@@ -32,7 +43,7 @@ export async function liberarCaixaVazia(
     entidade: 'caixa',
     idEntidade: caixa.id,
     acao: 'liberacao',
-    descricao: `Caixa ${caixa.codigo} liberada: o casal encerrou e nao sobrou animal nela`,
+    descricao: `Caixa ${caixa.codigo} liberada: o casal encerrou e nao ha filhote mamando nem reserva a entregar. Os desmamados seguem no estoque`,
   })
 
   return true

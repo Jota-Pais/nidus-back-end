@@ -11,7 +11,7 @@ const parto = (nascido: number, desmamado: number | null, entregue = 0) => ({
   compromissos:
     entregue === 0
       ? []
-      : [{ qtdM: entregue, qtdF: 0, remessa: { idSolicitacao: 1, dtRealizada: new Date() } }],
+      : [{ qtdM: entregue, qtdF: 0, remessa: { idSolicitacao: 1, dtRealizada: new Date() as Date | null } }],
 })
 
 function banco(casais: { ativo: boolean; partos: ReturnType<typeof parto>[] }[]) {
@@ -41,8 +41,26 @@ describe('liberar a caixa no fim do ciclo', () => {
     expect(gravado.historico).toBe(1)
   })
 
-  it('com filhote ainda na caixa ela continua', async () => {
+  it('casal encerrado com filhote ainda mamando: a caixa espera o desmame', async () => {
     const { tx, gravado } = banco([{ ativo: false, partos: [parto(3, null)] }])
+
+    expect(await liberarCaixaVazia(tx, 3, 1)).toBe(false)
+    expect(gravado.caixa).toBeNull()
+  })
+
+  it('depois do desmame a caixa sai, e os desmamados seguem no estoque', async () => {
+    const { tx, gravado } = banco([{ ativo: false, partos: [parto(3, 3)] }])
+
+    expect(await liberarCaixaVazia(tx, 3, 1)).toBe(true)
+    expect(gravado.caixa).toEqual({ ativa: false, estado: 'R' })
+  })
+
+  it('com reserva ainda a entregar ela continua ate a entrega', async () => {
+    const reservado = {
+      ...parto(3, 3),
+      compromissos: [{ qtdM: 2, qtdF: 0, remessa: { idSolicitacao: 1, dtRealizada: null } }],
+    }
+    const { tx, gravado } = banco([{ ativo: false, partos: [reservado] }])
 
     expect(await liberarCaixaVazia(tx, 3, 1)).toBe(false)
     expect(gravado.caixa).toBeNull()

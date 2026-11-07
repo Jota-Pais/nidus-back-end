@@ -13,6 +13,7 @@ import {
 } from '../reproducao/disponibilidade.ts'
 import { casaisParaODeficit, faixaDoPedido, ordenar, sugerirAlocacao } from './motor.ts'
 import type { Origem } from './motor.ts'
+import { caixaComEstoque } from '../infra/liberacaoDaCaixa.ts'
 
 export type PedidoDeBusca = {
   especie: string
@@ -48,9 +49,7 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
   const caixas = await prisma.caixa.findMany({
     where: {
       idEspecie,
-      ativa: true,
-      // reserva e enviado ja estao comprometidas: so livres, pre-reserva e estoque
-      estado: { in: ['R', 'P', 'E'] },
+      ...caixaComEstoque,
       ...(pedido.excluir && pedido.excluir.length > 0 ? { id: { notIn: pedido.excluir } } : {}),
       casais: {
         some: pedido.idLinhagem === undefined ? {} : { idLinhagem: pedido.idLinhagem },

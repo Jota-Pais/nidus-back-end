@@ -515,7 +515,10 @@ export type Desmame = {
 
 /** POST /api/partos/:id/desmame. A partir daqui o estoque e confirmado */
 export async function registrarDesmame(idParto: number, dados: Desmame, idUsuario: number) {
-  const parto = await prisma.parto.findUnique({ where: { id: idParto } })
+  const parto = await prisma.parto.findUnique({
+    where: { id: idParto },
+    include: { casal: { select: { ativo: true, idCaixa: true } } },
+  })
 
   if (parto === null) {
     throw naoEncontrado('Parto')
@@ -561,6 +564,10 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
       descricao: `Desmame do ${parto.ordem}o parto em ${dados.dtDesmameReal}: ${dados.desmamadoM} M e ${dados.desmamadoF} F`,
       dados: { ...dados },
     })
+
+    if (!parto.casal.ativo) {
+      await liberarCaixaVazia(tx, parto.casal.idCaixa, idUsuario)
+    }
   })
 
   return cicloFicha(idParto)

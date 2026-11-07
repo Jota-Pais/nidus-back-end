@@ -2,6 +2,7 @@ import { prisma } from '../../shared/prisma.ts'
 import { idDaEspecie } from '../infra/infra.service.ts'
 import { compromissosAtivos, disponibilidadeDoParto } from '../reproducao/disponibilidade.ts'
 import type { PorSexo } from '../reproducao/disponibilidade.ts'
+import { caixaComEstoque } from '../infra/liberacaoDaCaixa.ts'
 
 type Faixa = 'confirmado' | 'previsto'
 
@@ -61,7 +62,7 @@ export async function consultarEstoque(codigoEspecie: string) {
       select: { id: true, nome: true },
     }),
     prisma.parto.findMany({
-      where: { casal: { caixa: { idEspecie, ativa: true, estado: { in: ['R', 'P', 'E'] } } } },
+      where: { casal: { caixa: { idEspecie, ...caixaComEstoque } } },
       select: {
         dtPartoReal: true,
         nascidoM: true,

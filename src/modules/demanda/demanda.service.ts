@@ -446,10 +446,10 @@ export async function alocarSolicitacao(
       )
     }
 
-    if (!parto.casal.caixa.ativa || parto.casal.caixa.estado === 'X') {
+    if (parto.casal.caixa.ativa && parto.casal.caixa.estado === 'X') {
       throw erroDeRegra(
         'DISPONIBILIDADE_EXCEDIDA',
-        `A caixa do ${parto.ordem}o parto esta inativa ou ja foi enviada.`,
+        `A caixa do ${parto.ordem}o parto ja foi enviada.`,
       )
     }
 
@@ -638,8 +638,9 @@ async function moverCaixasDaEntrega(
       situacaoDaCaixa(caixa.casais.flatMap((casal) => casal.partos)),
     )
 
+    const semCasalAtivo = !caixa.casais.some((casal) => casal.ativo)
+    if (semCasalAtivo && (await liberarCaixaVazia(tx, caixa.id, idUsuario))) continue
     if (depois === null) continue
-    if (depois === 'X' && (await liberarCaixaVazia(tx, caixa.id, idUsuario))) continue
 
     const antes = estadoCaixa.paraApi(caixa.estado)
     const novo = estadoCaixa.paraApi(depois)
