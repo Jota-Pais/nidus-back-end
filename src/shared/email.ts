@@ -195,6 +195,12 @@ export type ResumoDoPedido = {
 const plural = (n: number, singular: string, flexao: string) =>
   `${n} ${n === 1 ? singular : flexao}`
 
+/** AAAA-MM-DD -> DD/MM/AAAA */
+function diaMesAno(data: string): string {
+  const [ano, mes, dia] = data.split('-')
+  return `${dia}/${mes}/${ano}`
+}
+
 /** As linhas do resumo do pedido, so com os grupos de animais que tem quantidade */
 function linhasDoResumo(pedido: ResumoDoPedido): string[] {
   const animais = [
@@ -207,22 +213,21 @@ function linhasDoResumo(pedido: ResumoDoPedido): string[] {
     pedido.idadeMin === pedido.idadeMax
       ? `${pedido.idadeMin} dias`
       : `de ${pedido.idadeMin} a ${pedido.idadeMax} dias`
-  const [ano, mes, dia] = pedido.dataEntrega.split('-')
-  const [anoDoPedido, mesDoPedido, diaDoPedido] = pedido.dataPedido.split('-')
 
   return [
-    `Data do pedido: ${diaDoPedido}/${mesDoPedido}/${anoDoPedido}`,
+    `Data do pedido: ${diaMesAno(pedido.dataPedido)}`,
     `Protocolo CEUA: ${pedido.protocoloCeua}`,
     `Linhagem: ${pedido.linhagem}`,
     `Animais: ${animais.join(', ')}`,
     `Idade: ${idade}`,
-    `Data de entrega: ${dia}/${mes}/${ano}`,
+    `Data de entrega: ${diaMesAno(pedido.dataEntrega)}`,
   ]
 }
 
 /**
  * O aviso de que o pedido foi aprovado (sem motivo) ou recusado (com o motivo que o tecnico
- * escreveu). Quem pediu nao precisa abrir o Nidus para saber
+ * escreveu). Quem pediu nao precisa abrir o Nidus para saber. Aprovar nao e reservar: os animais
+ * sao reservados depois, com outro aviso (avisarAnimaisReservados)
  */
 export async function avisarPedidoDecidido(
   email: string,
@@ -243,10 +248,35 @@ export async function avisarPedidoDecidido(
       'Olá!',
       '',
       aprovado
-        ? `O CPMR aprovou o seu pedido de animais.`
+        ? 'O CPMR aprovou o seu pedido de animais. Os animais serão separados até a data de ' +
+            'entrega, e você recebe outro e-mail quando eles estiverem reservados.'
         : `O CPMR recusou o seu pedido de animais.`,
       '',
       ...(aprovado ? [] : [`Motivo: ${motivoDaRecusa}`, '']),
+      ...linhasDoResumo(pedido),
+      '',
+      `Veja os seus pedidos em ${env.CORS_ORIGEM}/solicitar`,
+      '',
+      NOME_DO_REMETENTE,
+    ].join('\n'),
+  })
+}
+
+/** O aviso de que os animais do pedido aprovado foram separados para a entrega */
+export async function avisarAnimaisReservados(email: string, pedido: ResumoDoPedido): Promise<void> {
+  if (env.NODE_ENV !== 'production') {
+    console.log(`[pedido] aviso de animais reservados para ${email}`)
+    return
+  }
+
+  await enviarPelaBrevo({
+    para: email,
+    assunto: 'Os animais do seu pedido estão reservados',
+    texto: [
+      'Olá!',
+      '',
+      `Os animais do seu pedido estão reservados para a entrega de ${diaMesAno(pedido.dataEntrega)}.`,
+      '',
       ...linhasDoResumo(pedido),
       '',
       `Veja os seus pedidos em ${env.CORS_ORIGEM}/solicitar`,

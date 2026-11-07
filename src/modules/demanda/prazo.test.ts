@@ -10,6 +10,9 @@ const banco = vi.hoisted(() => ({
   consultaDasDevolucoes: undefined as unknown,
   reservas: [] as unknown[],
   jaDecididas: [] as number[],
+  /** o status que a recusa le, e o que o banco tem na hora de gravar, quando nao e mais o enviado */
+  statusLido: {} as Record<number, string>,
+  statusAtual: {} as Record<number, string>,
   historico: [] as Record<string, unknown>[],
   avisos: [] as { email: string; dataPedido: string; motivo: string | undefined }[],
 }))
@@ -37,10 +40,15 @@ vi.mock('../../shared/email.ts', () => ({
 }))
 
 vi.mock('../../shared/prisma.ts', () => {
+  const statusDe = (id: number) => banco.statusAtual[id] ?? 'EN'
+  // como o banco: o filtro do status vem como valor ou como lista
+  const passaNoFiltro = (filtro: string | { in: string[] }, status: string) =>
+    typeof filtro === 'string' ? filtro === status : filtro.in.includes(status)
+
   const tx = {
     solicitacao: {
-      updateMany: async ({ where }: { where: { id: number } }) => ({
-        count: banco.jaDecididas.includes(where.id) ? 0 : 1,
+      updateMany: async ({ where }: { where: { id: number; status: string | { in: string[] } } }) => ({
+        count: banco.jaDecididas.includes(where.id) || !passaNoFiltro(where.status, statusDe(where.id)) ? 0 : 1,
       }),
     },
     historico: {
@@ -61,12 +69,19 @@ vi.mock('../../shared/prisma.ts', () => {
           }
           return banco.lista
         },
-        findUnique: async ({ where }: { where: { id: number } }) => pedido(where.id),
+        findUnique: async ({ where }: { where: { id: number } }) => ({
+          ...pedido(where.id),
+          status: banco.statusLido[where.id] ?? 'EN',
+        }),
       },
       historico: {
-        findMany: async (consulta: { where: { acao?: unknown } }) => {
-          if (consulta.where.acao === 'devolucao') banco.consultaDasDevolucoes = consulta
-          return banco.decisoes
+        findMany: async (consulta: { where: { acao?: string | { in: string[] } } }) => {
+          const { acao } = consulta.where
+          if (acao === 'devolucao') banco.consultaDasDevolucoes = consulta
+          // como o banco: a lista so traz as acoes que pediu
+          return typeof acao === 'object'
+            ? banco.decisoes.filter((d) => acao.in.includes((d as { acao: string }).acao))
+            : banco.decisoes
         },
       },
       compromisso: { findMany: async () => banco.reservas },
@@ -82,6 +97,8 @@ beforeEach(() => {
   banco.consultaDasDevolucoes = undefined
   banco.reservas = []
   banco.jaDecididas = []
+  banco.statusLido = {}
+  banco.statusAtual = {}
   banco.historico = []
   banco.avisos = []
 })
@@ -136,6 +153,17 @@ describe('pedido sem resposta em 14 dias', () => {
     expect(await recusarSemResposta(agora)).toBe(1)
     await vi.waitFor(() => expect(banco.avisos.map((aviso) => aviso.email)).toEqual(['pessoa2@ufsc.br']))
   })
+
+  it('o pedido aprovado no meio do caminho nao e recusado sozinho: a recusa automatica e so do enviado', async () => {
+    // o #1 ja estava aprovado quando a recusa leu; o #2 foi aprovado entre a leitura e a gravacao
+    banco.vencidas = [{ id: 1 }, { id: 2 }]
+    banco.statusLido = { 1: 'AT' }
+    banco.statusAtual = { 1: 'AT', 2: 'AT' }
+
+    expect(await recusarSemResposta(agora)).toBe(0)
+    expect(banco.historico).toEqual([])
+    expect(banco.avisos).toEqual([])
+  })
 })
 
 describe('datas na lista de solicitacoes', () => {
@@ -188,6 +216,51 @@ describe('datas na lista de solicitacoes', () => {
     const [devolvido] = (await listarSolicitacoes(tecnica)).solicitacoes
 
     expect(devolvido).toMatchObject({ prazoResposta: '2026-11-24', dataAceite: null })
+  })
+
+  it('o aceite e a data da aprovacao; o pedido antigo, aceito ao reservar, usa a da alocacao', async () => {
+    banco.lista = [linha(1, 'AT'), linha(2, 'AP'), linha(3, 'AP'), linha(4, 'CO')]
+    banco.decisoes = [
+      { idEntidade: 1, acao: 'aprovacao', dtHora: new Date('2026-11-03T13:00:00.000Z'), dados: {} },
+      { idEntidade: 2, acao: 'aprovacao', dtHora: new Date('2026-11-03T13:00:00.000Z'), dados: {} },
+      { idEntidade: 2, acao: 'alocacao', dtHora: new Date('2026-11-05T13:00:00.000Z'), dados: {} },
+      { idEntidade: 3, acao: 'alocacao', dtHora: new Date('2026-11-04T13:00:00.000Z'), dados: {} },
+      { idEntidade: 4, acao: 'alocacao', dtHora: new Date('2026-11-02T13:00:00.000Z'), dados: {} },
+    ]
+
+    const { solicitacoes } = await listarSolicitacoes(tecnica)
+
+    expect(solicitacoes.map(({ status, prazoResposta, dataAceite }) => ({ status, prazoResposta, dataAceite }))).toEqual([
+      { status: 'em_atendimento', prazoResposta: null, dataAceite: '2026-11-03' },
+      { status: 'aprovada', prazoResposta: null, dataAceite: '2026-11-03' },
+      { status: 'aprovada', prazoResposta: null, dataAceite: '2026-11-04' },
+      { status: 'concluida', prazoResposta: null, dataAceite: '2026-11-02' },
+    ])
+  })
+
+  it('desfazer a reserva nao desfaz a aprovacao', async () => {
+    banco.lista = [linha(1, 'AT')]
+    banco.decisoes = [
+      { idEntidade: 1, acao: 'aprovacao', dtHora: new Date('2026-11-03T13:00:00.000Z'), dados: {} },
+      { idEntidade: 1, acao: 'alocacao', dtHora: new Date('2026-11-05T13:00:00.000Z'), dados: {} },
+      { idEntidade: 1, acao: 'devolucao', dtHora: new Date('2026-11-08T13:00:00.000Z'), dados: {} },
+    ]
+
+    const [desfeita] = (await listarSolicitacoes(tecnica)).solicitacoes
+
+    expect(desfeita).toMatchObject({ status: 'em_atendimento', prazoResposta: null, dataAceite: '2026-11-03' })
+  })
+
+  it('a recusada depois de aprovada traz a data da recusa, e nao a do aceite', async () => {
+    banco.lista = [linha(1, 'RE')]
+    banco.decisoes = [
+      { idEntidade: 1, acao: 'aprovacao', dtHora: new Date('2026-11-03T13:00:00.000Z'), dados: {} },
+      { idEntidade: 1, acao: 'recusa', dtHora: new Date('2026-11-09T13:00:00.000Z'), dados: { motivo: 'Nao vingou' } },
+    ]
+
+    const [recusada] = (await listarSolicitacoes(tecnica)).solicitacoes
+
+    expect(recusada).toMatchObject({ dataAceite: null, dataRecusa: '2026-11-09', motivoRecusa: 'Nao vingou' })
   })
 
   it('o pedido aceito diz quanto falta quando a ninhada reservada ficou com menos animais', async () => {

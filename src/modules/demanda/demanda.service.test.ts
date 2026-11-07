@@ -219,8 +219,8 @@ describe('lista de solicitacoes', () => {
   })
 })
 
-describe('alocacao so de solicitacao enviada', () => {
-  it.each(['AP', 'AT', 'CA'])('solicitacao com status %s nao recebe caixas', async (status) => {
+describe('reserva so de solicitacao aprovada', () => {
+  it.each(['AP', 'RE', 'CO', 'CA'])('solicitacao com status %s nao recebe caixas', async (status) => {
     banco.solicitacao = { id: 7, status, remessas: [] }
 
     await expect(alocarSolicitacao(7, itens, tecnica)).rejects.toEqual(
@@ -228,22 +228,31 @@ describe('alocacao so de solicitacao enviada', () => {
     )
   })
 
-  it('a aprovada diz que ja foi alocada; os outros status, que nao aguardam alocacao', async () => {
+  it('a enviada pede a aprovacao antes', async () => {
+    banco.solicitacao = { id: 7, status: 'EN', remessas: [] }
+
+    const reservar = alocarSolicitacao(7, itens, tecnica)
+
+    await expect(reservar).rejects.toEqual(expect.objectContaining({ status: 409, codigo: 'SEQUENCIA_INVALIDA' }))
+    await expect(reservar).rejects.toThrow('Aprove o pedido antes de reservar os animais.')
+  })
+
+  it('a com animais reservados diz que ja estao reservados; os outros status, que nao aguardam animais', async () => {
     banco.solicitacao = { id: 7, status: 'AP', remessas: [] }
     await expect(alocarSolicitacao(7, itens, tecnica)).rejects.toThrow(
-      'A solicitacao #7 ja foi alocada.',
+      'Os animais da solicitacao #7 ja estao reservados.',
     )
 
-    banco.solicitacao = { id: 7, status: 'AT', remessas: [] }
+    banco.solicitacao = { id: 7, status: 'RE', remessas: [] }
     await expect(alocarSolicitacao(7, itens, tecnica)).rejects.toThrow(
-      'A solicitacao #7 nao esta aguardando alocacao.',
+      'A solicitacao #7 nao esta aguardando animais.',
     )
   })
 
-  it('a enviada passa da conferencia do status', async () => {
+  it('a aprovada sem reserva passa da conferencia do status', async () => {
     // Sem remessa, para no 404 da remessa, que vem depois da conferencia - e antes de
     // qualquer parto ser lido
-    banco.solicitacao = { id: 7, status: 'EN', remessas: [] }
+    banco.solicitacao = { id: 7, status: 'AT', remessas: [] }
 
     await expect(alocarSolicitacao(7, itens, tecnica)).rejects.toEqual(
       expect.objectContaining({ status: 404, codigo: 'NAO_ENCONTRADO' }),

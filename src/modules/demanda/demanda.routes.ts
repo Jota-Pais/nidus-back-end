@@ -8,6 +8,7 @@ import {
 import { hojeISO } from '../../shared/traducao.ts'
 import {
   alocarSolicitacao,
+  aprovarSolicitacao,
   criarSolicitacao,
   listarProjetos,
   listarSolicitacoes,
@@ -15,7 +16,7 @@ import {
   recusarSolicitacao,
   registrarEntrega,
 } from './demanda.service.ts'
-import { devolverParaAnalise } from './devolucao.service.ts'
+import { desfazerReserva } from './devolucao.service.ts'
 import { SITUACAO_DO_PROJETO, alterarProjeto, criarProjeto } from './projeto.service.ts'
 import { numeroCeua } from './protocolo.ts'
 
@@ -119,6 +120,13 @@ solicitacaoRoutes.post('/', exigirPerfil('pesquisador'), async (req, res) => {
   res.status(201).json(await criarSolicitacao(dados, usuarioDaRequisicao(req)))
 })
 
+/** POST /api/solicitacoes/:id/aprovacao - a equipe aceita fazer o pedido; reserva depois */
+solicitacaoRoutes.post('/:id/aprovacao', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+  const { id } = idNaRota.parse(req.params)
+
+  res.json(await aprovarSolicitacao(id, usuarioDaRequisicao(req)))
+})
+
 const alocacao = z.object({
   itens: z
     .array(
@@ -131,7 +139,7 @@ const alocacao = z.object({
     .min(1, 'Escolha ao menos uma caixa.'),
 })
 
-/** POST /api/solicitacoes/:id/alocacao - so quem opera a colonia aloca */
+/** POST /api/solicitacoes/:id/alocacao - so quem opera a colonia reserva os animais do pedido aprovado */
 solicitacaoRoutes.post('/:id/alocacao', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
   const { itens } = alocacao.parse(req.body)
@@ -161,9 +169,9 @@ solicitacaoRoutes.post('/:id/recusa', exigirPerfil(...OPERA_A_COLONIA), async (r
   res.json(await recusarSolicitacao(id, motivo, usuarioDaRequisicao(req).id))
 })
 
-/** POST /api/solicitacoes/:id/devolucao - o pedido aceito com reserva em falta volta para analise */
+/** POST /api/solicitacoes/:id/devolucao - desfaz a reserva em falta; o pedido continua aprovado */
 solicitacaoRoutes.post('/:id/devolucao', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
 
-  res.json(await devolverParaAnalise(id, usuarioDaRequisicao(req)))
+  res.json(await desfazerReserva(id, usuarioDaRequisicao(req)))
 })

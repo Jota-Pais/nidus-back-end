@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   NOME_DO_REMETENTE,
   TEMPO_LIMITE_DO_ENVIO_EM_MS,
+  avisarAnimaisReservados,
   avisarPedidoDecidido,
   avisarSenhaAlterada,
   enviarCodigoDeAcesso,
@@ -266,6 +267,9 @@ describe('aviso do pedido decidido', () => {
     expect(corpo.to).toEqual([{ email: 'ana@ufsc.br' }])
     expect(corpo.subject).toBe('Seu pedido de animais foi aprovado')
     expect(corpo.textContent).toContain('aprovou o seu pedido de animais')
+    // aprovar nao e reservar: os animais sao separados depois, e vem outro e-mail
+    expect(corpo.textContent).toContain('Os animais serão separados até a data de entrega')
+    expect(corpo.textContent).toContain('você recebe outro e-mail quando eles estiverem reservados')
     expect(corpo.textContent).toContain('Protocolo CEUA: 23080.000001/2026-54')
     expect(corpo.textContent).toContain('Linhagem: Wistar')
     expect(corpo.textContent).toContain('Animais: 2 machos, 1 fêmea')
@@ -283,5 +287,43 @@ describe('aviso do pedido decidido', () => {
     expect(corpo.subject).toBe('Seu pedido de animais foi recusado')
     expect(corpo.textContent).toContain('recusou o seu pedido de animais')
     expect(corpo.textContent).toContain('Motivo: Sem Wistar até dezembro')
+    expect(corpo.textContent).not.toContain('separados')
+  })
+})
+
+describe('aviso de animais reservados', () => {
+  const pedido = {
+    protocoloCeua: '23080.000001/2026-54',
+    linhagem: 'Wistar',
+    machos: 0,
+    femeas: 0,
+    qualquer: 1,
+    idadeMin: 28,
+    idadeMax: 28,
+    dataEntrega: '2026-12-01',
+    dataPedido: '2026-11-05',
+  }
+
+  it('fora de production vai para o console, sem rede', async () => {
+    ambiente.NODE_ENV = 'development'
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await avisarAnimaisReservados('ana@ufsc.br', pedido)
+
+    expect(log).toHaveBeenCalledWith('[pedido] aviso de animais reservados para ana@ufsc.br')
+    expect(fetchFalso).not.toHaveBeenCalled()
+  })
+
+  it('diz para que entrega os animais estao reservados, com o resumo e o link', async () => {
+    await avisarAnimaisReservados('ana@ufsc.br', pedido)
+
+    const { corpo } = chamadaUnica()
+    expect(corpo.to).toEqual([{ email: 'ana@ufsc.br' }])
+    expect(corpo.subject).toBe('Os animais do seu pedido estão reservados')
+    expect(corpo.textContent).toContain('Os animais do seu pedido estão reservados para a entrega de 01/12/2026.')
+    expect(corpo.textContent).toContain('Animais: 1 de qualquer sexo')
+    expect(corpo.textContent).toContain('Idade: 28 dias')
+    expect(corpo.textContent).toContain('Data do pedido: 05/11/2026')
+    expect(corpo.textContent).toContain('https://thenidus.vercel.app/solicitar')
   })
 })

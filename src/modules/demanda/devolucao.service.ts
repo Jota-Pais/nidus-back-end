@@ -1,6 +1,7 @@
-// Pedido aceito cuja reserva ficou em falta: o desmame ou a correcao gravaram o que aconteceu
-// de verdade, com menos animais do que o reservado. A equipe devolve o pedido para analise e
-// aloca de novo. O pesquisador nao e avisado
+// Pedido com animais reservados cuja reserva ficou em falta: o desmame ou a correcao gravaram o
+// que aconteceu de verdade, com menos animais do que o reservado. A equipe desfaz a reserva e o
+// pedido, que continua aprovado, volta a aguardar animais para reservar de novo. O pesquisador
+// nao e avisado
 
 import { erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
@@ -10,10 +11,13 @@ import { registrarHistorico } from '../historico/historico.service.ts'
 import { compromissosAtivosComPedido, faltaNaReserva } from '../reproducao/disponibilidade.ts'
 import type { PorSexo } from '../reproducao/disponibilidade.ts'
 
-/** A acao no historico. A devolucao recomeca o prazo de resposta do pedido */
+/**
+ * A acao no historico quando a reserva em falta e desfeita. Antes da aprovacao separada, essa
+ * devolucao voltava o pedido para analise e recomecava o prazo de resposta (devolvidosDesde)
+ */
 export const ACAO_DEVOLUCAO = 'devolucao'
 
-const MOTIVO_DO_CANCELAMENTO = 'Pedido devolvido para analise: a reserva ficou em falta'
+const MOTIVO_DO_CANCELAMENTO = 'Reserva desfeita: a ninhada ficou com menos animais do que o reservado'
 
 /** As reservas ativas dos pedidos, cada uma com o parto e tudo o que esta reservado nele */
 function reservasDos(idsSolicitacao: number[]) {
@@ -72,7 +76,10 @@ export async function faltaDosPedidos(idsSolicitacao: number[]): Promise<Map<num
   return faltaPorPedido(await reservasDos(idsSolicitacao))
 }
 
-/** Os pedidos devolvidos para analise depois de 'desde': o prazo de resposta deles recomecou */
+/**
+ * Os pedidos devolvidos para analise depois de 'desde': o prazo de resposta deles recomecou. So a
+ * devolucao de antes da aprovacao separada deixava o pedido enviado
+ */
 export async function devolvidosDesde(idsSolicitacao: number[], desde: Date): Promise<Set<number>> {
   if (idsSolicitacao.length === 0) return new Set()
 
@@ -90,11 +97,11 @@ export async function devolvidosDesde(idsSolicitacao: number[], desde: Date): Pr
 }
 
 /**
- * POST /api/solicitacoes/:id/devolucao - o pedido aceito com reserva em falta volta para
- * "Aguardando analise": as reservas dele sao canceladas (nada se apaga) e a caixa que ficou sem
- * reserva volta de Pre-reserva para Livres, o inverso da alocacao
+ * POST /api/solicitacoes/:id/devolucao - desfaz a reserva em falta: as reservas do pedido sao
+ * canceladas (nada se apaga), a caixa que ficou sem reserva volta de Pre-reserva para Livres, o
+ * inverso da alocacao, e o pedido continua aprovado, aguardando animais
  */
-export async function devolverParaAnalise(idSolicitacao: number, usuario: UsuarioDaSessao) {
+export async function desfazerReserva(idSolicitacao: number, usuario: UsuarioDaSessao) {
   const solicitacao = await prisma.solicitacao.findUnique({
     where: { id: idSolicitacao },
     select: { id: true, status: true },
@@ -107,7 +114,7 @@ export async function devolverParaAnalise(idSolicitacao: number, usuario: Usuari
   if (solicitacao.status !== 'AP') {
     throw erroDeRegra(
       'SEQUENCIA_INVALIDA',
-      `A solicitacao #${idSolicitacao} nao esta aceita: so o pedido aceito volta para analise.`,
+      `A solicitacao #${idSolicitacao} nao tem animais reservados: nao ha reserva para desfazer.`,
     )
   }
 
@@ -117,7 +124,7 @@ export async function devolverParaAnalise(idSolicitacao: number, usuario: Usuari
   if (falta === undefined) {
     throw erroDeRegra(
       'SEQUENCIA_INVALIDA',
-      `A reserva da solicitacao #${idSolicitacao} nao esta em falta: nao ha o que devolver.`,
+      `A reserva da solicitacao #${idSolicitacao} nao esta em falta: nao ha o que desfazer.`,
     )
   }
 
@@ -133,7 +140,7 @@ export async function devolverParaAnalise(idSolicitacao: number, usuario: Usuari
 
       throw erroDeRegra(
         'DISPONIBILIDADE_EXCEDIDA',
-        `A ninhada do ${reserva.parto.ordem}o parto da caixa ${reserva.parto.casal.caixa.codigo} tambem esta reservada para ${pedidos}, e essa reserva sozinha ja passa do que a ninhada tem. Por enquanto o sistema nao devolve um pedido so nesse caso.`,
+        `A ninhada do ${reserva.parto.ordem}o parto da caixa ${reserva.parto.casal.caixa.codigo} tambem esta reservada para ${pedidos}, e essa reserva sozinha ja passa do que a ninhada tem. Por enquanto o sistema nao desfaz a reserva de um pedido so nesse caso.`,
       )
     }
   }
@@ -141,13 +148,16 @@ export async function devolverParaAnalise(idSolicitacao: number, usuario: Usuari
   const caixas = [...new Set(reservas.map((reserva) => reserva.parto.casal.idCaixa))]
 
   await prisma.$transaction(async (tx) => {
-    const devolvida = await tx.solicitacao.updateMany({
+    const desfeita = await tx.solicitacao.updateMany({
       where: { id: idSolicitacao, status: 'AP' },
-      data: { status: 'EN' },
+      data: { status: 'AT' },
     })
 
-    if (devolvida.count === 0) {
-      throw erroDeRegra('SEQUENCIA_INVALIDA', `A solicitacao #${idSolicitacao} nao esta mais aceita.`)
+    if (desfeita.count === 0) {
+      throw erroDeRegra(
+        'SEQUENCIA_INVALIDA',
+        `A solicitacao #${idSolicitacao} nao esta mais com os animais reservados.`,
+      )
     }
 
     await tx.compromisso.updateMany({
@@ -181,7 +191,7 @@ export async function devolverParaAnalise(idSolicitacao: number, usuario: Usuari
       entidade: 'solicitacao',
       idEntidade: idSolicitacao,
       acao: ACAO_DEVOLUCAO,
-      descricao: `Solicitacao #${idSolicitacao} devolvida para analise: a reserva ficou em falta (${falta.m} M, ${falta.f} F)`,
+      descricao: `Reserva da solicitacao #${idSolicitacao} desfeita: a reserva ficou em falta (${falta.m} M, ${falta.f} F)`,
       dados: {
         falta,
         reservasCanceladas: reservas.map((reserva) => ({
@@ -193,5 +203,5 @@ export async function devolverParaAnalise(idSolicitacao: number, usuario: Usuari
     })
   })
 
-  return { idSolicitacao, status: statusSolicitacao.paraApi('EN') }
+  return { idSolicitacao, status: statusSolicitacao.paraApi('AT') }
 }

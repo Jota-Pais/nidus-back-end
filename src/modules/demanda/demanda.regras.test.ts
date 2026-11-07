@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
-import { avisarPedidoDecidido } from '../../shared/email.ts'
+import { avisarAnimaisReservados, avisarPedidoDecidido } from '../../shared/email.ts'
 import { alocarSolicitacao, criarSolicitacao } from './demanda.service.ts'
 
-vi.mock('../../shared/email.ts', () => ({ avisarPedidoDecidido: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('../../shared/email.ts', () => ({
+  avisarPedidoDecidido: vi.fn().mockResolvedValue(undefined),
+  avisarAnimaisReservados: vi.fn().mockResolvedValue(undefined),
+}))
 
 const banco = vi.hoisted(() => ({
   linhagem: null as Record<string, unknown> | null,
@@ -11,6 +14,8 @@ const banco = vi.hoisted(() => ({
   solicitacao: {} as Record<string, unknown>,
   partos: [] as Record<string, unknown>[],
   aprovadas: 1,
+  /** o que a reserva mandou gravar no status do pedido */
+  mudancaDeStatus: null as Record<string, unknown> | null,
   transacoes: 0,
 }))
 
@@ -29,7 +34,8 @@ vi.mock('../../shared/prisma.ts', () => ({
     solicitacao: {
       findUnique: async () => ({
         id: 7,
-        status: 'EN',
+        // aprovado, aguardando os animais
+        status: 'AT',
         idEspecie: 1,
         idLinhagem: 3,
         qtdM: 2,
@@ -50,7 +56,12 @@ vi.mock('../../shared/prisma.ts', () => ({
     $transaction: async (fn: (tx: unknown) => Promise<unknown>) => {
       banco.transacoes += 1
       return fn({
-        solicitacao: { updateMany: async () => ({ count: banco.aprovadas }) },
+        solicitacao: {
+          updateMany: async (consulta: Record<string, unknown>) => {
+            banco.mudancaDeStatus = consulta
+            return { count: banco.aprovadas }
+          },
+        },
         compromisso: { create: async () => ({}) },
         caixa: { updateMany: async () => ({ count: 0 }) },
         historico: { create: async () => ({}) },
@@ -103,6 +114,7 @@ beforeEach(() => {
   banco.solicitacao = {}
   banco.partos = [parto(3)]
   banco.aprovadas = 1
+  banco.mudancaDeStatus = null
   banco.transacoes = 0
 })
 
@@ -160,7 +172,7 @@ describe('alocacao', () => {
 
     await expect(alocarSolicitacao(7, inteiro, tecnica)).rejects.toEqual(recusa(409, 'DISPONIBILIDADE_EXCEDIDA'))
     expect(banco.transacoes).toBe(0)
-    expect(avisarPedidoDecidido).not.toHaveBeenCalled()
+    expect(avisarAnimaisReservados).not.toHaveBeenCalled()
   })
 
   it('a idade vale com a mesma tolerancia da busca: 28 dias aceita de 25 a 31', async () => {
@@ -196,8 +208,9 @@ describe('alocacao', () => {
     await expect(alocarSolicitacao(7, inteiro, tecnica)).rejects.toEqual(recusa(409, 'SOLICITACAO_JA_ALOCADA'))
   })
 
-  it('pedido certo e alocado', async () => {
+  it('pedido certo e alocado: o aprovado sem reserva passa a ter os animais reservados', async () => {
     await expect(alocarSolicitacao(7, inteiro, tecnica)).resolves.toEqual({ idSolicitacao: 7, status: 'aprovada' })
+    expect(banco.mudancaDeStatus).toEqual({ where: { id: 7, status: 'AT' }, data: { status: 'AP' } })
   })
 
   it('pedido pela metade e recusado, dizendo quanto falta, sem gravar nem avisar', async () => {
@@ -206,7 +219,7 @@ describe('alocacao', () => {
     await expect(metade).rejects.toEqual(recusa(409, 'PEDIDO_INCOMPLETO'))
     await expect(metade).rejects.toThrow('faltam 1 macho e 1 femea')
     expect(banco.transacoes).toBe(0)
-    expect(avisarPedidoDecidido).not.toHaveBeenCalled()
+    expect(avisarAnimaisReservados).not.toHaveBeenCalled()
   })
 
   it('o de qualquer sexo vem como macho ou femea, mas tem de vir', async () => {
@@ -220,10 +233,12 @@ describe('alocacao', () => {
     ).resolves.toMatchObject({ status: 'aprovada' })
   })
 
-  it('avisa quem pediu, sem motivo, depois de gravar', async () => {
+  it('avisa quem pediu que os animais estao reservados, depois de gravar', async () => {
     await alocarSolicitacao(7, inteiro, tecnica)
 
-    expect(avisarPedidoDecidido).toHaveBeenCalledWith(
+    // a aprovacao ja foi avisada quando o pedido foi aprovado
+    expect(avisarPedidoDecidido).not.toHaveBeenCalled()
+    expect(avisarAnimaisReservados).toHaveBeenCalledWith(
       'paula@ufsc.br',
       {
         protocoloCeua: '23080.000001/2026-54',
@@ -236,7 +251,6 @@ describe('alocacao', () => {
         dataEntrega: '2026-12-01',
         dataPedido: '2026-11-05',
       },
-      undefined,
     )
   })
 
@@ -244,11 +258,11 @@ describe('alocacao', () => {
     banco.aprovadas = 0
 
     await expect(alocarSolicitacao(7, inteiro, tecnica)).rejects.toBeDefined()
-    expect(avisarPedidoDecidido).not.toHaveBeenCalled()
+    expect(avisarAnimaisReservados).not.toHaveBeenCalled()
   })
 
   it('o envio que falha nao derruba a alocacao', async () => {
-    vi.mocked(avisarPedidoDecidido).mockRejectedValueOnce(new Error('Brevo fora do ar'))
+    vi.mocked(avisarAnimaisReservados).mockRejectedValueOnce(new Error('Brevo fora do ar'))
     const log = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     await expect(alocarSolicitacao(7, inteiro, tecnica)).resolves.toEqual({ idSolicitacao: 7, status: 'aprovada' })

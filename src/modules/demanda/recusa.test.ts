@@ -7,6 +7,7 @@ vi.mock('../../shared/email.ts', () => ({ avisarPedidoDecidido: vi.fn().mockReso
 const banco = vi.hoisted(() => ({
   solicitacao: null as Record<string, unknown> | null,
   recusadas: 1,
+  atualizacao: null as Record<string, unknown> | null,
   historico: null as Record<string, unknown> | null,
 }))
 
@@ -15,7 +16,12 @@ vi.mock('../../shared/prisma.ts', () => ({
     solicitacao: { findUnique: async () => banco.solicitacao },
     $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
       fn({
-        solicitacao: { updateMany: async () => ({ count: banco.recusadas }) },
+        solicitacao: {
+          updateMany: async (consulta: Record<string, unknown>) => {
+            banco.atualizacao = consulta
+            return { count: banco.recusadas }
+          },
+        },
         historico: {
           create: async ({ data }: { data: Record<string, unknown> }) => {
             banco.historico = data
@@ -43,6 +49,7 @@ beforeEach(() => {
   }
   vi.clearAllMocks()
   banco.recusadas = 1
+  banco.atualizacao = null
   banco.historico = null
 })
 
@@ -83,8 +90,17 @@ describe('recusa de solicitacao', () => {
     expect(avisarPedidoDecidido).not.toHaveBeenCalled()
   })
 
-  it('a ja alocada nao pode ser recusada', async () => {
-    banco.solicitacao = { id: 7, status: 'AP' }
+  it('a aprovada que nao deu para produzir (sem reserva) tambem pode ser recusada', async () => {
+    banco.solicitacao = { ...banco.solicitacao, status: 'AT' }
+
+    await expect(recusarSolicitacao(7, 'A ninhada nao vingou', 2)).resolves.toMatchObject({ status: 'recusada' })
+    expect(banco.atualizacao).toEqual({ where: { id: 7, status: { in: ['EN', 'AT'] } }, data: { status: 'RE' } })
+    expect(banco.historico).toMatchObject({ acao: 'recusa', dados: { motivo: 'A ninhada nao vingou' } })
+    expect(avisarPedidoDecidido).toHaveBeenCalledWith('paula@ufsc.br', expect.anything(), 'A ninhada nao vingou')
+  })
+
+  it.each(['AP', 'CO'])('a com animais reservados ou entregue (%s) nao pode ser recusada', async (status) => {
+    banco.solicitacao = { id: 7, status }
 
     await expect(recusarSolicitacao(7, 'teste', 2)).rejects.toEqual(recusa(409, 'SEQUENCIA_INVALIDA'))
     expect(banco.historico).toBeNull()

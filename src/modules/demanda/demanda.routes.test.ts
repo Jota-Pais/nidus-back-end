@@ -58,9 +58,11 @@ describe('autorizacao', () => {
     expect(alocacao.status).toBe(403)
   })
 
-  it('o pesquisador nao devolve pedido para analise', async () => {
+  it('o pesquisador nao aprova pedido nem desfaz reserva', async () => {
+    const aprovacao = await request(app('pesquisador')).post('/api/solicitacoes/1/aprovacao')
     const devolucao = await request(app('pesquisador')).post('/api/solicitacoes/1/devolucao')
 
+    expect(aprovacao.status).toBe(403)
     expect(devolucao.status).toBe(403)
   })
 

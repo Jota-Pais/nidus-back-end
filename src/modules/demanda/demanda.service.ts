@@ -1,7 +1,8 @@
 // Projetos CEUA, solicitacoes de animais e a alocacao das caixas que atendem cada uma
 
 import type { Prisma } from '@prisma/client'
-import { avisarPedidoDecidido } from '../../shared/email.ts'
+import { avisarAnimaisReservados, avisarPedidoDecidido } from '../../shared/email.ts'
+import type { ResumoDoPedido } from '../../shared/email.ts'
 import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { prisma } from '../../shared/prisma.ts'
@@ -64,6 +65,13 @@ export const PRAZO_DE_RESPOSTA_EM_DIAS = 14
 
 export const MOTIVO_SEM_RESPOSTA = `Recusado automaticamente: o CPMR nao respondeu em ${PRAZO_DE_RESPOSTA_EM_DIAS} dias.`
 
+/** A acao no historico quando a equipe aprova o pedido, antes de reservar os animais */
+export const ACAO_APROVACAO = 'aprovacao'
+
+/**
+ * Recusa o pedido que ficou sem resposta. So o enviado: o aprovado ja foi respondido, mesmo que
+ * os animais ainda nao estejam reservados
+ */
 export async function recusarSemResposta(agora: Date = new Date()): Promise<number> {
   const limite = new Date(agora.getTime() - PRAZO_DE_RESPOSTA_EM_DIAS * 24 * 60 * 60 * 1000)
   const vencidas = await prisma.solicitacao.findMany({
@@ -71,7 +79,9 @@ export async function recusarSemResposta(agora: Date = new Date()): Promise<numb
     select: { id: true },
   })
 
-  // o pedido devolvido para analise conta o prazo da devolucao, e nao do dia em que foi feito
+  // O pedido devolvido para analise conta o prazo da devolucao, e nao do dia em que foi feito.
+  // So vale para a devolucao de antes da aprovacao separada, que voltava o pedido para enviado;
+  // hoje desfazer a reserva deixa o pedido aprovado
   const devolvidos = await devolvidosDesde(
     vencidas.map((vencida) => vencida.id),
     limite,
@@ -84,7 +94,7 @@ export async function recusarSemResposta(agora: Date = new Date()): Promise<numb
 
     try {
       // ninguem da equipe recusou: o historico grava sem usuario e a tela mostra "Sistema"
-      await recusarSolicitacao(id, MOTIVO_SEM_RESPOSTA, null)
+      await recusar(id, MOTIVO_SEM_RESPOSTA, null, ['EN'])
       recusadas += 1
     } catch (erro) {
       if (!(erro instanceof ErroDeAplicacao)) throw erro
@@ -109,28 +119,34 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
   const decisoes = await prisma.historico.findMany({
     where: {
       entidade: 'solicitacao',
-      acao: { in: ['alocacao', 'recusa', ACAO_DEVOLUCAO] },
+      acao: { in: [ACAO_APROVACAO, 'alocacao', 'recusa', ACAO_DEVOLUCAO] },
       idEntidade: { in: solicitacoes.map((s) => s.id) },
     },
     orderBy: { dtHora: 'asc' },
     select: { idEntidade: true, acao: true, dtHora: true, dados: true },
   })
 
-  // a mais recente: o pedido devolvido para analise pode ser alocado de novo
-  const decisao = (id: number, acao: 'alocacao' | 'recusa' | typeof ACAO_DEVOLUCAO) =>
+  // a mais recente: a reserva desfeita pode ser feita de novo
+  type Acao = typeof ACAO_APROVACAO | 'alocacao' | 'recusa' | typeof ACAO_DEVOLUCAO
+  const decisao = (id: number, acao: Acao) =>
     decisoes.filter((d) => d.idEntidade === id && d.acao === acao).at(-1)
 
-  const dataDa = (id: number, acao: 'alocacao' | 'recusa') => {
+  const dataDa = (id: number, acao: Acao) => {
     const encontrada = decisao(id, acao)
-    const devolucao = decisao(id, ACAO_DEVOLUCAO)
-    // o aceite de antes da devolucao para analise nao vale mais
-    if (encontrada === undefined || (devolucao !== undefined && devolucao.dtHora > encontrada.dtHora)) {
-      return null
-    }
-    return hojeISO(encontrada.dtHora)
+    return encontrada === undefined ? null : hojeISO(encontrada.dtHora)
   }
 
-  /** o prazo de resposta conta do pedido, ou da ultima devolucao para analise */
+  /**
+   * O dia em que a equipe aceitou o pedido: o da aprovacao. O pedido de antes da aprovacao
+   * separada foi aceito ao reservar os animais. So o pedido aceito tem a data
+   */
+  const dataDoAceite = (id: number, status: string) =>
+    ['AT', 'AP', 'CO'].includes(status) ? (dataDa(id, ACAO_APROVACAO) ?? dataDa(id, 'alocacao')) : null
+
+  /**
+   * O prazo de resposta conta do pedido, ou da ultima devolucao para analise (a de antes da
+   * aprovacao separada, que voltava o pedido para enviado)
+   */
   const inicioDoPrazo = (id: number, dtCriacao: Date) => decisao(id, ACAO_DEVOLUCAO)?.dtHora ?? dtCriacao
 
   const faltas = await faltaDosPedidos(solicitacoes.filter((s) => s.status === 'AP').map((s) => s.id))
@@ -150,7 +166,7 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
         s.status === 'EN'
           ? somarDias(hojeISO(inicioDoPrazo(s.id, s.dtCriacao)), PRAZO_DE_RESPOSTA_EM_DIAS)
           : null,
-      dataAceite: dataDa(s.id, 'alocacao'),
+      dataAceite: dataDoAceite(s.id, s.status),
       dataRecusa: s.status === 'RE' ? dataDa(s.id, 'recusa') : null,
       protocoloCeua: s.protocoloCeua,
       // o nome e o que a pessoa digitou no pedido; o e-mail e o da conta que pediu
@@ -168,7 +184,7 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
       observacoes: s.observacoes,
       status: statusSolicitacao.paraApi(s.status),
       motivoRecusa: s.status === 'RE' ? motivoDaRecusa(s.id) : null,
-      /** pedido aceito cuja ninhada ficou com menos animais do que o reservado: quanto pode faltar */
+      /** pedido com animais reservados cuja ninhada ficou com menos do que o reservado: quanto pode faltar */
       reservaEmFalta: faltas.get(s.id) ?? null,
     })),
   }
@@ -308,37 +324,83 @@ const PARA_O_AVISO = {
 /**
  * Avisa por e-mail quem pediu, DEPOIS de a decisao estar gravada. Sem 'await': o envio nao segura
  * a resposta do tecnico, e uma falha do servico de e-mail fica so no log, sem desfazer nada.
- * Com motivo e recusa; sem, aprovacao
+ * 'enviar' e o aviso da decisao: aprovacao, reserva dos animais ou recusa
  */
 function avisarPesquisador(
   solicitacao: Prisma.SolicitacaoGetPayload<{ include: typeof PARA_O_AVISO }>,
-  motivoDaRecusa?: string,
+  enviar: (email: string, pedido: ResumoDoPedido) => Promise<void>,
 ): void {
   const { id } = solicitacao
 
-  avisarPedidoDecidido(
-    solicitacao.usuarioSolicitante.email,
-    {
-      protocoloCeua: solicitacao.protocoloCeua,
-      linhagem: solicitacao.linhagem.nome,
-      machos: solicitacao.qtdM,
-      femeas: solicitacao.qtdF,
-      qualquer: solicitacao.qtdQualquer,
-      idadeMin: solicitacao.idadeMinDias,
-      idadeMax: solicitacao.idadeMaxDias,
-      dataEntrega: dataISO(solicitacao.dtDesejada),
-      dataPedido: hojeISO(solicitacao.dtCriacao),
-    },
-    motivoDaRecusa,
-  ).catch((erro: unknown) => {
+  enviar(solicitacao.usuarioSolicitante.email, {
+    protocoloCeua: solicitacao.protocoloCeua,
+    linhagem: solicitacao.linhagem.nome,
+    machos: solicitacao.qtdM,
+    femeas: solicitacao.qtdF,
+    qualquer: solicitacao.qtdQualquer,
+    idadeMin: solicitacao.idadeMinDias,
+    idadeMax: solicitacao.idadeMaxDias,
+    dataEntrega: dataISO(solicitacao.dtDesejada),
+    dataPedido: hojeISO(solicitacao.dtCriacao),
+  }).catch((erro: unknown) => {
     console.error(`[pedido] o aviso do pedido #${id} nao foi enviado:`, erro)
   })
 }
 
 /**
- * POST /api/solicitacoes/:id/alocacao - o tecnico aceita as caixas da busca, que tem de cobrir
- * o pedido inteiro. Cada item vira um compromisso com o parto; caixa que estava em Livres vai
- * para Pre-reserva
+ * POST /api/solicitacoes/:id/aprovacao - a equipe aceita fazer o pedido. Aprovar nao reserva
+ * nada: os animais sao reservados depois, em alocarSolicitacao, quando existirem na idade pedida
+ */
+export async function aprovarSolicitacao(idSolicitacao: number, usuario: UsuarioDaSessao) {
+  const solicitacao = await prisma.solicitacao.findUnique({
+    where: { id: idSolicitacao },
+    include: PARA_O_AVISO,
+  })
+
+  if (solicitacao === null) {
+    throw naoEncontrado('Solicitacao')
+  }
+
+  // aprovada com ou sem os animais reservados: o caso comum e o segundo clique
+  if (solicitacao.status === 'AT' || solicitacao.status === 'AP') {
+    throw erroDeRegra('SEQUENCIA_INVALIDA', `A solicitacao #${idSolicitacao} ja foi aprovada.`)
+  }
+
+  const naoAguarda = `A solicitacao #${idSolicitacao} nao esta aguardando analise e nao pode ser aprovada.`
+
+  if (solicitacao.status !== 'EN') {
+    throw erroDeRegra('SEQUENCIA_INVALIDA', naoAguarda)
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // so se ainda estiver enviada: outra pessoa pode ter aprovado ou recusado no meio do caminho
+    const aprovada = await tx.solicitacao.updateMany({
+      where: { id: idSolicitacao, status: 'EN' },
+      data: { status: 'AT' },
+    })
+
+    if (aprovada.count === 0) {
+      throw erroDeRegra('SEQUENCIA_INVALIDA', naoAguarda)
+    }
+
+    await registrarHistorico(tx, {
+      idUsuario: usuario.id,
+      entidade: 'solicitacao',
+      idEntidade: idSolicitacao,
+      acao: ACAO_APROVACAO,
+      descricao: `Solicitacao #${idSolicitacao} aprovada: os animais serao reservados para ${dataISO(solicitacao.dtDesejada)}`,
+    })
+  })
+
+  avisarPesquisador(solicitacao, (email, pedido) => avisarPedidoDecidido(email, pedido))
+
+  return { idSolicitacao, status: statusSolicitacao.paraApi('AT') }
+}
+
+/**
+ * POST /api/solicitacoes/:id/alocacao - o tecnico reserva para o pedido aprovado as caixas da
+ * busca, que tem de cobrir o pedido inteiro. Cada item vira um compromisso com o parto; caixa que
+ * estava em Livres vai para Pre-reserva
  */
 export async function alocarSolicitacao(
   idSolicitacao: number,
@@ -356,17 +418,23 @@ export async function alocarSolicitacao(
     throw naoEncontrado('Solicitacao')
   }
 
-  // so a enviada recebe caixas. O codigo so grava enviada e aprovada; os outros status do
-  // dicionario continuam aparecendo na lista, mas nenhum vira aprovada por aqui.
-  // A aprovada e o caso comum (dois tecnicos, ou dois cliques em Alocar) e diz o que houve
+  // so a aprovada sem reserva (em atendimento) recebe caixas. A com os animais ja reservados e o
+  // caso comum (dois tecnicos, ou dois cliques em Reservar) e diz o que houve
   if (solicitacao.status === 'AP') {
-    throw erroDeRegra('SOLICITACAO_JA_ALOCADA', `A solicitacao #${idSolicitacao} ja foi alocada.`)
-  }
-
-  if (solicitacao.status !== 'EN') {
     throw erroDeRegra(
       'SOLICITACAO_JA_ALOCADA',
-      `A solicitacao #${idSolicitacao} nao esta aguardando alocacao.`,
+      `Os animais da solicitacao #${idSolicitacao} ja estao reservados.`,
+    )
+  }
+
+  if (solicitacao.status === 'EN') {
+    throw erroDeRegra('SEQUENCIA_INVALIDA', 'Aprove o pedido antes de reservar os animais.')
+  }
+
+  if (solicitacao.status !== 'AT') {
+    throw erroDeRegra(
+      'SOLICITACAO_JA_ALOCADA',
+      `A solicitacao #${idSolicitacao} nao esta aguardando animais.`,
     )
   }
 
@@ -394,8 +462,8 @@ export async function alocarSolicitacao(
     )
   }
 
-  // e nem fica abaixo: so o pedido inteiro e aceito. Sem animais para completar, o pedido
-  // continua aguardando analise, e a equipe recusa com o motivo ou espera ter animal
+  // e nem fica abaixo: so o pedido inteiro e reservado. Sem animais para completar, o pedido
+  // continua aguardando animais, e a equipe recusa com o motivo ou espera ter animal
   const falta = {
     m: Math.max(qtdM - totalM, 0),
     f: Math.max(qtdF - totalF, 0),
@@ -489,13 +557,16 @@ export async function alocarSolicitacao(
   }
 
   await prisma.$transaction(async (tx) => {
-    const aprovada = await tx.solicitacao.updateMany({
-      where: { id: idSolicitacao, status: 'EN' },
+    const reservada = await tx.solicitacao.updateMany({
+      where: { id: idSolicitacao, status: 'AT' },
       data: { status: 'AP' },
     })
 
-    if (aprovada.count === 0) {
-      throw erroDeRegra('SOLICITACAO_JA_ALOCADA', `A solicitacao #${idSolicitacao} ja foi alocada.`)
+    if (reservada.count === 0) {
+      throw erroDeRegra(
+        'SOLICITACAO_JA_ALOCADA',
+        `Os animais da solicitacao #${idSolicitacao} ja estao reservados.`,
+      )
     }
 
     for (const item of itens) {
@@ -525,12 +596,12 @@ export async function alocarSolicitacao(
       entidade: 'solicitacao',
       idEntidade: idSolicitacao,
       acao: 'alocacao',
-      descricao: `Solicitacao #${idSolicitacao} alocada: ${totalM} M e ${totalF} F em ${itens.length} parto(s)`,
+      descricao: `Animais da solicitacao #${idSolicitacao} reservados: ${totalM} M e ${totalF} F em ${itens.length} parto(s)`,
       dados: { itens },
     })
   })
 
-  avisarPesquisador(solicitacao)
+  avisarPesquisador(solicitacao, avisarAnimaisReservados)
 
   return { idSolicitacao, status: statusSolicitacao.paraApi('AP') }
 }
@@ -658,8 +729,24 @@ async function moverCaixasDaEntrega(
   }
 }
 
-/** idUsuario null quando a recusa e automatica, sem ninguem da equipe por tras */
-export async function recusarSolicitacao(idSolicitacao: number, motivo: string, idUsuario: number | null) {
+/**
+ * POST /api/solicitacoes/:id/recusa - a equipe recusa o pedido que aguarda analise, ou o aprovado
+ * que nao deu para produzir. O que ja tem os animais reservados nao e recusado
+ */
+export function recusarSolicitacao(idSolicitacao: number, motivo: string, idUsuario: number) {
+  return recusar(idSolicitacao, motivo, idUsuario, ['EN', 'AT'])
+}
+
+/**
+ * idUsuario null quando a recusa e automatica, sem ninguem da equipe por tras. 'podeRecusar' sao
+ * os status que aceitam a recusa, conferidos de novo na gravacao: o pedido pode mudar no meio
+ */
+async function recusar(
+  idSolicitacao: number,
+  motivo: string,
+  idUsuario: number | null,
+  podeRecusar: string[],
+) {
   const solicitacao = await prisma.solicitacao.findUnique({
     where: { id: idSolicitacao },
     include: PARA_O_AVISO,
@@ -669,24 +756,25 @@ export async function recusarSolicitacao(idSolicitacao: number, motivo: string, 
     throw naoEncontrado('Solicitacao')
   }
 
-  if (solicitacao.status !== 'EN') {
-    throw erroDeRegra(
-      'SEQUENCIA_INVALIDA',
-      `A solicitacao #${idSolicitacao} nao esta aguardando analise e nao pode ser recusada.`,
-    )
+  const naoPode = erroDeRegra(
+    'SEQUENCIA_INVALIDA',
+    podeRecusar.includes('AT')
+      ? `A solicitacao #${idSolicitacao} nao esta aguardando analise nem animais, e nao pode ser recusada.`
+      : `A solicitacao #${idSolicitacao} nao esta aguardando analise e nao pode ser recusada.`,
+  )
+
+  if (!podeRecusar.includes(solicitacao.status)) {
+    throw naoPode
   }
 
   await prisma.$transaction(async (tx) => {
     const recusada = await tx.solicitacao.updateMany({
-      where: { id: idSolicitacao, status: 'EN' },
+      where: { id: idSolicitacao, status: { in: podeRecusar } },
       data: { status: 'RE' },
     })
 
     if (recusada.count === 0) {
-      throw erroDeRegra(
-        'SEQUENCIA_INVALIDA',
-        `A solicitacao #${idSolicitacao} nao esta aguardando analise e nao pode ser recusada.`,
-      )
+      throw naoPode
     }
 
     await registrarHistorico(tx, {
@@ -699,7 +787,7 @@ export async function recusarSolicitacao(idSolicitacao: number, motivo: string, 
     })
   })
 
-  avisarPesquisador(solicitacao, motivo)
+  avisarPesquisador(solicitacao, (email, pedido) => avisarPedidoDecidido(email, pedido, motivo))
 
   return { idSolicitacao, status: statusSolicitacao.paraApi('RE'), motivo }
 }
