@@ -1,21 +1,15 @@
 import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { prisma } from '../../shared/prisma.ts'
-import { dataISO, hojeISO, paraData } from '../../shared/traducao.ts'
+import { dataISO, paraData } from '../../shared/traducao.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
-import { calcularDesmamePrevisto, calcularProximoCiclo } from './cadeiaTemporal.ts'
+import { calcularDesmamePrevisto } from './cadeiaTemporal.ts'
 import { compromissosAtivosComPedido, faltaNaReserva } from './disponibilidade.ts'
 import type { ContagemDoCiclo } from './disponibilidade.ts'
 import { cicloFicha, contagemInvalida } from './reproducao.service.ts'
 import type { Desmame, Nascimento, Selecao } from './reproducao.service.ts'
 
 export type ComMotivo<T> = T & { motivo: string }
-
-function campoInvalido(campo: string, mensagem: string) {
-  return new ErroDeAplicacao(400, 'VALIDACAO', 'Confira os campos destacados.', {
-    campos: { [campo]: mensagem },
-  })
-}
 
 async function partoParaCorrigir(idParto: number) {
   const parto = await prisma.parto.findUnique({
@@ -64,7 +58,6 @@ export async function corrigirNascimento(
   idParto: number,
   dados: ComMotivo<Nascimento>,
   idUsuario: number,
-  agora: Date = new Date(),
 ) {
   const parto = await partoParaCorrigir(idParto)
 
@@ -72,25 +65,6 @@ export async function corrigirNascimento(
     throw erroDeRegra(
       'SEQUENCIA_INVALIDA',
       'Este parto ainda nao foi registrado: registre antes de corrigir.',
-    )
-  }
-
-  const acasalamento = dataISO(parto.dtAcasalamento)
-
-  if (dados.dtPartoReal < acasalamento) {
-    throw campoInvalido('dtPartoReal', `O parto nao pode ser antes do acasalamento (${acasalamento}).`)
-  }
-
-  if (dados.dtPartoReal > hojeISO(agora)) {
-    throw campoInvalido('dtPartoReal', 'O parto nao pode ser numa data futura.')
-  }
-
-  const eventoSeguinte = parto.dtSelecao ?? parto.dtDesmameReal
-
-  if (eventoSeguinte !== null && dados.dtPartoReal > dataISO(eventoSeguinte)) {
-    throw campoInvalido(
-      'dtPartoReal',
-      'O parto nao pode ser depois da selecao ou do desmame ja registrados.',
     )
   }
 
@@ -112,17 +86,6 @@ export async function corrigirNascimento(
   const dataAntiga = dataISO(parto.dtPartoReal)
   const mudouData = dados.dtPartoReal !== dataAntiga
 
-  const proximo = await prisma.parto.findFirst({
-    where: { idCasal: parto.idCasal, ordem: parto.ordem + 1 },
-  })
-
-  if (mudouData && proximo !== null && proximo.dtPartoReal !== null) {
-    throw erroDeRegra(
-      'SEQUENCIA_INVALIDA',
-      'O parto seguinte deste casal ja foi registrado: a data deste nao pode mais mudar.',
-    )
-  }
-
   const novaContagem = { ...contagemDo(parto), nascidoM: dados.nascidoM, nascidoF: dados.nascidoF }
 
   await prisma.$transaction(async (tx) => {
@@ -137,19 +100,6 @@ export async function corrigirNascimento(
         nascidoF: dados.nascidoF,
       },
     })
-
-    if (mudouData && proximo !== null) {
-      const ciclo = calcularProximoCiclo(dados.dtPartoReal)
-
-      await tx.parto.update({
-        where: { id: proximo.id },
-        data: {
-          dtAcasalamento: paraData(ciclo.dtAcasalamento),
-          dtPartoPrevisto: paraData(ciclo.dtPartoPrevisto),
-          dtDesmamePrevisto: paraData(ciclo.dtDesmamePrevisto),
-        },
-      })
-    }
 
     if (
       mudouData &&
@@ -201,14 +151,6 @@ export async function corrigirSelecao(
     parto.nascidoF === null
   ) {
     throw erroDeRegra('SEQUENCIA_INVALIDA', 'A selecao deste parto ainda nao foi registrada.')
-  }
-
-  if (dados.dtSelecao < dataISO(parto.dtPartoReal)) {
-    throw campoInvalido('dtSelecao', 'A selecao nao pode ser antes do parto.')
-  }
-
-  if (parto.dtDesmameReal !== null && dados.dtSelecao > dataISO(parto.dtDesmameReal)) {
-    throw campoInvalido('dtSelecao', 'A selecao nao pode ser depois do desmame.')
   }
 
   const vivosM = parto.nascidoM - dados.eutanasiadoM
@@ -294,14 +236,6 @@ export async function corrigirDesmame(
     parto.nascidoF === null
   ) {
     throw erroDeRegra('SEQUENCIA_INVALIDA', 'O desmame deste parto ainda nao foi registrado.')
-  }
-
-  if (dados.dtDesmameReal < dataISO(parto.dtPartoReal)) {
-    throw campoInvalido('dtDesmameReal', 'O desmame nao pode ser antes do parto.')
-  }
-
-  if (parto.dtSelecao !== null && dados.dtDesmameReal < dataISO(parto.dtSelecao)) {
-    throw campoInvalido('dtDesmameReal', 'O desmame nao pode ser antes da selecao.')
   }
 
   const vivosM = parto.nascidoM - (parto.eutanasiadoM ?? 0)

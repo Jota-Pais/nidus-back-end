@@ -9,6 +9,7 @@ import { corrigirDesmame, corrigirNascimento, corrigirSelecao } from './correcao
 import {
   encerrarCasal,
   formarCasal,
+  registrarAcasalamento,
   registrarDesmame,
   registrarNascimento,
   registrarSelecao,
@@ -26,7 +27,9 @@ export const partoRoutes = Router()
 const idNaRota = z.object({ id: z.coerce.number().int().positive() })
 
 /** 'aaaa-mm-dd', nunca timestamp para data de calendario. */
-const dataCalendario = z.iso.date('Data invalida. Use aaaa-mm-dd.')
+const dataCalendario = z.iso
+  .date('Data invalida. Use aaaa-mm-dd.')
+  .refine((data) => data >= '2000-01-01' && data <= '2100-12-31', 'Use um ano entre 2000 e 2100.')
 
 const grupoGenetico = z.enum(['A', 'B', 'C', 'D', 'E'])
 
@@ -72,6 +75,15 @@ casalRoutes.post('/:id/encerramento', exigirPerfil(...OPERA_A_COLONIA), async (r
   const dados = encerramento.parse(req.body)
 
   res.json(await encerrarCasal(id, dados, usuarioDaRequisicao(req).id))
+})
+
+const acasalamento = z.object({ dtAcasalamento: dataCalendario })
+
+casalRoutes.post('/:id/acasalamento', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+  const { id } = idNaRota.parse(req.params)
+  const dados = acasalamento.parse(req.body)
+
+  res.status(201).json(await registrarAcasalamento(id, dados, usuarioDaRequisicao(req).id))
 })
 
 const nascimento = z.object({

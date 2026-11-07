@@ -37,7 +37,6 @@ vi.mock('../../shared/prisma.ts', () => ({
 }))
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
-const agora = new Date('2026-10-30T15:00:00.000Z')
 const recusa = (status: number, codigo: string) => expect.objectContaining({ status, codigo })
 
 /** a recusa de VALIDACAO com a mensagem exatamente nestes campos do formulario */
@@ -80,28 +79,27 @@ describe('correcao do parto', () => {
     banco.parto = { ...partoRegistrado, dtPartoReal: null, nascidoM: null, nascidoF: null }
 
     await expect(
-      corrigirNascimento(1, { dtPartoReal: '2026-09-24', nascidoM: 6, nascidoF: 5, motivo: 'x' }, 1, agora),
+      corrigirNascimento(1, { dtPartoReal: '2026-09-24', nascidoM: 6, nascidoF: 5, motivo: 'x' }, 1),
     ).rejects.toEqual(recusa(409, 'SEQUENCIA_INVALIDA'))
   })
 
   it('nascido nao pode ficar abaixo do que ja foi selecionado e desmamado', async () => {
     await expect(
-      corrigirNascimento(1, { dtPartoReal: '2026-09-24', nascidoM: 4, nascidoF: 5, motivo: 'x' }, 1, agora),
+      corrigirNascimento(1, { dtPartoReal: '2026-09-24', nascidoM: 4, nascidoF: 5, motivo: 'x' }, 1),
     ).rejects.toEqual(nosCampos('nascidoM'))
     expect(banco.atualizados).toEqual([])
   })
 
-  it('mudar a data recalcula o parto seguinte que ainda nao aconteceu', async () => {
+  it('mudar a data corrige so este parto: o acasalamento seguinte e digitado pelo tecnico', async () => {
     banco.proximo = { id: 2, dtPartoReal: null }
 
     await corrigirNascimento(
       1,
       { dtPartoReal: '2026-09-23', nascidoM: 5, nascidoF: 5, motivo: 'data digitada errada' },
       3,
-      agora,
     )
 
-    expect(banco.atualizados.map((a) => a.where.id)).toEqual([1, 2])
+    expect(banco.atualizados.map((a) => a.where.id)).toEqual([1])
     expect(banco.historico).toMatchObject({
       idUsuario: 3,
       acao: 'correcao_nascimento',
@@ -118,7 +116,6 @@ describe('correcao do parto', () => {
       1,
       { dtPartoReal: '2026-09-23', nascidoM: 5, nascidoF: 5, motivo: 'data digitada errada' },
       1,
-      agora,
     )
 
     expect(banco.atualizados[0]).toMatchObject({
@@ -127,12 +124,12 @@ describe('correcao do parto', () => {
     })
   })
 
-  it('com o parto seguinte ja registrado a data nao muda mais', async () => {
+  it('com o parto seguinte ja registrado a data continua podendo mudar', async () => {
     banco.proximo = { id: 2, dtPartoReal: d('2026-10-20') }
 
-    await expect(
-      corrigirNascimento(1, { dtPartoReal: '2026-09-23', nascidoM: 5, nascidoF: 5, motivo: 'x' }, 1, agora),
-    ).rejects.toEqual(recusa(409, 'SEQUENCIA_INVALIDA'))
+    await corrigirNascimento(1, { dtPartoReal: '2026-09-23', nascidoM: 5, nascidoF: 5, motivo: 'x' }, 1)
+
+    expect(banco.atualizados[0]?.data).toMatchObject({ dtPartoReal: d('2026-09-23') })
   })
 
   it('avisa quando os compromissos passam do que o parto tem depois da correcao', async () => {
@@ -151,7 +148,6 @@ describe('correcao do parto', () => {
       1,
       { dtPartoReal: '2026-09-24', nascidoM: 3, nascidoF: 5, motivo: 'contagem errada' },
       1,
-      agora,
     )
 
     // grava o que aconteceu, e o aviso diz quanto falta e qual pedido

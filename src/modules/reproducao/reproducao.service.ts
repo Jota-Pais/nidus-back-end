@@ -11,12 +11,12 @@ import {
 import {
   calcularCicloInicial,
   calcularDesmamePrevisto,
-  calcularProximoCiclo,
 } from './cadeiaTemporal.ts'
 import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { prisma } from '../../shared/prisma.ts'
-import { dataISO, hojeISO, paraData } from '../../shared/traducao.ts'
+import { dataISO, paraData } from '../../shared/traducao.ts'
+import { liberarCaixaVazia } from '../infra/liberacaoDaCaixa.ts'
 
 /**
  * Valida o par genetico ANTES do insert, para dar a mensagem rica
@@ -309,11 +309,10 @@ export async function registrarNascimento(
   idParto: number,
   dados: Nascimento,
   idUsuario: number,
-  agora: Date = new Date(),
 ) {
   const parto = await prisma.parto.findUnique({
     where: { id: idParto },
-    include: { casal: { select: { ativo: true } } },
+    include: { casal: { select: { ativo: true, idCaixa: true } } },
   })
 
   if (parto === null) {
@@ -329,16 +328,6 @@ export async function registrarNascimento(
 
   if (!parto.casal.ativo) {
     throw erroDeRegra('SEQUENCIA_INVALIDA', 'Este casal esta encerrado e nao recebe parto novo.')
-  }
-
-  const acasalamento = dataISO(parto.dtAcasalamento)
-
-  if (dados.dtPartoReal < acasalamento) {
-    throw campoInvalido('dtPartoReal', `O parto nao pode ser antes do acasalamento (${acasalamento}).`)
-  }
-
-  if (dados.dtPartoReal > hojeISO(agora)) {
-    throw campoInvalido('dtPartoReal', 'O parto nao pode ser numa data futura.')
   }
 
   await prisma.$transaction(async (tx) => {
@@ -375,26 +364,76 @@ export async function registrarNascimento(
           motivoEncerramento: `Limite de ${MAX_PARTOS_POR_CASAL} partos atingido`,
         },
       })
-      return
+
+      await liberarCaixaVazia(tx, parto.casal.idCaixa, idUsuario)
     }
-
-    const proximo = calcularProximoCiclo(dados.dtPartoReal)
-
-    // CHECK parto_ordem_ciclo (1..5) e a rede de seguranca desta linha: se
-    // MAX_PARTOS_POR_CASAL mudar sem uma migration junto, o Postgres recusa antes
-    // de gravar ordem invalida.
-    await tx.parto.create({
-      data: {
-        idCasal: parto.idCasal,
-        ordem: parto.ordem + 1,
-        dtAcasalamento: paraData(proximo.dtAcasalamento),
-        dtPartoPrevisto: paraData(proximo.dtPartoPrevisto),
-        dtDesmamePrevisto: paraData(proximo.dtDesmamePrevisto),
-      },
-    })
   })
 
   return cicloFicha(idParto)
+}
+
+export type Acasalamento = {
+  dtAcasalamento: string
+}
+
+export async function registrarAcasalamento(idCasal: number, dados: Acasalamento, idUsuario: number) {
+  const casal = await prisma.casal.findUnique({
+    where: { id: idCasal },
+    include: { partos: { orderBy: { ordem: 'desc' }, take: 1 } },
+  })
+
+  if (casal === null) {
+    throw naoEncontrado('Casal')
+  }
+
+  if (!casal.ativo) {
+    throw erroDeRegra('SEQUENCIA_INVALIDA', 'Este casal esta encerrado e nao recebe acasalamento novo.')
+  }
+
+  const [ultimo] = casal.partos
+
+  if (ultimo !== undefined && ultimo.dtPartoReal === null) {
+    throw erroDeRegra(
+      'SEQUENCIA_INVALIDA',
+      `Registre o ${ultimo.ordem}o parto antes do acasalamento seguinte.`,
+    )
+  }
+
+  const ordem = (ultimo?.ordem ?? 0) + 1
+
+  if (ordem > MAX_PARTOS_POR_CASAL) {
+    throw erroDeRegra(
+      'SEQUENCIA_INVALIDA',
+      `Este casal ja teve os ${MAX_PARTOS_POR_CASAL} partos.`,
+    )
+  }
+
+  const ciclo = calcularCicloInicial(dados.dtAcasalamento)
+
+  const criado = await prisma.$transaction(async (tx) => {
+    const parto = await tx.parto.create({
+      data: {
+        idCasal,
+        ordem,
+        dtAcasalamento: paraData(ciclo.dtAcasalamento),
+        dtPartoPrevisto: paraData(ciclo.dtPartoPrevisto),
+        dtDesmamePrevisto: paraData(ciclo.dtDesmamePrevisto),
+      },
+    })
+
+    await registrarHistorico(tx, {
+      idUsuario,
+      entidade: 'parto',
+      idEntidade: parto.id,
+      acao: 'acasalamento',
+      descricao: `Acasalamento do ${ordem}o parto do casal ${casal.identificacao.trim()} em ${dados.dtAcasalamento}`,
+      dados: { ...dados },
+    })
+
+    return parto
+  })
+
+  return cicloFicha(criado.id)
 }
 
 export type Selecao = {
@@ -405,7 +444,10 @@ export type Selecao = {
 
 /** POST /api/partos/:id/selecao */
 export async function registrarSelecao(idParto: number, dados: Selecao, idUsuario: number) {
-  const parto = await prisma.parto.findUnique({ where: { id: idParto } })
+  const parto = await prisma.parto.findUnique({
+    where: { id: idParto },
+    include: { casal: { select: { ativo: true, idCaixa: true } } },
+  })
 
   if (parto === null) {
     throw naoEncontrado('Parto')
@@ -421,10 +463,6 @@ export async function registrarSelecao(idParto: number, dados: Selecao, idUsuari
 
   if (parto.dtSelecao !== null) {
     throw erroDeRegra('SEQUENCIA_INVALIDA', 'A selecao deste parto ja foi registrada.')
-  }
-
-  if (dados.dtSelecao < dataISO(parto.dtPartoReal)) {
-    throw campoInvalido('dtSelecao', 'A selecao nao pode ser antes do parto.')
   }
 
   const eutanasiaPassou = {
@@ -460,6 +498,10 @@ export async function registrarSelecao(idParto: number, dados: Selecao, idUsuari
       descricao: `Selecao do ${parto.ordem}o parto em ${dados.dtSelecao}: ${dados.eutanasiadoM} M e ${dados.eutanasiadoF} F`,
       dados: { ...dados },
     })
+
+    if (!parto.casal.ativo) {
+      await liberarCaixaVazia(tx, parto.casal.idCaixa, idUsuario)
+    }
   })
 
   return cicloFicha(idParto)
@@ -485,10 +527,6 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
 
   if (parto.dtDesmameReal !== null) {
     throw erroDeRegra('SEQUENCIA_INVALIDA', 'O desmame deste parto ja foi registrado.')
-  }
-
-  if (dados.dtDesmameReal < dataISO(parto.dtPartoReal)) {
-    throw campoInvalido('dtDesmameReal', 'O desmame nao pode ser antes do parto.')
   }
 
   const vivosM = parto.nascidoM - (parto.eutanasiadoM ?? 0)
@@ -547,10 +585,6 @@ export async function encerrarCasal(idCasal: number, dados: Encerramento, idUsua
     })
   }
 
-  if (dados.dtEncerramento < dataISO(casal.dtFormacao)) {
-    throw campoInvalido('dtEncerramento', 'O encerramento nao pode ser antes da formacao do casal.')
-  }
-
   await prisma.$transaction(async (tx) => {
     await tx.casal.update({
       where: { id: idCasal },
@@ -569,6 +603,8 @@ export async function encerrarCasal(idCasal: number, dados: Encerramento, idUsua
       descricao: `Casal ${casal.identificacao} encerrado em ${dados.dtEncerramento}: ${dados.motivo}`,
       dados: { ...dados },
     })
+
+    await liberarCaixaVazia(tx, casal.idCaixa, idUsuario)
   })
 
   return casalFicha(idCasal)

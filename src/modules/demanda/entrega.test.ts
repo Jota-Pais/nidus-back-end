@@ -9,6 +9,14 @@ const banco = vi.hoisted(() => ({
   /** as caixas com reserva do pedido, como estao depois de a remessa ganhar a data */
   caixas: [] as Record<string, unknown>[],
   movidas: [] as { id: number; estado: string }[],
+  liberadas: [] as number[],
+}))
+
+vi.mock('../infra/liberacaoDaCaixa.ts', () => ({
+  liberarCaixaVazia: async (_tx: unknown, idCaixa: number) => {
+    banco.liberadas.push(idCaixa)
+    return true
+  },
 }))
 
 vi.mock('../../shared/prisma.ts', () => ({
@@ -42,6 +50,7 @@ const agora = new Date('2026-10-31T15:00:00.000Z')
 const recusa = (status: number, codigo: string) => expect.objectContaining({ status, codigo })
 
 beforeEach(() => {
+  banco.liberadas = []
   banco.solicitacao = { id: 7, status: 'AP', dtCriacao: new Date('2026-10-01T12:00:00.000Z') }
   banco.concluidas = 1
   banco.remessas = null
@@ -122,28 +131,22 @@ const caixa = (estado: string, ativo: boolean, ...partos: unknown[]) => ({
 })
 
 describe('a caixa depois da entrega', () => {
-  it('a entrega que esvazia a caixa do casal encerrado manda a caixa para Enviado', async () => {
+  it('a entrega que esvazia a caixa do casal encerrado libera a caixa: ela sai do kanban', async () => {
     banco.caixas = [caixa('T', false, desmamado(2, 1, entregue(2, 1)))]
 
     await registrarEntrega(7, '2026-10-30', 1, agora)
 
-    expect(banco.movidas).toEqual([{ id: 3, estado: 'X' }])
-    expect(banco.historicos).toContainEqual(
-      expect.objectContaining({
-        entidade: 'caixa',
-        idEntidade: 3,
-        acao: 'mudanca_de_coluna',
-        dados: { antes: 'reserva', depois: 'enviado', entrega: 7 },
-      }),
-    )
+    expect(banco.liberadas).toEqual([3])
+    expect(banco.movidas).toEqual([])
   })
 
-  it('pre-reserva de casal encerrado que a entrega esvazia vai para Enviado, e nao para Livres', async () => {
+  it('pre-reserva de casal encerrado que a entrega esvazia tambem libera a caixa', async () => {
     banco.caixas = [caixa('P', false, desmamado(2, 1, entregue(2, 1)))]
 
     await registrarEntrega(7, '2026-10-30', 1, agora)
 
-    expect(banco.movidas).toEqual([{ id: 3, estado: 'X' }])
+    expect(banco.liberadas).toEqual([3])
+    expect(banco.movidas).toEqual([])
   })
 
   it('com casal ativo a caixa nao vai para Enviado; em Pre-reserva sem nada a entregar volta para Livres', async () => {

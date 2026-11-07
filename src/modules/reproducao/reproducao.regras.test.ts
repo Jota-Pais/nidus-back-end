@@ -3,6 +3,7 @@ import {
   cicloFicha,
   encerrarCasal,
   formarCasal,
+  registrarAcasalamento,
   registrarDesmame,
   registrarNascimento,
   registrarSelecao,
@@ -15,6 +16,15 @@ const banco = vi.hoisted(() => ({
   partoAtualizado: null as Record<string, unknown> | null,
   linhagem: null as Record<string, unknown> | null,
   caixa: { id: 1, idEspecie: 1, estado: 'R' },
+  criados: [] as Record<string, unknown>[],
+  liberou: [] as number[],
+}))
+
+vi.mock('../infra/liberacaoDaCaixa.ts', () => ({
+  liberarCaixaVazia: async (_tx: unknown, idCaixa: number) => {
+    banco.liberou.push(idCaixa)
+    return true
+  },
 }))
 
 vi.mock('../../shared/prisma.ts', () => ({
@@ -41,7 +51,10 @@ vi.mock('../../shared/prisma.ts', () => ({
           update: async ({ data }: { data: Record<string, unknown> }) => {
             banco.partoAtualizado = data
           },
-          create: async () => undefined,
+          create: async ({ data }: { data: Record<string, unknown> }) => {
+            banco.criados.push(data)
+            return { id: 2, ...data }
+          },
         },
         casal: { update: async () => undefined },
         historico: { create: async () => undefined },
@@ -83,6 +96,8 @@ beforeEach(() => {
   banco.casal = null
   banco.partoAtualizado = null
   banco.caixa = { id: 1, idEspecie: 1, estado: 'R' }
+  banco.criados = []
+  banco.liberou = []
 })
 
 describe('nascimento', () => {
@@ -93,25 +108,43 @@ describe('nascimento', () => {
     banco.parto = { ...pendente, casal: { ativo: false } }
 
     await expect(
-      registrarNascimento(1, { dtPartoReal: '2026-09-24', nascidoM: 5, nascidoF: 5 }, 1, agora),
+      registrarNascimento(1, { dtPartoReal: '2026-09-24', nascidoM: 5, nascidoF: 5 }, 1),
     ).rejects.toEqual(recusa(409, 'SEQUENCIA_INVALIDA'))
     expect(banco.gravou).toBe(false)
   })
 
-  it('parto antes do acasalamento e recusado', async () => {
-    banco.parto = pendente
+  it.each(['2026-08-31', '2026-10-29', '2026-10-31'])(
+    'o parto aceita a data que o tecnico digitar (%s)',
+    async (dtPartoReal) => {
+      banco.parto = { ...pendente, dtPartoPrevisto: d('2026-09-24'), compromissos: [] }
 
-    await expect(
-      registrarNascimento(1, { dtPartoReal: '2026-08-31', nascidoM: 5, nascidoF: 5 }, 1, agora),
-    ).rejects.toEqual(recusa(400, 'VALIDACAO'))
+      await registrarNascimento(1, { dtPartoReal, nascidoM: 5, nascidoF: 5 }, 1)
+
+      expect(banco.partoAtualizado).toMatchObject({ dtPartoReal: d(dtPartoReal) })
+    },
+  )
+
+  it('o parto nao abre o parto seguinte sozinho', async () => {
+    banco.parto = { ...pendente, dtPartoPrevisto: d('2026-09-24'), compromissos: [] }
+
+    await registrarNascimento(1, { dtPartoReal: '2026-09-24', nascidoM: 5, nascidoF: 5 }, 1)
+
+    expect(banco.criados).toEqual([])
   })
 
-  it('parto no futuro e recusado', async () => {
-    banco.parto = pendente
+  it('o 5o parto encerra o casal e libera a caixa se ela ficou vazia', async () => {
+    banco.parto = {
+      ...pendente,
+      ordem: 5,
+      dtPartoPrevisto: d('2026-09-24'),
+      casal: { ativo: true, idCaixa: 7 },
+      compromissos: [],
+    }
 
-    await expect(
-      registrarNascimento(1, { dtPartoReal: '2026-10-31', nascidoM: 5, nascidoF: 5 }, 1, agora),
-    ).rejects.toEqual(recusa(400, 'VALIDACAO'))
+    await registrarNascimento(1, { dtPartoReal: '2026-09-24', nascidoM: 0, nascidoF: 0 }, 1)
+
+    expect(banco.criados).toEqual([])
+    expect(banco.liberou).toEqual([7])
   })
 
   it('o desmame previsto passa a contar do parto real', async () => {
@@ -123,7 +156,7 @@ describe('nascimento', () => {
       compromissos: [],
     }
 
-    await registrarNascimento(1, { dtPartoReal: '2026-10-20', nascidoM: 5, nascidoF: 5 }, 1, agora)
+    await registrarNascimento(1, { dtPartoReal: '2026-10-20', nascidoM: 5, nascidoF: 5 }, 1)
 
     expect(banco.partoAtualizado).toMatchObject({ dtDesmamePrevisto: d('2026-11-11') })
   })
@@ -222,12 +255,12 @@ describe('desmame', () => {
     ).rejects.toEqual(nosCampos('desmamadoM', 'desmamadoF'))
   })
 
-  it('antes do parto e recusado', async () => {
-    banco.parto = partoNascido
+  it('aceita a data que o tecnico digitar, mesmo antes do parto', async () => {
+    banco.parto = { ...partoNascido, dtPartoPrevisto: d('2026-09-24'), compromissos: [] }
 
-    await expect(
-      registrarDesmame(1, { dtDesmameReal: '2026-09-20', desmamadoM: 4, desmamadoF: 4 }, 1),
-    ).rejects.toEqual(recusa(400, 'VALIDACAO'))
+    await registrarDesmame(1, { dtDesmameReal: '2026-09-20', desmamadoM: 4, desmamadoF: 4 }, 1)
+
+    expect(banco.partoAtualizado).toMatchObject({ dtDesmameReal: d('2026-09-20') })
   })
 
   it('com menos animais do que o reservado grava, e a resposta diz quanto falta e de quais pedidos', async () => {
@@ -311,12 +344,64 @@ describe('formacao do casal', () => {
 })
 
 describe('encerramento', () => {
-  it('antes da formacao do casal e recusado', async () => {
-    banco.casal = { id: 1, ativo: true, dtFormacao: d('2026-09-01') }
+  it('aceita a data que o tecnico digitar e libera a caixa se ela ficou vazia', async () => {
+    banco.casal = {
+      id: 1,
+      idCaixa: 7,
+      ativo: true,
+      identificacao: 'AB',
+      grupoMacho: 'A',
+      grupoFemea: 'B',
+      dtFormacao: d('2026-09-01'),
+      dtEncerramento: null,
+      linhagem: { nome: 'Wistar' },
+    }
 
-    await expect(
-      encerrarCasal(1, { dtEncerramento: '2026-08-30', motivo: 'teste' }, 1),
-    ).rejects.toEqual(recusa(400, 'VALIDACAO'))
-    expect(banco.gravou).toBe(false)
+    await encerrarCasal(1, { dtEncerramento: '2026-08-30', motivo: 'teste' }, 1)
+
+    expect(banco.gravou).toBe(true)
+    expect(banco.liberou).toEqual([7])
+  })
+})
+
+describe('acasalamento', () => {
+  const casal = (partos: Record<string, unknown>[], ativo = true) => ({
+    id: 1,
+    ativo,
+    identificacao: 'AB',
+    partos,
+  })
+
+  it('abre o parto seguinte com a data que o tecnico digitar', async () => {
+    banco.casal = casal([{ ordem: 1, dtPartoReal: d('2026-09-24') }])
+    banco.parto = { ...partoNascido, ordem: 2, dtPartoPrevisto: d('2026-10-28'), compromissos: [] }
+
+    await registrarAcasalamento(1, { dtAcasalamento: '2026-09-25' }, 1)
+
+    expect(banco.criados).toEqual([
+      expect.objectContaining({ idCasal: 1, ordem: 2, dtAcasalamento: d('2026-09-25') }),
+    ])
+  })
+
+  it('so depois de registrar o parto anterior', async () => {
+    banco.casal = casal([{ ordem: 1, dtPartoReal: null }])
+
+    await expect(registrarAcasalamento(1, { dtAcasalamento: '2026-09-25' }, 1)).rejects.toEqual(
+      recusa(409, 'SEQUENCIA_INVALIDA'),
+    )
+    expect(banco.criados).toEqual([])
+  })
+
+  it('nao passa do 5o parto nem vale para casal encerrado', async () => {
+    banco.casal = casal([{ ordem: 5, dtPartoReal: d('2026-09-24') }])
+    await expect(registrarAcasalamento(1, { dtAcasalamento: '2026-09-25' }, 1)).rejects.toEqual(
+      recusa(409, 'SEQUENCIA_INVALIDA'),
+    )
+
+    banco.casal = casal([{ ordem: 1, dtPartoReal: d('2026-09-24') }], false)
+    await expect(registrarAcasalamento(1, { dtAcasalamento: '2026-09-25' }, 1)).rejects.toEqual(
+      recusa(409, 'SEQUENCIA_INVALIDA'),
+    )
+    expect(banco.criados).toEqual([])
   })
 })

@@ -11,6 +11,7 @@ import {
   selecaoDoPartoDaCaixa,
   situacaoDaCaixa,
 } from '../infra/fluxoDoKanban.ts'
+import { liberarCaixaVazia } from '../infra/liberacaoDaCaixa.ts'
 import { faixaDoPedido } from '../motor/motor.ts'
 import { dataDoDesmame, diasEntre } from '../motor/motor.service.ts'
 import { ACAO_DEVOLUCAO, devolvidosDesde, faltaDosPedidos } from './devolucao.service.ts'
@@ -638,6 +639,7 @@ async function moverCaixasDaEntrega(
     )
 
     if (depois === null) continue
+    if (depois === 'X' && (await liberarCaixaVazia(tx, caixa.id, idUsuario))) continue
 
     const antes = estadoCaixa.paraApi(caixa.estado)
     const novo = estadoCaixa.paraApi(depois)
