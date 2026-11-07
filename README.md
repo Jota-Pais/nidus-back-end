@@ -21,6 +21,13 @@ O que mora aqui:
   só passa com confirmação
 - **Estantes** - a grade das duas faces, com a posição vazia como `caixa: null`.
   O endereço segue a etiqueta do cliente: face, linha e letra (`F1A`, `T2K`)
+- **Salas e estantes** (`/api/salas` e `/api/estantes`, escrita só do gestor) - a
+  sala é tabela própria e existe sem estante; renomear muda num lugar só. O nome
+  da sala é único entre as ativas, sem diferenciar maiúscula (`409 SALA_DUPLICADA`),
+  e o número da etiqueta é único na sala (`409 ESTANTE_DUPLICADA`). A estante muda
+  de número e de sala, mas não de modelo: para trocar, remove e cadastra de novo.
+  Remover é `ativa = false` e vai para o histórico: a sala só sai sem estante ativa
+  (`409 SALA_COM_ESTANTE`), e a estante, sem caixa ativa (`409 ESTANTE_OCUPADA`)
 - **Ficha da caixa** - casal (cruzamento AB, BC, CD, DE, EA), do 1º ao 5º parto,
   com parto, eutanásia de seleção e desmame. As datas previstas saem sozinhas:
   parto = acasalamento + 23 dias, desmame = parto + 22, próximo acasalamento =

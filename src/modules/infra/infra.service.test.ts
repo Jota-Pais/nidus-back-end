@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { cadastrarEstante } from './infra.service.ts'
+import { alterarEstante, cadastrarEstante, removerEstante } from './infra.service.ts'
 import type { NovaEstante } from './infra.service.ts'
 
-// Cadastro de estante, com o banco de mentira: o que importa e o que cada
+// Cadastro, edicao e remocao de estante, com o banco de mentira: o que importa e o que cada
 // regra consulta e grava
 
 type Linha = Record<string, unknown>
@@ -125,5 +125,81 @@ describe('cadastro de estante', () => {
 
     await expect(cadastrarEstante(nova, 1)).rejects.toThrow('Ja existe a estante E-05 na sala Sala 2.')
     expect(banco.numeroConsultado).toEqual({ idSala: 2, numeroVisivel: 'E-05', ativa: true })
+  })
+})
+
+describe('edicao de estante', () => {
+  it('muda numero e sala, e confere o numero na sala de destino sem contar a propria estante', async () => {
+    await expect(alterarEstante(4, { numeroVisivel: 'E-09', idSala: 2 }, 1)).resolves.toMatchObject({
+      numeroVisivel: 'E-09',
+      idSala: 2,
+      sala: 'Sala 2',
+    })
+    expect(banco.numeroConsultado).toEqual({ idSala: 2, numeroVisivel: 'E-09', ativa: true, id: { not: 4 } })
+    expect(banco.historico[0]).toMatchObject({
+      acao: 'alteracao',
+      dados: {
+        antes: { numeroVisivel: 'E-01', sala: 'Sala 1' },
+        depois: { numeroVisivel: 'E-09', sala: 'Sala 2' },
+      },
+    })
+  })
+
+  it('o modelo nao muda: so numero, sala e a data de manutencao sao gravados', async () => {
+    await alterarEstante(4, { numeroVisivel: 'E-07' }, 1)
+
+    expect(Object.keys(banco.gravado ?? {}).sort()).toEqual(['dtManutencao', 'idSala', 'numeroVisivel'])
+    expect(banco.gravado).toMatchObject({ numeroVisivel: 'E-07', idSala: 1 })
+  })
+
+  it('numero ja usado na sala de destino e recusado', async () => {
+    banco.mesmoNumero = { id: 6 }
+
+    await expect(alterarEstante(4, { idSala: 2 }, 1)).rejects.toEqual(recusa(409, 'ESTANTE_DUPLICADA'))
+    expect(banco.gravado).toBeNull()
+  })
+
+  it('sala de destino removida e campo invalido', async () => {
+    await expect(alterarEstante(4, { idSala: 3 }, 1)).rejects.toEqual(recusa(400, 'VALIDACAO'))
+  })
+
+  it('estante removida nao se edita', async () => {
+    banco.estante = null
+
+    await expect(alterarEstante(4, { numeroVisivel: 'E-09' }, 1)).rejects.toEqual(recusa(404, 'NAO_ENCONTRADO'))
+  })
+})
+
+describe('remocao de estante', () => {
+  it('conta como ocupada a posicao com caixa ativa, como a grade', async () => {
+    await removerEstante(4, 1)
+
+    expect(banco.caixasConsultadas).toEqual({ idEstante: 4, ativa: true })
+  })
+
+  it('estante com caixa nao sai', async () => {
+    banco.caixas = 3
+
+    await expect(removerEstante(4, 1)).rejects.toEqual(recusa(409, 'ESTANTE_OCUPADA'))
+    await expect(removerEstante(4, 1)).rejects.toThrow('A estante E-01 ainda tem 3 caixas.')
+    expect(banco.gravado).toBeNull()
+  })
+
+  it('estante vazia fica inativa, nao e apagada, e vai para o historico', async () => {
+    await expect(removerEstante(4, 1)).resolves.toBeUndefined()
+
+    expect(banco.gravado).toMatchObject({ ativa: false })
+    expect(banco.historico[0]).toMatchObject({
+      entidade: 'estante',
+      idEntidade: 4,
+      acao: 'remocao',
+      descricao: 'Estante E-01 removida da Sala 1',
+    })
+  })
+
+  it('estante ja removida da 404', async () => {
+    banco.estante = null
+
+    await expect(removerEstante(4, 1)).rejects.toEqual(recusa(404, 'NAO_ENCONTRADO'))
   })
 })

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { criarApp } from '../../app.ts'
 import type { Perfil } from '../../shared/traducao.ts'
 import { capacidadeDerivada } from './infra.service.ts'
-import { estanteNova } from './infra.routes.ts'
+import { alteracaoDeEstante, estanteNova } from './infra.routes.ts'
 
 // Autorizacao decidida no servidor. E o que este arquivo cobra
 
@@ -63,6 +63,16 @@ describe('autorizacao das rotas de infraestrutura', () => {
     ])
 
     expect(respostas.map((resposta) => resposta.status)).toEqual([403, 403, 403])
+  })
+
+  it('editar e remover estante e so do gestor - tecnico recebe 403', async () => {
+    const tecnico = app('tecnico')
+    const respostas = await Promise.all([
+      request(tecnico).patch('/api/estantes/1').send({ numeroVisivel: 'E-09' }),
+      request(tecnico).delete('/api/estantes/1'),
+    ])
+
+    expect(respostas.map((resposta) => resposta.status)).toEqual([403, 403])
   })
 
   it('pesquisador nao le as salas - 403', async () => {
@@ -130,6 +140,19 @@ describe('validacao de entrada das rotas de infraestrutura', () => {
     expect(Object.keys(resposta.body.erro.campos)).toContain('idSala')
   })
 
+  it('edicao sem numero nem sala e recusada', async () => {
+    const resposta = await request(app('gestor')).patch('/api/estantes/1').send({})
+
+    expect(resposta.status).toBe(400)
+    expect(resposta.body.erro.campos.numeroVisivel).toBe('Informe o que alterar.')
+  })
+
+  it('remocao de estante com id nao numerico e recusada', async () => {
+    const resposta = await request(app('gestor')).delete('/api/estantes/abc')
+
+    expect(resposta.status).toBe(400)
+  })
+
   it('sala sem nome, so com espaco ou com id invalido e recusada', async () => {
     const respostas = await Promise.all([
       request(app('gestor')).post('/api/salas').send({}),
@@ -140,6 +163,22 @@ describe('validacao de entrada das rotas de infraestrutura', () => {
 
     expect(respostas.map((resposta) => resposta.status)).toEqual([400, 400, 400, 400])
     expect(Object.keys(respostas[0]?.body.erro.campos)).toContain('nome')
+  })
+})
+
+describe('o modelo da estante nao muda depois do cadastro', () => {
+  it('a edicao descarta fabricante, modelo e topologia mandados no corpo', () => {
+    // Para trocar o modelo, remove e cadastra de novo: a grade e as caixas dependem da topologia
+    const validado = alteracaoDeEstante.parse({
+      numeroVisivel: 'E-09',
+      fabricante: 'TECNIPLAST',
+      modelo: 'Modelo 1',
+      faces: 1,
+      linhas: 8,
+      colunas: 7,
+    })
+
+    expect(validado).toEqual({ numeroVisivel: 'E-09' })
   })
 })
 

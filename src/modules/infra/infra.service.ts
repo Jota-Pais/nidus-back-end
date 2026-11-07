@@ -1,4 +1,4 @@
-// Estantes: lista, grade das duas faces e cadastro
+// Estantes: lista, grade das duas faces, cadastro, edicao e remocao
 
 import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
@@ -126,6 +126,12 @@ export type NovaEstante = {
   colunas: number
 }
 
+/** O que a edicao muda. O modelo e a topologia ficam: para trocar, remove e cadastra de novo */
+export type AlteracaoDeEstante = {
+  numeroVisivel?: string | undefined
+  idSala?: number | undefined
+}
+
 /** capacidade e derivada da topologia e nunca vem do cliente - o CHECK do banco cobra o mesmo */
 export function capacidadeDerivada(faces: number, linhas: number, colunas: number): number {
   return faces * linhas * colunas
@@ -145,14 +151,33 @@ async function salaDoCorpo(idSala: number) {
 }
 
 /** O numero da etiqueta e unico na sala, entre as estantes ativas */
-async function conferirNumeroLivre(sala: { id: number; nome: string }, numeroVisivel: string) {
+async function conferirNumeroLivre(
+  sala: { id: number; nome: string },
+  numeroVisivel: string,
+  idEstante?: number,
+) {
   const mesmoNumero = await prisma.estante.findFirst({
-    where: { idSala: sala.id, numeroVisivel, ativa: true },
+    where: {
+      idSala: sala.id,
+      numeroVisivel,
+      ativa: true,
+      ...(idEstante === undefined ? {} : { id: { not: idEstante } }),
+    },
   })
 
   if (mesmoNumero !== null) {
     throw erroDeRegra('ESTANTE_DUPLICADA', `Ja existe a estante ${numeroVisivel} na sala ${sala.nome}.`)
   }
+}
+
+async function estanteAtiva(id: number) {
+  const estante = await prisma.estante.findFirst({ where: { id, ativa: true }, include: comASala })
+
+  if (estante === null) {
+    throw naoEncontrado('Estante')
+  }
+
+  return estante
 }
 
 /** POST /api/estantes */
@@ -183,4 +208,70 @@ export async function cadastrarEstante(dados: NovaEstante, idUsuario: number) {
   })
 
   return paraApi(criada)
+}
+
+/** PATCH /api/estantes/:id - o numero da etiqueta e a sala */
+export async function alterarEstante(id: number, dados: AlteracaoDeEstante, idUsuario: number) {
+  const estante = await estanteAtiva(id)
+
+  const sala =
+    dados.idSala === undefined || dados.idSala === estante.idSala
+      ? { id: estante.idSala, nome: estante.sala.nome }
+      : await salaDoCorpo(dados.idSala)
+  const numeroVisivel = dados.numeroVisivel ?? estante.numeroVisivel
+
+  await conferirNumeroLivre(sala, numeroVisivel, id)
+
+  const salva = await prisma.$transaction(async (tx) => {
+    const atualizada = await tx.estante.update({
+      where: { id },
+      data: { numeroVisivel, idSala: sala.id, dtManutencao: new Date() },
+      include: comASala,
+    })
+
+    await registrarHistorico(tx, {
+      idUsuario,
+      entidade: 'estante',
+      idEntidade: id,
+      acao: 'alteracao',
+      descricao: `Estante ${numeroVisivel} alterada na ${sala.nome}`,
+      dados: {
+        antes: { numeroVisivel: estante.numeroVisivel, idSala: estante.idSala, sala: estante.sala.nome },
+        depois: { numeroVisivel, idSala: sala.id, sala: sala.nome },
+      },
+    })
+
+    return atualizada
+  })
+
+  return paraApi(salva)
+}
+
+/**
+ * DELETE /api/estantes/:id - so a estante vazia. Ocupada e a posicao com caixa ativa, a mesma
+ * regra com que a grade mostra a posicao ocupada
+ */
+export async function removerEstante(id: number, idUsuario: number) {
+  const estante = await estanteAtiva(id)
+  const caixas = await prisma.caixa.count({ where: { idEstante: id, ativa: true } })
+
+  if (caixas > 0) {
+    throw erroDeRegra(
+      'ESTANTE_OCUPADA',
+      `A estante ${estante.numeroVisivel} ainda tem ${caixas} ${caixas === 1 ? 'caixa' : 'caixas'}. So da para remover a estante vazia: mude as caixas para outra estante antes.`,
+    )
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.estante.update({ where: { id }, data: { ativa: false, dtManutencao: new Date() } })
+
+    await registrarHistorico(tx, {
+      idUsuario,
+      entidade: 'estante',
+      idEntidade: id,
+      acao: 'remocao',
+      descricao: `Estante ${estante.numeroVisivel} removida da ${estante.sala.nome}`,
+      dados: { numeroVisivel: estante.numeroVisivel, idSala: estante.idSala, sala: estante.sala.nome },
+    })
+  })
 }
