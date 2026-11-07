@@ -118,7 +118,7 @@ src/
   shared/              prisma, erros, tradução dos códigos do banco, autorização,
                        parâmetros biológicos, envio de e-mail
   modules/
-    infra/             estantes, grade, kanban e ficha
+    infra/             salas, estantes, grade, kanban e ficha
     reproducao/        casais e partos
     demanda/           projetos CEUA, solicitações e alocação
     motor/             busca de atendimento

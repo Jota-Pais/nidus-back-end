@@ -9,7 +9,7 @@ export const NOME_DO_SISTEMA = 'Sistema'
 export type Alteracao = {
   /** null so quando foi o proprio sistema. Obrigatorio para nenhuma acao ficar sem dono por esquecimento */
   idUsuario: number | null
-  entidade: 'caixa' | 'casal' | 'parto' | 'solicitacao' | 'usuario' | 'projeto' | 'linhagem' | 'estante'
+  entidade: 'caixa' | 'casal' | 'parto' | 'solicitacao' | 'usuario' | 'projeto' | 'linhagem' | 'sala' | 'estante'
   idEntidade: number
   acao: string
   descricao: string

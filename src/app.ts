@@ -6,6 +6,7 @@ import { projetoRoutes, solicitacaoRoutes } from './modules/demanda/demanda.rout
 import { caixaRoutes, quadroRoutes } from './modules/infra/caixa.routes.ts'
 import { historicoRoutes } from './modules/historico/historico.routes.ts'
 import { estanteRoutes } from './modules/infra/infra.routes.ts'
+import { salaRoutes } from './modules/infra/sala.routes.ts'
 import { autenticacaoPorCookie } from './modules/login/autenticacao.ts'
 import { acessoRoutes, sessaoRoutes } from './modules/login/login.routes.ts'
 import { buscaRoutes, estoqueRoutes, viabilidadeRoutes } from './modules/motor/motor.routes.ts'
@@ -59,6 +60,7 @@ export function criarApp({
   app.use('/api/sessao', sessaoRoutes)
   app.use('/api/acesso', acessoRoutes)
   app.use('/api/catalogo', catalogoRoutes)
+  app.use('/api/salas', salaRoutes)
   app.use('/api/estantes', estanteRoutes)
   app.use('/api/casais', casalRoutes)
   app.use('/api/partos', partoRoutes)

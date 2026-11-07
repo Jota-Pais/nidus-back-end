@@ -54,6 +54,23 @@ describe('autorizacao das rotas de infraestrutura', () => {
     expect(resposta.status).toBe(403)
   })
 
+  it('cadastrar, renomear e remover sala e so do gestor - tecnico recebe 403', async () => {
+    const tecnico = app('tecnico')
+    const respostas = await Promise.all([
+      request(tecnico).post('/api/salas').send({ nome: 'Sala 4' }),
+      request(tecnico).patch('/api/salas/1').send({ nome: 'Sala A' }),
+      request(tecnico).delete('/api/salas/1'),
+    ])
+
+    expect(respostas.map((resposta) => resposta.status)).toEqual([403, 403, 403])
+  })
+
+  it('pesquisador nao le as salas - 403', async () => {
+    const resposta = await request(app('pesquisador')).get('/api/salas')
+
+    expect(resposta.status).toBe(403)
+  })
+
   it('rota inexistente sob /api nao vira 401 pela autenticacao', async () => {
     // A autenticacao esta montada em '/api' inteiro e nao pode transformar "essa rota nao
     // existe" em "faca login"
@@ -111,6 +128,18 @@ describe('validacao de entrada das rotas de infraestrutura', () => {
 
     expect(resposta.status).toBe(400)
     expect(Object.keys(resposta.body.erro.campos)).toContain('idSala')
+  })
+
+  it('sala sem nome, so com espaco ou com id invalido e recusada', async () => {
+    const respostas = await Promise.all([
+      request(app('gestor')).post('/api/salas').send({}),
+      request(app('gestor')).post('/api/salas').send({ nome: '   ' }),
+      request(app('gestor')).patch('/api/salas/1').send({ nome: '' }),
+      request(app('gestor')).delete('/api/salas/0'),
+    ])
+
+    expect(respostas.map((resposta) => resposta.status)).toEqual([400, 400, 400, 400])
+    expect(Object.keys(respostas[0]?.body.erro.campos)).toContain('nome')
   })
 })
 
