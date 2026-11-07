@@ -179,6 +179,13 @@ async function caixaNaPosicao(posicao: PosicaoVazia) {
 }
 
 /**
+ * As colunas de onde a caixa nao recebe casal novo. O casal novo leva a caixa para Livres, e
+ * Estoque e Reserva nao voltam para Livres (fluxoDoKanban.ts). Enviado volta: e assim que a
+ * caixa enviada e reaproveitada
+ */
+const COLUNA_SEM_VOLTA: Record<string, string> = { E: 'Estoque', T: 'Reserva' }
+
+/**
  * POST /api/casais - forma o casal e ja cria o 1o parto, com as datas previstas. Numa posicao
  * vazia a caixa nasce na mesma transacao, com a especie da linhagem escolhida
  */
@@ -208,6 +215,15 @@ export async function formarCasal(dados: NovoCasal, idUsuario: number) {
     throw new ErroDeAplicacao(400, 'VALIDACAO', 'Confira os campos destacados.', {
       campos: { idLinhagem: 'Esta linhagem nao pertence a especie da caixa.' },
     })
+  }
+
+  const semVolta = caixaExistente === null ? undefined : COLUNA_SEM_VOLTA[caixaExistente.estado]
+
+  if (semVolta !== undefined) {
+    throw erroDeRegra(
+      'TRANSICAO_INVALIDA',
+      `Esta caixa esta em ${semVolta} e nao volta para Livres: casal novo nao entra em caixa de Estoque ou Reserva.`,
+    )
   }
 
   await validarParGenetico(dados.grupoMacho, dados.grupoFemea)

@@ -14,12 +14,13 @@ const banco = vi.hoisted(() => ({
   gravou: false,
   partoAtualizado: null as Record<string, unknown> | null,
   linhagem: null as Record<string, unknown> | null,
+  caixa: { id: 1, idEspecie: 1, estado: 'R' },
 }))
 
 vi.mock('../../shared/prisma.ts', () => ({
   prisma: {
     linhagem: { findUnique: async () => banco.linhagem },
-    caixa: { findUnique: async () => ({ id: 1, idEspecie: 1, estado: 'R' }) },
+    caixa: { findUnique: async () => banco.caixa },
     grupoGeneticoPar: { findFirst: async () => ({ id: 1 }) },
     parto: {
       findUnique: async () => banco.parto,
@@ -81,6 +82,7 @@ beforeEach(() => {
   banco.gravou = false
   banco.casal = null
   banco.partoAtualizado = null
+  banco.caixa = { id: 1, idEspecie: 1, estado: 'R' }
 })
 
 describe('nascimento', () => {
@@ -280,6 +282,28 @@ describe('formacao do casal', () => {
         status: 400,
         codigo: 'VALIDACAO',
         extras: { campos: { idLinhagem: expect.stringContaining('inativa') } },
+      }),
+    )
+    expect(banco.gravou).toBe(false)
+  })
+
+  it.each([
+    ['E', 'Estoque'],
+    ['T', 'Reserva'],
+  ])('caixa em %s (%s) nao recebe casal novo: ela nao volta para Livres', async (estado, coluna) => {
+    banco.linhagem = { id: 2, nome: 'Wistar', idEspecie: 1, ativa: true }
+    banco.caixa = { id: 1, idEspecie: 1, estado }
+
+    await expect(
+      formarCasal(
+        { idCaixa: 1, idLinhagem: 2, grupoMacho: 'A', grupoFemea: 'B', dtFormacao: '2026-11-06' },
+        1,
+      ),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        status: 409,
+        codigo: 'TRANSICAO_INVALIDA',
+        message: expect.stringContaining(coluna),
       }),
     )
     expect(banco.gravou).toBe(false)
