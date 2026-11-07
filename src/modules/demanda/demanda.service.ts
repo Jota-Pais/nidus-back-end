@@ -407,7 +407,7 @@ export async function alocarSolicitacao(
   if (quantasFaltam > 0) {
     throw erroDeRegra(
       'PEDIDO_INCOMPLETO',
-      `A alocacao so aceita o pedido inteiro: ${quantasFaltam === 1 ? 'falta' : 'faltam'} ${descreverQuantidade(falta)}. Sem animais para completar, recuse com o motivo ou aguarde.`,
+      `A alocacao nao cobre o pedido: ${quantasFaltam === 1 ? 'falta' : 'faltam'} ${descreverQuantidade(falta)}. Sem animais, recuse com o motivo ou aguarde.`,
     )
   }
 
