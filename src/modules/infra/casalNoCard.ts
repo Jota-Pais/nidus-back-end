@@ -36,6 +36,12 @@ export function partoPrevisto(partos: DatasDoParto[]): string | null {
   return pendente === undefined ? null : dataISO(pendente.dtPartoPrevisto)
 }
 
+function mamando(parto: PartoDoCard): boolean {
+  if (parto.dtPartoReal === null || parto.desmamadoM !== null) return false
+  const { m, f } = naCaixa(parto)
+  return m + f > 0
+}
+
 function diasEntre(de: string, ate: string): number {
   return Math.round((Date.parse(`${ate}T00:00:00Z`) - Date.parse(`${de}T00:00:00Z`)) / 86_400_000)
 }
@@ -85,6 +91,7 @@ export function casalNoCard(casais: CasalDoCard[], estado: string, hoje: string 
     partoAtual: partoAtual(casal.partos),
     partoPrevisto: casal.ativo ? partoPrevisto(casal.partos) : null,
     encerrado: !casal.ativo,
+    aguardandoDesmame: !casal.ativo && casal.partos.some(mamando),
     ninhadas: todas,
   }
 }

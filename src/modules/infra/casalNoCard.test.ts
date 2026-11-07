@@ -62,6 +62,22 @@ describe('casalNoCard', () => {
     expect(casal).toMatchObject({ identificacao: 'AB', partoAtual: 5, partoPrevisto: null, encerrado: true })
   })
 
+  it('casal encerrado com filhote mamando fica aguardando desmame; desmamado, nao', () => {
+    const mamando = parto('2026-10-20', '2026-10-20', { m: 3, f: 2 })
+    expect(
+      casalNoCard([{ identificacao: 'AB', ativo: false, partos: [mamando] }], 'R', '2026-11-06'),
+    ).toMatchObject({ encerrado: true, aguardandoDesmame: true })
+
+    const desmamado = { ...mamando, desmamadoM: 3, desmamadoF: 2 }
+    expect(
+      casalNoCard([{ identificacao: 'AB', ativo: false, partos: [desmamado] }], 'E', '2026-11-06'),
+    ).toMatchObject({ encerrado: true, aguardandoDesmame: false })
+
+    expect(
+      casalNoCard([{ identificacao: 'AB', ativo: true, partos: [mamando] }], 'R', '2026-11-06'),
+    ).toMatchObject({ aguardandoDesmame: false })
+  })
+
   it('casal encerrado com a caixa ja enviada some do card', () => {
     const partos = [parto('2026-06-01', '2026-06-01')]
     expect(casalNoCard([{ identificacao: 'AB', ativo: false, partos }], 'X')).toBeNull()
@@ -79,6 +95,7 @@ describe('casalNoCard', () => {
       partoAtual: 1,
       partoPrevisto: '2026-10-20',
       encerrado: false,
+      aguardandoDesmame: false,
       ninhadas: [],
     })
   })
