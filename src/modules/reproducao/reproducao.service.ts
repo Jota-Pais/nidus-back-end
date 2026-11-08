@@ -344,7 +344,7 @@ export async function registrarNascimento(
 ) {
   const parto = await prisma.parto.findUnique({
     where: { id: idParto },
-    include: { casal: { select: { ativo: true, idCaixa: true } } },
+    include: { casal: { select: { ativo: true, idCaixa: true, identificacao: true } } },
   })
 
   if (parto === null) {
@@ -406,6 +406,15 @@ export async function registrarNascimento(
           dtEncerramento: paraData(dados.dtPartoReal),
           motivoEncerramento: `Limite de ${MAX_PARTOS_POR_CASAL} partos atingido`,
         },
+      })
+
+      await registrarHistorico(tx, {
+        idUsuario,
+        entidade: 'casal',
+        idEntidade: parto.idCasal,
+        acao: 'encerramento',
+        descricao: `Casal ${parto.casal.identificacao.trim()} encerrado em ${dados.dtPartoReal}: limite de ${MAX_PARTOS_POR_CASAL} partos atingido`,
+        dados: { dtEncerramento: dados.dtPartoReal, automatico: true },
       })
 
       await liberarCaixaVazia(tx, parto.casal.idCaixa, idUsuario)

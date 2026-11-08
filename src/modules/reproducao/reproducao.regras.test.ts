@@ -20,6 +20,7 @@ const banco = vi.hoisted(() => ({
   partosDaCaixa: [] as Record<string, unknown>[],
   criados: [] as Record<string, unknown>[],
   liberou: [] as number[],
+  historicos: [] as Record<string, unknown>[],
 }))
 
 vi.mock('../infra/liberacaoDaCaixa.ts', () => ({
@@ -60,7 +61,11 @@ vi.mock('../../shared/prisma.ts', () => ({
           },
         },
         casal: { update: async () => undefined },
-        historico: { create: async () => undefined },
+        historico: {
+          create: async ({ data }: { data: Record<string, unknown> }) => {
+            banco.historicos.push(data)
+          },
+        },
       })
     },
   },
@@ -119,6 +124,7 @@ beforeEach(() => {
   banco.partosDaCaixa = []
   banco.criados = []
   banco.liberou = []
+  banco.historicos = []
 })
 
 describe('nascimento', () => {
@@ -218,7 +224,7 @@ describe('nascimento', () => {
       ...pendente,
       ordem: 5,
       dtPartoPrevisto: d('2026-09-24'),
-      casal: { ativo: true, idCaixa: 7 },
+      casal: { ativo: true, idCaixa: 7, identificacao: 'AB' },
       compromissos: [],
     }
 
@@ -226,6 +232,9 @@ describe('nascimento', () => {
 
     expect(banco.criados).toEqual([])
     expect(banco.liberou).toEqual([7])
+    expect(banco.historicos).toContainEqual(
+      expect.objectContaining({ entidade: 'casal', acao: 'encerramento' }),
+    )
   })
 
   it('o desmame previsto passa a contar do parto real', async () => {
