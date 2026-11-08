@@ -637,6 +637,15 @@ export async function registrarEntrega(
     throw campoInvalido('dtEntrega', 'A data da entrega nao pode ser antes do pedido.')
   }
 
+  const falta = (await faltaDosPedidos([idSolicitacao])).get(idSolicitacao)
+
+  if (falta !== undefined && falta.m + falta.f > 0) {
+    throw erroDeRegra(
+      'DISPONIBILIDADE_EXCEDIDA',
+      `A reserva deste pedido esta em falta (${falta.m} M e ${falta.f} F a menos do que o reservado): desfaca a reserva ou ajuste antes de registrar a entrega.`,
+    )
+  }
+
   await prisma.$transaction(async (tx) => {
     const concluida = await tx.solicitacao.updateMany({
       where: { id: idSolicitacao, status: 'AP' },

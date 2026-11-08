@@ -14,6 +14,12 @@ const banco = vi.hoisted(() => ({
   liberadas: [] as number[],
   /** se a caixa do casal sem casal ativo libera (a regra fica em liberacaoDaCaixa.test.ts) */
   libera: true,
+  falta: null as { m: number; f: number } | null,
+}))
+
+vi.mock('./devolucao.service.ts', async (original) => ({
+  ...(await original<typeof import('./devolucao.service.ts')>()),
+  faltaDosPedidos: async () => new Map(banco.falta ? [[7, banco.falta]] : []),
 }))
 
 type Parto = {
@@ -94,6 +100,7 @@ const agora = new Date('2026-10-31T15:00:00.000Z')
 const recusa = (status: number, codigo: string) => expect.objectContaining({ status, codigo })
 
 beforeEach(() => {
+  banco.falta = null
   banco.liberadas = []
   banco.solicitacao = { id: 7, status: 'AP', dtCriacao: new Date('2026-10-01T12:00:00.000Z') }
   banco.concluidas = 1
@@ -106,6 +113,15 @@ beforeEach(() => {
 })
 
 describe('registro de entrega', () => {
+  it('pedido com a reserva em falta nao e entregue', async () => {
+    banco.falta = { m: 1, f: 0 }
+
+    await expect(registrarEntrega(7, '2026-10-30', 1, agora)).rejects.toEqual(
+      recusa(409, 'DISPONIBILIDADE_EXCEDIDA'),
+    )
+    expect(banco.historicos).toEqual([])
+  })
+
   it('solicitacao alocada vira entregue e a remessa ganha a data', async () => {
     await expect(registrarEntrega(7, '2026-10-30', 1, agora)).resolves.toEqual({
       idSolicitacao: 7,
