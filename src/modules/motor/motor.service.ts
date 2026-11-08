@@ -1,7 +1,12 @@
 // A busca de atendimento lida do banco: caixas da especie que ja tiveram casal, os partos que
 // ja nasceram e o que cada um ainda tem livre. So entram partos com a idade na entrega dentro da faixa aceita do pedido
 
-import { ALEITAMENTO_DIAS, GESTACAO_DIAS } from '../../shared/parametros.ts'
+import {
+  ALEITAMENTO_DIAS,
+  CIO_DIAS,
+  GESTACAO_DIAS,
+  NINHADA_POR_SEXO,
+} from '../../shared/parametros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { dataISO, estadoCaixa, hojeISO } from '../../shared/traducao.ts'
 import { codigoDaPosicao } from '../infra/endereco.ts'
@@ -145,6 +150,11 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
       dataMinimaDeEntrega: dataMinima,
       viavel: referencia >= dataMinima,
       formarCasais: janelaDeFormarCasais(faixa, referencia),
+      // quantos acasalamentos, da ninhada maior para a menor
+      acasalamentos: {
+        min: casaisParaODeficit(deficit, { m: NINHADA_POR_SEXO.maior, f: NINHADA_POR_SEXO.maior }),
+        max: casaisParaODeficit(deficit, { m: NINHADA_POR_SEXO.menor, f: NINHADA_POR_SEXO.menor }),
+      },
     },
   }
 }
@@ -152,8 +162,8 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
 /**
  * Quando formar os casais novos para a entrega: os filhotes nascem a gestacao depois e, na
  * entrega, tem de estar na faixa aceita e ja desmamados, como as caixas da busca. Formado antes
- * da janela, os filhotes passam da idade; depois, ficam novos demais. Nula quando nenhuma idade
- * da faixa chega desmamada
+ * da janela, os filhotes passam da idade; depois, ficam novos demais. A janela comeca o cio antes:
+ * o casal pode levar esses dias para acasalar. Nula quando nenhuma idade da faixa chega desmamada
  */
 export function janelaDeFormarCasais(
   faixa: { min: number; max: number },
@@ -163,7 +173,7 @@ export function janelaDeFormarCasais(
   if (idadeMinima > faixa.max) return null
 
   return {
-    de: somarDias(entrega, -(GESTACAO_DIAS + faixa.max)),
+    de: somarDias(entrega, -(GESTACAO_DIAS + faixa.max + CIO_DIAS)),
     ate: somarDias(entrega, -(GESTACAO_DIAS + idadeMinima)),
   }
 }

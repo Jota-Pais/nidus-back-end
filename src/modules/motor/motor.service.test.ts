@@ -116,6 +116,8 @@ describe('deficit e acasalamento novo', () => {
     expect(busca.candidatas.map((c) => c.alocar)).toEqual([{ m: 4, f: 4 }])
     expect(busca.deficit).toEqual({ m: 0, f: 0, qualquer: 8 })
     expect(busca.casaisAFormar).toBe(1)
+    // 8 de qualquer sexo: 1 acasalamento com ninhadas de 5 de cada sexo, 2 com ninhadas de 3
+    expect(busca.acasalamentoNovo.acasalamentos).toEqual({ min: 1, max: 2 })
   })
 
   it('a data minima do acasalamento novo e hoje + gestacao + idade minima', async () => {
@@ -133,11 +135,11 @@ describe('deficit e acasalamento novo', () => {
     const busca = await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
 
     // faixa 20 a 44 dias na entrega (31/12), mas desmamados so a partir de 22: formados de
-    // 31/12 - 23 - 44 ate 31/12 - 23 - 22
-    expect(busca.acasalamentoNovo.formarCasais).toEqual({ de: '2026-10-25', ate: '2026-11-16' })
+    // 31/12 - 23 - 44 - 4 de cio ate 31/12 - 23 - 22
+    expect(busca.acasalamentoNovo.formarCasais).toEqual({ de: '2026-10-21', ate: '2026-11-16' })
   })
 
-  it('na idade exata, a janela pode ser um dia so', async () => {
+  it('na idade exata, a janela e o cio antes do unico dia da gestacao exata', async () => {
     banco.caixas = []
 
     const busca = await buscarAtendimento(
@@ -145,8 +147,8 @@ describe('deficit e acasalamento novo', () => {
       agora,
     )
 
-    // 21 dias aceita de 20 a 22, e desmamado so com 22: formado em 01/12 - 23 - 22
-    expect(busca.acasalamentoNovo.formarCasais).toEqual({ de: '2026-10-17', ate: '2026-10-17' })
+    // 21 dias aceita de 20 a 22, e desmamado so com 22: 01/12 - 23 - 22, ou ate 4 dias antes
+    expect(busca.acasalamentoNovo.formarCasais).toEqual({ de: '2026-10-13', ate: '2026-10-17' })
   })
 })
 

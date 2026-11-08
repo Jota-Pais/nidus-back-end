@@ -102,14 +102,13 @@ export function sugerirAlocacao<T extends Candidata>(
 }
 
 /**
- * Casais a formar para cobrir o deficit, pelo esperado de cada casal (4M/4F na colonia). Machos e
- * femeas pedem os proprios casais; o "qualquer" so pesa no total, que cada casal cobre com 8
+ * Casais a formar para cobrir o deficit, pelo esperado de cada casal (4M/4F na colonia, ou a
+ * ninhada dada). Machos e femeas pedem os proprios casais; o "qualquer" so pesa no total, que
+ * cada casal cobre com a soma dos dois
  */
-export function casaisParaODeficit(deficit: Pedido): number {
-  const porMacho = Math.ceil(deficit.m / ESPERADOS_POR_CASAL.m)
-  const porFemea = Math.ceil(deficit.f / ESPERADOS_POR_CASAL.f)
-  const porTotal = Math.ceil(
-    (deficit.m + deficit.f + deficit.qualquer) / (ESPERADOS_POR_CASAL.m + ESPERADOS_POR_CASAL.f),
-  )
+export function casaisParaODeficit(deficit: Pedido, porCasal: PorSexo = ESPERADOS_POR_CASAL): number {
+  const porMacho = Math.ceil(deficit.m / porCasal.m)
+  const porFemea = Math.ceil(deficit.f / porCasal.f)
+  const porTotal = Math.ceil((deficit.m + deficit.f + deficit.qualquer) / (porCasal.m + porCasal.f))
   return Math.max(porMacho, porFemea, porTotal)
 }

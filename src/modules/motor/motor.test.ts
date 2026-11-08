@@ -172,4 +172,9 @@ describe('casais para cobrir o deficit', () => {
     // os machos ja pedem 3 casais, que sobram para o qualquer
     expect(casaisParaODeficit({ m: 12, f: 0, qualquer: 10 })).toBe(3)
   })
+
+  it('com outra ninhada, a mesma conta', () => {
+    expect(casaisParaODeficit({ m: 10, f: 0, qualquer: 0 }, { m: 5, f: 5 })).toBe(2)
+    expect(casaisParaODeficit({ m: 10, f: 0, qualquer: 0 }, { m: 3, f: 3 })).toBe(4)
+  })
 })

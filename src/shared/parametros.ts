@@ -21,6 +21,18 @@ export const MAX_PARTOS_POR_CASAL = 5
  */
 export const ESPERADOS_POR_CASAL = { m: 4, f: 4 } as const
 
+// Os dois abaixo nao vem do sistema do cliente: sao a folga da sugestao de acasalamento novo
+// na janela de reservar, quando o plantel nao tem os animais do pedido
+
+/**
+ * A ninhada varia em torno do esperado de 4 de cada sexo: de 3 a 5. Com 5, saem menos
+ * acasalamentos; com 3, mais
+ */
+export const NINHADA_POR_SEXO = { menor: 3, maior: 5 } as const
+
+/** O casal recem-formado so acasala no proximo cio, ate 4 dias depois (o ciclo estral) */
+export const CIO_DIAS = 4
+
 /**
  * A variacao aceita cresce com a idade pedida (spec do cliente, secao 1.6). A ultima faixa
  * e aberta: 'idadeMaxDias' nulo e a "> 90 dias"
