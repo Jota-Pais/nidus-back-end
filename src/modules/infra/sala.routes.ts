@@ -9,7 +9,7 @@ import { criarSala, listarSalas, removerSala, renomearSala } from './sala.servic
 
 export const salaRoutes = Router()
 
-const idNaRota = z.object({ id: z.coerce.number().int().positive() })
+const idNaRota = z.object({ id: z.coerce.number().int().positive().max(2147483647) })
 
 /** corpo do cadastro e da renomeacao: a sala so tem o nome */
 export const salaNova = z.object({

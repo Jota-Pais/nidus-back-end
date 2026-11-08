@@ -26,7 +26,7 @@ import {
 export const casalRoutes = Router()
 export const partoRoutes = Router()
 
-const idNaRota = z.object({ id: z.coerce.number().int().positive() })
+const idNaRota = z.object({ id: z.coerce.number().int().positive().max(2147483647) })
 
 /**
  * A data de algo que ja aconteceu na caixa (acasalamento, parto, selecao, desmame,
@@ -47,16 +47,16 @@ const grupoGenetico = z.enum(['A', 'B', 'C', 'D', 'E'])
  */
 export const casalNovo = z
   .object({
-    idCaixa: z.number().int().positive().optional(),
+    idCaixa: z.number().int().positive().max(2147483647).optional(),
     posicao: z
       .object({
-        idEstante: z.number().int().positive(),
+        idEstante: z.number().int().positive().max(2147483647),
         face: z.enum(['frontal', 'traseira']),
-        linha: z.number().int().positive(),
-        coluna: z.number().int().positive(),
+        linha: z.number().int().positive().max(2147483647),
+        coluna: z.number().int().positive().max(2147483647),
       })
       .optional(),
-    idLinhagem: z.number().int().positive(),
+    idLinhagem: z.number().int().positive().max(2147483647),
     grupoMacho: grupoGenetico,
     grupoFemea: grupoGenetico,
     dtFormacao: dataDoFato,
@@ -95,8 +95,8 @@ casalRoutes.post('/:id/acasalamento', exigirPerfil(...OPERA_A_COLONIA), async (r
 
 const nascimento = z.object({
   dtPartoReal: dataDoFato,
-  nascidoM: z.number().int().min(0),
-  nascidoF: z.number().int().min(0),
+  nascidoM: z.number().int().min(0).max(999, 'No maximo 999 animais.'),
+  nascidoF: z.number().int().min(0).max(999, 'No maximo 999 animais.'),
 })
 
 partoRoutes.post('/:id/nascimento', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
@@ -108,8 +108,8 @@ partoRoutes.post('/:id/nascimento', exigirPerfil(...OPERA_A_COLONIA), async (req
 
 const selecao = z.object({
   dtSelecao: dataDoFato,
-  eutanasiadoM: z.number().int().min(0),
-  eutanasiadoF: z.number().int().min(0),
+  eutanasiadoM: z.number().int().min(0).max(999, 'No maximo 999 animais.'),
+  eutanasiadoF: z.number().int().min(0).max(999, 'No maximo 999 animais.'),
 })
 
 partoRoutes.post('/:id/selecao', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
@@ -122,8 +122,8 @@ partoRoutes.post('/:id/selecao', exigirPerfil(...OPERA_A_COLONIA), async (req, r
 /** Corpo de POST /api/partos/:id/desmame. Chave a mais que o front mande e descartada */
 export const desmame = z.object({
   dtDesmameReal: dataDoFato,
-  desmamadoM: z.number().int().min(0),
-  desmamadoF: z.number().int().min(0),
+  desmamadoM: z.number().int().min(0).max(999, 'No maximo 999 animais.'),
+  desmamadoF: z.number().int().min(0).max(999, 'No maximo 999 animais.'),
 })
 
 partoRoutes.post('/:id/desmame', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
@@ -160,13 +160,13 @@ partoRoutes.patch('/:id/desmame', exigirPerfil(...OPERA_A_COLONIA), async (req, 
 
 /** O destino dos desmamados de um sexo: uma caixa de estoque que ja existe, ou uma posicao vazia */
 const destinoDoEstoque = z.union([
-  z.object({ idCaixa: z.number().int().positive() }),
+  z.object({ idCaixa: z.number().int().positive().max(2147483647) }),
   z.object({
     posicao: z.object({
-      idEstante: z.number().int().positive(),
+      idEstante: z.number().int().positive().max(2147483647),
       face: z.enum(['frontal', 'traseira']),
-      linha: z.number().int().positive(),
-      coluna: z.number().int().positive(),
+      linha: z.number().int().positive().max(2147483647),
+      coluna: z.number().int().positive().max(2147483647),
     }),
   }),
 ])

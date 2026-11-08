@@ -14,10 +14,10 @@ catalogoRoutes.get('/', exigirPerfil(), async (_req, res) => {
   res.json(await montarCatalogo())
 })
 
-const idNaRota = z.object({ id: z.coerce.number().int().positive() })
+const idNaRota = z.object({ id: z.coerce.number().int().positive().max(2147483647) })
 
 export const linhagemNova = z.object({
-  idEspecie: z.number().int().positive(),
+  idEspecie: z.number().int().positive().max(2147483647),
   nome: z.string().trim().min(1).max(60),
 })
 

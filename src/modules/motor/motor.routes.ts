@@ -14,13 +14,13 @@ export const viabilidadeRoutes = Router()
 export const filtroDaBusca = z
   .object({
     especie: z.string().trim().min(1),
-    idLinhagem: z.coerce.number().int().positive().optional(),
-    machos: z.coerce.number().int().min(0),
-    femeas: z.coerce.number().int().min(0),
-    qualquer: z.coerce.number().int().min(0),
+    idLinhagem: z.coerce.number().int().positive().max(2147483647).optional(),
+    machos: z.coerce.number().int().min(0).max(9999),
+    femeas: z.coerce.number().int().min(0).max(9999),
+    qualquer: z.coerce.number().int().min(0).max(9999),
     /** a idade exata vem com idadeMin = idadeMax */
-    idadeMin: z.coerce.number().int().min(1),
-    idadeMax: z.coerce.number().int().min(1),
+    idadeMin: z.coerce.number().int().min(1).max(300),
+    idadeMax: z.coerce.number().int().min(1).max(300),
     dataEntrega: z.iso.date('Data invalida. Use aaaa-mm-dd.').optional(),
     /** ids separados por virgula */
     excluir: z

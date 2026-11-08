@@ -25,7 +25,7 @@ quadroRoutes.get('/', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   res.json(await montarQuadro(especie))
 })
 
-const idNaRota = z.object({ id: z.coerce.number().int().positive() })
+const idNaRota = z.object({ id: z.coerce.number().int().positive().max(2147483647) })
 
 /** GET /api/caixas/:id - a ficha da caixa */
 caixaRoutes.get('/:id', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
@@ -47,10 +47,10 @@ caixaRoutes.patch('/:id/estado', exigirPerfil(...OPERA_A_COLONIA), async (req, r
 })
 
 const posicaoNova = z.object({
-  idEstante: z.number().int().positive(),
+  idEstante: z.number().int().positive().max(2147483647),
   face: z.enum(['frontal', 'traseira']),
-  linha: z.number().int().positive(),
-  coluna: z.number().int().positive(),
+  linha: z.number().int().positive().max(2147483647),
+  coluna: z.number().int().positive().max(2147483647),
 })
 
 caixaRoutes.patch('/:id/posicao', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {

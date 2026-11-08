@@ -7,7 +7,7 @@ export const historicoRoutes = Router()
 
 const filtro = z.object({
   entidade: z.string().trim().min(1).max(20).optional(),
-  idEntidade: z.coerce.number().int().positive().optional(),
+  idEntidade: z.coerce.number().int().positive().max(2147483647).optional(),
   busca: z.string().trim().min(1).max(100).optional(),
   limite: z.coerce.number().int().min(1).max(500).default(100),
 })

@@ -24,7 +24,7 @@ import { numeroCeua } from './protocolo.ts'
 export const projetoRoutes = Router()
 export const solicitacaoRoutes = Router()
 
-const idNaRota = z.object({ id: z.coerce.number().int().positive() })
+const idNaRota = z.object({ id: z.coerce.number().int().positive().max(2147483647) })
 
 /** So o gestor lista: o pesquisador digita o protocolo e nao ve o dos outros */
 projetoRoutes.get('/', exigirPerfil('gestor'), async (req, res) => {
@@ -34,10 +34,10 @@ projetoRoutes.get('/', exigirPerfil('gestor'), async (req, res) => {
 export const projetoNovo = z.object({
   numero: numeroCeua,
   titulo: z.string().trim().min(1).max(255),
-  idUsuarioResponsavel: z.number().int().positive(),
+  idUsuarioResponsavel: z.number().int().positive().max(2147483647),
   dtVigenciaInicio: z.iso.date('Data invalida. Use aaaa-mm-dd.'),
   dtVigenciaFim: z.iso.date('Data invalida. Use aaaa-mm-dd.'),
-  cotaAutorizada: z.number().int().min(0),
+  cotaAutorizada: z.number().int().min(0).max(2147483647),
   situacao: z.enum(Object.values(SITUACAO_DO_PROJETO)),
 })
 
@@ -81,7 +81,7 @@ export const solicitacaoNova = z
       .max(120, 'O nome passa de 120 caracteres.'),
     /** so o formato: o pedido nao depende de projeto cadastrado */
     protocoloCeua: numeroCeua,
-    idLinhagem: z.number().int().positive(),
+    idLinhagem: z.number().int().positive().max(2147483647),
     machos: animais,
     femeas: animais,
     qualquer: animais,
@@ -92,7 +92,9 @@ export const solicitacaoNova = z
       .min(IDADE.minima, `A idade minima e ${IDADE.minima} dias.`)
       .max(IDADE.maxima, `A idade maxima e ${IDADE.maxima} dias.`),
     idadeMax: z.number().int().max(IDADE.maxima, `A idade maxima e ${IDADE.maxima} dias.`),
-    dataEntrega: z.iso.date('Data invalida. Use aaaa-mm-dd.'),
+    dataEntrega: z.iso
+      .date('Data invalida. Use aaaa-mm-dd.')
+      .refine((data) => data <= '2100-12-31', 'Use um ano ate 2100.'),
     /** vazia, ausente ou null (o que o GET devolve sem observacoes) vira null */
     observacoes: z
       .string()
@@ -132,9 +134,9 @@ const alocacao = z.object({
   itens: z
     .array(
       z.object({
-        idParto: z.number().int().positive(),
-        machos: z.number().int().min(0),
-        femeas: z.number().int().min(0),
+        idParto: z.number().int().positive().max(2147483647),
+        machos: animais,
+        femeas: animais,
       }),
     )
     .min(1, 'Escolha ao menos uma caixa.'),

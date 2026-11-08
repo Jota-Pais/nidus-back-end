@@ -17,13 +17,13 @@ import {
 export const estanteRoutes = Router()
 
 const idNaRota = z.object({
-  id: z.coerce.number().int().positive(),
+  id: z.coerce.number().int().positive().max(2147483647),
 })
 
 /** corpo do cadastro. 'capacidade' nao esta aqui, e por isso o Zod a descarta */
 export const estanteNova = z
   .object({
-    idSala: z.number().int().positive(),
+    idSala: z.number().int().positive().max(2147483647),
     fabricante: z.string().trim().min(1).max(60),
     modelo: z.string().trim().min(1).max(60),
     numeroVisivel: z.string().trim().min(1).max(30),
@@ -44,7 +44,7 @@ export const estanteNova = z
 export const alteracaoDeEstante = z
   .object({
     numeroVisivel: z.string().trim().min(1).max(30).optional(),
-    idSala: z.number().int().positive().optional(),
+    idSala: z.number().int().positive().max(2147483647).optional(),
   })
   .refine((dados) => dados.numeroVisivel !== undefined || dados.idSala !== undefined, {
     path: ['numeroVisivel'],

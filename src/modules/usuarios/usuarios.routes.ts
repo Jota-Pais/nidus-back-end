@@ -11,7 +11,7 @@ import {
 
 export const usuarioRoutes = Router()
 
-const idNaRota = z.object({ id: z.coerce.number().int().positive() })
+const idNaRota = z.object({ id: z.coerce.number().int().positive().max(2147483647) })
 
 export const usuarioNovo = z.object({
   nome: z.string().trim().min(1).max(120),
