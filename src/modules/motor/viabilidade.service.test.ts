@@ -38,6 +38,7 @@ const caixa = (id: number, nascimento: string) => ({
           desmamadoM: 4,
           desmamadoF: 4,
           compromissos: [],
+          lotes: [],
         },
       ],
     },

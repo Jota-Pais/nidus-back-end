@@ -87,19 +87,44 @@ export function naCaixaDoCasal(
 export type Retirada = { idCaixa: number | null; qtd: number }
 
 /**
- * Em que lugar estao os animais de cada reserva a entregar do parto, num sexo. A ordem e a da
- * retirada: primeiro o que sobrou na caixa do casal, que assim fica livre para o parto seguinte,
- * depois as caixas de estoque, da que recebeu primeiro; e a reserva mais antiga primeiro. A
- * reserva que passa do que existe fica com menos retirada (e a falta na reserva, ou o parto que
- * ainda nao nasceu)
+ * Os lugares dos animais do parto num sexo, na ordem da retirada: primeiro o que sobrou na caixa
+ * do casal, que assim fica livre para o parto seguinte, depois as caixas de estoque, da que
+ * recebeu primeiro
  */
-export function reservasNosLugares(parto: PartoComLugares, sexo: Sexo): Map<number, Retirada[]> {
-  const lugares = [
-    { idCaixa: null as number | null, qtd: deSexo(sexo, naCaixaDoCasal(parto)) },
+function lugaresDoParto(parto: PartoComLugares, sexo: Sexo): Retirada[] {
+  return [
+    { idCaixa: null, qtd: deSexo(sexo, naCaixaDoCasal(parto)) },
     ...parto.lotes
       .filter((lote) => lote.caixa.sexo === sexo && lote.qtd > 0)
-      .map((lote) => ({ idCaixa: lote.idCaixa as number | null, qtd: lote.qtd })),
+      .map((lote) => ({ idCaixa: lote.idCaixa, qtd: lote.qtd })),
   ]
+}
+
+/**
+ * Em que lugar estao os animais de cada reserva a entregar do parto, num sexo, na ordem da
+ * retirada e a reserva mais antiga primeiro. A reserva que passa do que existe fica com menos
+ * retirada (e a falta na reserva, ou o parto que ainda nao nasceu)
+ */
+export function reservasNosLugares(parto: PartoComLugares, sexo: Sexo): Map<number, Retirada[]> {
+  return tirarAsReservas(parto, sexo, lugaresDoParto(parto, sexo))
+}
+
+/**
+ * Onde estao os animais livres do parto num sexo: o que sobra em cada lugar depois das reservas a
+ * entregar, tiradas na mesma ordem. E o que a busca de atendimento oferece
+ */
+export function livresNosLugares(parto: PartoComLugares, sexo: Sexo): Retirada[] {
+  const lugares = lugaresDoParto(parto, sexo)
+  tirarAsReservas(parto, sexo, lugares)
+  return lugares.filter((lugar) => lugar.qtd > 0)
+}
+
+/** Tira dos lugares as reservas a entregar do parto, e diz de onde saiu cada uma */
+function tirarAsReservas(
+  parto: PartoComLugares,
+  sexo: Sexo,
+  lugares: Retirada[],
+): Map<number, Retirada[]> {
   const porReserva = new Map<number, Retirada[]>()
 
   for (const reserva of parto.compromissos) {

@@ -10,12 +10,11 @@ import {
 import { prisma } from '../../shared/prisma.ts'
 import { dataISO, estadoCaixa, hojeISO } from '../../shared/traducao.ts'
 import { codigoDaPosicao } from '../infra/endereco.ts'
+import { SEXOS, livresNosLugares, selecaoDoPartoComLugares } from '../infra/estoque.ts'
+import type { LoteDoParto, PartoComLugares } from '../infra/estoque.ts'
 import { idDaEspecie } from '../infra/infra.service.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
-import {
-  compromissosAtivos,
-  disponibilidadeDoParto,
-} from '../reproducao/disponibilidade.ts'
+import { disponibilidadeDoParto } from '../reproducao/disponibilidade.ts'
 import { casaisParaODeficit, faixaDoPedido, ordenar, sugerirAlocacao } from './motor.ts'
 import type { Origem } from './motor.ts'
 import { caixaComEstoque } from '../infra/liberacaoDaCaixa.ts'
@@ -43,6 +42,67 @@ export function diasEntre(de: string, ate: string): number {
 /** O dia em que o animal ja esta desmamado: o desmame real ou, sem ele, nascimento + aleitamento */
 export function dataDoDesmame(nascimento: string, dtDesmameReal: Date | null): string {
   return dtDesmameReal ? dataISO(dtDesmameReal) : somarDias(nascimento, ALEITAMENTO_DIAS)
+}
+
+/** O que a busca le de uma caixa para escrever o codigo dela */
+const POSICAO = {
+  face: true,
+  linha: true,
+  coluna: true,
+  estante: { select: { numeroVisivel: true, colunas: true } },
+} as const
+
+type Posicao = {
+  face: number
+  linha: number
+  coluna: number
+  estante: { numeroVisivel: string; colunas: number }
+}
+
+/** Uma caixa com animais livres do parto: a do casal, ou uma de estoque */
+export type LugarDosLivres = {
+  codigo: string
+  numeroVisivel: string
+  tipo: 'casal' | 'estoque'
+  m: number
+  f: number
+}
+
+/** Os desmamados do parto numa caixa de estoque, com a posicao dela */
+type LoteComPosicao = LoteDoParto & { caixa: LoteDoParto['caixa'] & Posicao }
+
+/**
+ * Onde estao os animais livres do parto: o que sobrou na caixa do casal e as caixas de estoque
+ * para onde os desmamados passaram, com quantos de cada sexo, na ordem da retirada
+ */
+export function ondeEstaoOsLivres(
+  parto: Omit<PartoComLugares, 'lotes'> & { lotes: LoteComPosicao[] },
+  caixaDoCasal: Posicao,
+): LugarDosLivres[] {
+  const porCaixa = new Map<number | null, LugarDosLivres>()
+
+  for (const sexo of SEXOS) {
+    for (const { idCaixa, qtd } of livresNosLugares(parto, sexo)) {
+      const caixa =
+        idCaixa === null ? caixaDoCasal : parto.lotes.find((lote) => lote.idCaixa === idCaixa)?.caixa
+      if (caixa === undefined) continue
+
+      const lugar = porCaixa.get(idCaixa) ?? {
+        codigo: codigoDaPosicao(caixa.face, caixa.linha, caixa.coluna, caixa.estante.colunas),
+        numeroVisivel: caixa.estante.numeroVisivel,
+        tipo: idCaixa === null ? 'casal' : 'estoque',
+        m: 0,
+        f: 0,
+      }
+      porCaixa.set(idCaixa, { ...lugar, [sexo === 'M' ? 'm' : 'f']: qtd })
+    }
+  }
+
+  // na ordem da retirada: a caixa do casal, depois as de estoque, da que recebeu primeiro
+  return [null, ...parto.lotes.map((lote) => lote.idCaixa)].flatMap((idCaixa) => {
+    const lugar = porCaixa.get(idCaixa)
+    return lugar === undefined ? [] : [lugar]
+  })
 }
 
 /** GET /api/busca */
@@ -74,17 +134,20 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
           partos: {
             orderBy: { ordem: 'asc' },
             select: {
-              id: true,
+              ...selecaoDoPartoComLugares,
               ordem: true,
               dtPartoReal: true,
               dtDesmameReal: true,
-              nascidoM: true,
-              nascidoF: true,
-              eutanasiadoM: true,
-              eutanasiadoF: true,
-              desmamadoM: true,
-              desmamadoF: true,
-              compromissos: compromissosAtivos,
+              // as caixas de estoque com os desmamados, para dizer onde estao os livres
+              lotes: {
+                orderBy: { id: 'asc' },
+                select: {
+                  id: true,
+                  idCaixa: true,
+                  qtd: true,
+                  caixa: { select: { sexo: true, ...POSICAO } },
+                },
+              },
             },
           },
         },
@@ -125,6 +188,7 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
             nascimento,
             idadeNaEntrega,
             disponivel,
+            onde: ondeEstaoOsLivres(parto, caixa),
           },
         ]
       }),

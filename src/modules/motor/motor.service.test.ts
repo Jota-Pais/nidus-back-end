@@ -46,7 +46,8 @@ const caixa = (id: number, idade: number, { ativo = true, nasceu = true } = {}) 
           eutanasiadoF: 1,
           desmamadoM: 4,
           desmamadoF: 4,
-          compromissos: [],
+          compromissos: [] as unknown[],
+          lotes: [] as unknown[],
           ...(nasceu ? {} : NAO_NASCEU),
         },
       ],
@@ -101,6 +102,46 @@ describe('so o que ja nasceu entra na busca', () => {
     const busca = await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
 
     expect(busca.candidatas).toEqual([])
+  })
+})
+
+describe('onde estao os livres', () => {
+  it('na caixa do casal, enquanto nao passaram para o estoque', async () => {
+    banco.caixas = [caixa(1, 30)]
+
+    const busca = await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
+
+    expect(busca.candidatas[0]?.onde).toEqual([
+      { codigo: 'F1A', numeroVisivel: '1', tipo: 'casal', m: 4, f: 4 },
+    ])
+  })
+
+  it('nas caixas de estoque, sem a reserva de outro pedido, e o que sobrou na do casal', async () => {
+    const estoque = (idCaixa: number, coluna: number, sexo: string, qtd: number) => ({
+      id: idCaixa,
+      idCaixa,
+      qtd,
+      caixa: { sexo, face: 1, linha: 2, coluna, estante: { numeroVisivel: '1', colunas: 12 } },
+    })
+    const comEstoque = caixa(1, 30)
+    const parto = comEstoque.casais[0]?.partos[0]
+    if (parto === undefined) throw new Error('sem parto')
+    // os 4 machos foram para a F2A e 3 das femeas para a F2B; 1 femea ficou na caixa do casal
+    parto.lotes = [estoque(20, 1, 'M', 4), estoque(21, 2, 'F', 3)]
+    // e outro pedido ja reservou 1 macho, que sai da F2A
+    parto.compromissos = [
+      { id: 9, qtdM: 1, qtdF: 0, remessa: { idSolicitacao: 7, dtRealizada: null } },
+    ]
+    banco.caixas = [comEstoque]
+
+    const busca = await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
+
+    expect(busca.candidatas[0]?.disponivel).toEqual({ m: 3, f: 4 })
+    expect(busca.candidatas[0]?.onde).toEqual([
+      { codigo: 'F1A', numeroVisivel: '1', tipo: 'casal', m: 0, f: 1 },
+      { codigo: 'F2A', numeroVisivel: '1', tipo: 'estoque', m: 3, f: 0 },
+      { codigo: 'F2B', numeroVisivel: '1', tipo: 'estoque', m: 0, f: 3 },
+    ])
   })
 })
 
