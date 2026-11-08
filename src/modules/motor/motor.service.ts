@@ -133,14 +133,20 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
   })
 
   // ultima alternativa: acasalamento novo. A entrega precisa caber em hoje + gestacao + idade
-  // minima, a menor idade que o pedido aceita
+  // minima, a menor idade que o pedido aceita; ao contrario, o casal tem de ser formado ate a
+  // entrega - gestacao - idade minima
   const dataMinima = somarDias(hoje, GESTACAO_DIAS + pedido.idadeMin)
+  const acasalarAte = somarDias(referencia, -(GESTACAO_DIAS + pedido.idadeMin))
 
   return {
     faixa,
     candidatas: itens,
     deficit,
     casaisAFormar: casaisParaODeficit(deficit),
-    acasalamentoNovo: { dataMinimaDeEntrega: dataMinima, viavel: referencia >= dataMinima },
+    acasalamentoNovo: {
+      dataMinimaDeEntrega: dataMinima,
+      acasalarAte,
+      viavel: referencia >= dataMinima,
+    },
   }
 }

@@ -123,7 +123,25 @@ describe('deficit e acasalamento novo', () => {
 
     const busca = await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
 
-    // 30/10 + 23 + 21 dias. Com a idade maxima seria 01/01/2027, depois da entrega
-    expect(busca.acasalamentoNovo).toEqual({ dataMinimaDeEntrega: '2026-12-13', viavel: true })
+    // 30/10 + 23 + 21 dias. Com a idade maxima seria 01/01/2027, depois da entrega. O casal tem
+    // de ser formado ate 31/12 - 23 - 21 dias
+    expect(busca.acasalamentoNovo).toEqual({
+      dataMinimaDeEntrega: '2026-12-13',
+      acasalarAte: '2026-11-17',
+      viavel: true,
+    })
+  })
+
+  it('com a data de formar o casal ja passada, o acasalamento novo nao e viavel', async () => {
+    banco.caixas = []
+
+    const busca = await buscarAtendimento(
+      { ...pedido, idadeMin: 21, idadeMax: 21, dataEntrega: '2026-12-01' },
+      agora,
+    )
+
+    // 01/12 - 44 dias = 18/10, antes de hoje (30/10)
+    expect(busca.acasalamentoNovo.acasalarAte).toBe('2026-10-18')
+    expect(busca.acasalamentoNovo.viavel).toBe(false)
   })
 })
