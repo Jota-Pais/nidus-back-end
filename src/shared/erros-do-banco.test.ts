@@ -25,22 +25,29 @@ const unique = (indice: string, tabela: string) => ({
   },
 })
 
-/** Violacao de CHECK: nome da constraint so dentro da mensagem. */
-const check = (constraint: string, tabela: string) => ({
-  name: 'PrismaClientKnownRequestError',
-  code: 'P2010',
-  meta: {
-    driverAdapterError: {
-      name: 'DriverAdapterError',
-      cause: {
-        originalCode: '23514',
-        originalMessage: `new row for relation "${tabela}" violates check constraint "${constraint}"`,
-        kind: 'postgres',
-        code: '23514',
+/** Violacao de CHECK num update ou create do Prisma: nome da constraint so dentro da mensagem */
+const check = (constraint: string, tabela: string) => {
+  const mensagem = `new row for relation "${tabela}" violates check constraint "${constraint}"`
+
+  return {
+    name: 'PrismaClientKnownRequestError',
+    code: 'P2039',
+    meta: {
+      modelName: tabela,
+      driverAdapterError: {
+        name: 'DriverAdapterError',
+        cause: {
+          originalCode: '23514',
+          originalMessage: mensagem,
+          kind: 'postgres',
+          code: '23514',
+          severity: 'ERROR',
+          message: mensagem,
+        },
       },
     },
-  },
-})
+  }
+}
 
 /** violacao de FK: nome da constraint so dentro da mensagem, como no CHECK. */
 const fk = (constraint: string, tabela: string) => ({
@@ -59,11 +66,12 @@ const fk = (constraint: string, tabela: string) => ({
   },
 })
 
-/** 'RAISE EXCEPTION' de trigger nosso: a mensagem e texto que escrevemos */
-const trigger = (mensagem: string) => ({
+/** 'RAISE EXCEPTION' de trigger nosso: a mensagem e texto que escrevemos, com o prefixo */
+const trigger = (mensagem: string, modelo = 'Animal') => ({
   name: 'PrismaClientKnownRequestError',
   code: 'P2039',
   meta: {
+    modelName: modelo,
     driverAdapterError: {
       name: 'DriverAdapterError',
       cause: {
@@ -75,31 +83,41 @@ const trigger = (mensagem: string) => ({
         message: mensagem,
       },
     },
-    modelName: 'Compromisso',
   },
 })
 
-describe('invariante do banco vira 409', () => {
-  it('compromisso acima da oferta vira DISPONIBILIDADE_EXCEDIDA', () => {
-    // A invariante que o sistema existe para garantir.
-    const traduzido = traduzirErroDoBanco(
-      trigger('RN-09: o parto 8 oferta 4 machos e ja teria 6 comprometidos'),
-    )
+describe('trigger do banco vira 409 com o codigo do prefixo', () => {
+  // Uma mensagem real de cada prefixo dos tres triggers
+  it.each([
+    ['TOPOLOGIA', 'TOPOLOGIA: a posicao face 1 linha 99 coluna 1 nao existe na estante 4 (2 faces, 8 linhas, 8 colunas)', 'Caixa'],
+    ['ANIMAL_ORIGEM', 'ANIMAL_ORIGEM: o parto 3 ainda nao nasceu', 'Animal'],
+    ['ANIMAL_SITUACAO', 'ANIMAL_SITUACAO: o animal 21 ja esta entregue, e isso nao muda mais', 'Animal'],
+    ['ANIMAL_CAIXA', 'ANIMAL_CAIXA: a caixa de estoque F2A guarda machos Swiss, e este animal e femea Swiss', 'Animal'],
+    ['PEDIDO_RESERVA', 'PEDIDO_RESERVA: o pedido 2 esta entregue, e so pedido aprovado ou reservado recebe animais', 'Animal'],
+    ['PEDIDO_EXCEDIDO', 'PEDIDO_EXCEDIDO: o pedido 1 pede 0 machos, 0 femeas e 12 de qualquer sexo, e ficaria com 10 machos e 3 femeas', 'Animal'],
+    ['PEDIDO_INCOMPLETO', 'PEDIDO_INCOMPLETO: o pedido 1 pede 0 machos, 0 femeas e 12 de qualquer sexo, e tem 0 machos e 0 femeas reservados', 'Pedido'],
+    ['PEDIDO_COM_RESERVA', 'PEDIDO_COM_RESERVA: o pedido 1 ainda tem 12 animais reservados: desfaca a reserva antes', 'Pedido'],
+  ])('%s', (codigo, mensagem, modelo) => {
+    const traduzido = traduzirErroDoBanco(trigger(mensagem, modelo))
 
     expect(traduzido?.status).toBe(409)
-    expect(traduzido?.codigo).toBe('DISPONIBILIDADE_EXCEDIDA')
+    expect(traduzido?.codigo).toBe(codigo)
   })
 
   it('preserva a mensagem do trigger, que traz os numeros do caso, sem o prefixo', () => {
-    // O banco explica melhor que qualquer texto generico: diz o parto, a oferta e o
-    // total que ficaria. E mensagem para exibir ao usuario
+    // O banco explica melhor que qualquer texto generico: diz o pedido, o que ele pede e com
+    // quanto ficaria. E mensagem para exibir ao usuario
     const traduzido = traduzirErroDoBanco(
-      trigger('RN-09: o parto 8 oferta 4 machos e ja teria 6 comprometidos'),
+      trigger('PEDIDO_EXCEDIDO: o pedido 1 pede 0 machos, 0 femeas e 12 de qualquer sexo, e ficaria com 10 machos e 3 femeas'),
     )
 
-    expect(traduzido?.message).toBe('O parto 8 oferta 4 machos e ja teria 6 comprometidos')
+    expect(traduzido?.message).toBe(
+      'O pedido 1 pede 0 machos, 0 femeas e 12 de qualquer sexo, e ficaria com 10 machos e 3 femeas',
+    )
   })
+})
 
+describe('constraint do banco vira 409', () => {
   it('duas caixas na mesma posicao vira POSICAO_OCUPADA', () => {
     const traduzido = traduzirErroDoBanco(unique('caixa_uma_por_posicao', 'caixa'))
 
@@ -121,10 +139,30 @@ describe('invariante do banco vira 409', () => {
     expect(traduzido?.message).toBe('Este parto ja foi aberto por outro registro de acasalamento. Atualize a ficha.')
   })
 
+  it('a mesma baixa anulada duas vezes (duplo clique em Anular) vira OCORRENCIA_JA_ANULADA', () => {
+    const traduzido = traduzirErroDoBanco(unique('ocorrencia_id_anulada_key', 'ocorrencia'))
+
+    expect(traduzido?.status).toBe(409)
+    expect(traduzido?.codigo).toBe('OCORRENCIA_JA_ANULADA')
+  })
+
   it('sexto parto vira LIMITE_PARTOS_ATINGIDO', () => {
     const traduzido = traduzirErroDoBanco(check('parto_ordem_ciclo', 'parto'))
 
     expect(traduzido?.codigo).toBe('LIMITE_PARTOS_ATINGIDO')
+  })
+
+  it.each([
+    ['parto_datas_em_ordem', 'parto'],
+    ['casal_encerra_depois_de_formar', 'casal'],
+    ['animal_sai_depois_de_chegar', 'animal'],
+  ])('data fora da ordem (%s) vira DATA_FORA_DA_ORDEM, com texto para o usuario', (constraint, tabela) => {
+    // Rede de seguranca: o zod e os servicos conferem antes, com a mensagem no campo
+    const traduzido = traduzirErroDoBanco(check(constraint, tabela))
+
+    expect(traduzido?.status).toBe(409)
+    expect(traduzido?.codigo).toBe('DATA_FORA_DA_ORDEM')
+    expect(traduzido?.message).not.toMatch(/violates/)
   })
 
   it('FK composta recusada vira PAR_GENETICO_INVALIDO (rede de seguranca)', () => {
@@ -151,6 +189,20 @@ describe('o que NAO deve virar 409', () => {
     // esconderia o bug atras de uma mensagem amigavel.
     expect(traduzirErroDoBanco(check('constraint_que_ninguem_mapeou', 'caixa'))).toBeUndefined()
     expect(traduzirErroDoBanco(unique('indice_novo_qualquer', 'caixa'))).toBeUndefined()
+  })
+
+  it('CHECK de dominio continua caindo em 500', () => {
+    // O zod das rotas nunca deixa chegar uma situacao, um tipo ou um status fora do dominio:
+    // se chegar, e bug do codigo, nao regra que o usuario possa corrigir
+    expect(traduzirErroDoBanco(check('animal_situacao_dominio', 'animal'))).toBeUndefined()
+    expect(traduzirErroDoBanco(check('pedido_status_dominio', 'pedido'))).toBeUndefined()
+    expect(traduzirErroDoBanco(check('caixa_liberacao_coerente', 'caixa'))).toBeUndefined()
+  })
+
+  it('prefixo de trigger que ninguem mapeou continua caindo em 500', () => {
+    // Inclusive o RN-09 do trigger da oferta, que saiu com o modelo por caixa
+    expect(traduzirErroDoBanco(trigger('RN-09: o parto 8 oferta 4 machos e ja teria 6 comprometidos'))).toBeUndefined()
+    expect(traduzirErroDoBanco(trigger('PREFIXO_NOVO: algo que ninguem traduziu'))).toBeUndefined()
   })
 
   it('FK sem constraint mapeada continua sem traducao', () => {

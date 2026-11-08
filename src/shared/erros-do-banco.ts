@@ -29,8 +29,11 @@ type Traducao = {
   mensagem: string
 }
 
-/** As invariantes que o banco cobra, com o codigo de erro da API de cada uma. */
-const POR_INVARIANTE: Record<string, Traducao> = {
+/**
+ * As constraints que o banco cobra, com o codigo de erro da API de cada uma. O Postgres so da o
+ * nome da constraint, entao a mensagem para o usuario e esta
+ */
+const POR_CONSTRAINT: Record<string, Traducao> = {
   // unicidade parcial
   caixa_uma_por_posicao: {
     codigo: 'POSICAO_OCUPADA',
@@ -45,16 +48,30 @@ const POR_INVARIANTE: Record<string, Traducao> = {
     codigo: 'SEQUENCIA_INVALIDA',
     mensagem: 'Este parto ja foi aberto por outro registro de acasalamento. Atualize a ficha.',
   },
+  // uma baixa so se anula uma vez: o duplo clique em Anular cai aqui
+  ocorrencia_id_anulada_key: {
+    codigo: 'OCORRENCIA_JA_ANULADA',
+    mensagem: 'Esta baixa ja foi anulada. Atualize a ficha.',
+  },
   // CHECK
   parto_ordem_ciclo: {
     codigo: 'LIMITE_PARTOS_ATINGIDO',
     mensagem: 'O casal ja atingiu o limite de 5 partos.',
   },
-  // trigger de disponibilidade, a invariante que o sistema existe para garantir. O RAISE nao
-  // informa o nome do trigger, entao a chave e o prefixo que ele poe na mensagem
-  'RN-09': {
-    codigo: 'DISPONIBILIDADE_EXCEDIDA',
-    mensagem: 'A ninhada nao tem animais suficientes para este compromisso.',
+  // CHECKs de data. O zod das rotas e os servicos conferem antes, com a mensagem no campo; estes
+  // sao a rede de seguranca
+  parto_datas_em_ordem: {
+    codigo: 'DATA_FORA_DA_ORDEM',
+    mensagem:
+      'As datas do parto ficariam fora de ordem: o nascimento vem depois do acasalamento e o desmame depois do nascimento (o mesmo dia vale).',
+  },
+  casal_encerra_depois_de_formar: {
+    codigo: 'DATA_FORA_DA_ORDEM',
+    mensagem: 'O encerramento do casal nao pode ser antes da formacao.',
+  },
+  animal_sai_depois_de_chegar: {
+    codigo: 'DATA_FORA_DA_ORDEM',
+    mensagem: 'A data e anterior a chegada dos animais nesta caixa.',
   },
   // FK composta do par genetico. Rede de seguranca: a mensagem rica vem da pre-validacao em
   // 'reproducao.service.ts'
@@ -76,14 +93,33 @@ const POR_INVARIANTE: Record<string, Traducao> = {
   },
 }
 
+/**
+ * Os prefixos que os tres triggers poem no RAISE ('ANIMAL_CAIXA: a caixa F2A ...'), com o codigo
+ * de erro da API de cada um. O RAISE nao informa o nome do trigger, entao a chave e o prefixo; a
+ * mensagem e o proprio texto do trigger, que ja e em portugues e traz os numeros do caso
+ */
+const POR_PREFIXO: Record<string, CodigoErro> = {
+  // infra.caixa_dentro_da_topologia: a posicao nao cabe na estante
+  TOPOLOGIA: 'TOPOLOGIA',
+  // colonia.animal_coerente
+  ANIMAL_ORIGEM: 'ANIMAL_ORIGEM',
+  ANIMAL_SITUACAO: 'ANIMAL_SITUACAO',
+  ANIMAL_CAIXA: 'ANIMAL_CAIXA',
+  PEDIDO_RESERVA: 'PEDIDO_RESERVA',
+  PEDIDO_EXCEDIDO: 'PEDIDO_EXCEDIDO',
+  // demanda.pedido_coerente
+  PEDIDO_INCOMPLETO: 'PEDIDO_INCOMPLETO',
+  PEDIDO_COM_RESERVA: 'PEDIDO_COM_RESERVA',
+}
+
 /** Acha o nome da constraint dentro da mensagem do Postgres */
 function constraintNaMensagem(mensagem: string): string | undefined {
   return /violates (?:check|unique|foreign key) constraint "([^"]+)"/.exec(mensagem)?.[1]
 }
 
-/** Acha o prefixo ('RN-09') de uma mensagem levantada por trigger nosso */
+/** Acha o prefixo ('ANIMAL_CAIXA') de uma mensagem levantada por trigger nosso */
 function prefixoDoTrigger(mensagem: string): string | undefined {
-  return /^(R[NF]-[A-Z]*-?\d+):/.exec(mensagem)?.[1]
+  return /^([A-Z][A-Z_]+):/.exec(mensagem)?.[1]
 }
 
 /** O texto do trigger sem o prefixo, que nao diz nada ao usuario */
@@ -117,20 +153,20 @@ export function traduzirErroDoBanco(erro: unknown): ErroDeAplicacao | undefined 
   const mensagemDoBanco = causa.originalMessage ?? ''
   const prefixo = prefixoDoTrigger(mensagemDoBanco)
 
-  const chave = causa.constraint?.index ?? constraintNaMensagem(mensagemDoBanco) ?? prefixo
+  if (prefixo !== undefined) {
+    const codigo = POR_PREFIXO[prefixo]
 
-  const traducao = chave === undefined ? undefined : POR_INVARIANTE[chave]
-
-  if (traducao === undefined) {
-    return undefined
+    return codigo === undefined
+      ? undefined
+      : new ErroDeAplicacao(409, codigo, semPrefixo(mensagemDoBanco, prefixo))
   }
 
-  // Mensagem levantada por trigger nosso ja e em portugues e traz os numeros do caso;
-  // mensagem gerada pelo Postgres ("duplicate key value violates...") e para log, nao para
-  // usuario
-  return new ErroDeAplicacao(
-    409,
-    traducao.codigo,
-    prefixo === undefined ? traducao.mensagem : semPrefixo(mensagemDoBanco, prefixo),
-  )
+  // Mensagem gerada pelo Postgres ("duplicate key value violates...") e para log, nao para
+  // usuario: o texto vem da tabela
+  const chave = causa.constraint?.index ?? constraintNaMensagem(mensagemDoBanco)
+  const traducao = chave === undefined ? undefined : POR_CONSTRAINT[chave]
+
+  return traducao === undefined
+    ? undefined
+    : new ErroDeAplicacao(409, traducao.codigo, traducao.mensagem)
 }
