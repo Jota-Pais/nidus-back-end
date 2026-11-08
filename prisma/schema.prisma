@@ -8,8 +8,10 @@
 // migration nova aplicada nele; comentario nao gera migration.
 //
 // Nomes do banco via @map/@@map: um schema por modulo, tabela snake_case no
-// singular, FK `id_<tabela>`, datas com `dt_`, codigos em char com CHECK (sem
-// enum do Prisma) e NO ACTION em toda FK, porque registro nao se apaga.
+// singular, FK `id_<tabela>`, datas com `dt_`, dominios fechados por CHECK (sem
+// enum do Prisma) e NO ACTION em toda FK, porque registro nao se apaga. Dominio
+// novo ou reescrito guarda a palavra (vivo, entregue, estoque); a letra so ficou
+// onde o dominio nao mudou (sexo M/F, perfil, situacao do projeto).
 
 generator client {
   provider = "prisma-client-js"
@@ -17,7 +19,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  schemas  = ["infra", "catalogo", "reproducao", "login", "etica", "demanda", "auditoria"]
+  schemas  = ["infra", "catalogo", "reproducao", "colonia", "login", "etica", "demanda", "auditoria"]
 }
 
 // ---------------------------------------------------------------- infra
@@ -62,9 +64,10 @@ model Estante {
   @@schema("infra")
 }
 
-/// A gaiola que ocupa uma posicao. Nao existe tabela `slot`: o endereco vive na
-/// propria caixa e a grade vazia se gera em codigo a partir da topologia da
-/// estante.
+/// A gaiola que ocupa uma posicao: so o lugar. Os animais apontam para ela
+/// (colonia.animal.id_caixa), e o que ela tem e sempre contado, nunca gravado.
+/// Nao existe tabela `slot`: o endereco vive na propria caixa e a grade vazia se
+/// gera em codigo a partir da topologia da estante.
 model Caixa {
   id        Int @id @default(autoincrement())
   idEstante Int @map("id_estante")
@@ -72,52 +75,40 @@ model Caixa {
   face      Int @db.SmallInt
   linha     Int @db.SmallInt
   coluna    Int @db.SmallInt
-  /// Endereco legivel (ex.: F1A), gerado por `codigoDaPosicao`.
-  codigo    String @db.VarChar(20)
+  /// Endereco legivel (ex.: F1A). Quem escreve e o trigger da posicao
+  /// (infra.caixa_dentro_da_topologia), com a mesma formula de `codigoDaPosicao`.
+  codigo    String @default("") @db.VarChar(20)
   /// A segregacao por especie e aplicada no servidor.
   idEspecie Int @map("id_especie")
-  /// Coluna do Kanban. A caixa de casal so alterna R livres e P pre-reserva; a de
-  /// estoque fica em E enquanto tem animal (Estoque ou Reserva sai das reservas, na
-  /// leitura) e vai para X enviado quando a entrega a esvazia
-  estado     String @default("R") @db.Char(1)
-  /// C caixa de casal | E caixa de estoque, com os desmamados de um sexo e uma
-  /// linhagem. Qualquer posicao vazia vira uma ou outra
-  tipo       String  @default("C") @db.Char(1)
-  /// So na caixa de estoque: M ou F
-  sexo       String? @db.Char(1)
-  ativa      Boolean   @default(true)
+  /// casal | estoque. Qualquer posicao vazia vira uma ou outra, e a caixa do casal
+  /// encerrado pode virar de estoque no lugar.
+  tipo      String  @default("casal") @db.VarChar(10)
+  /// So na caixa de estoque, e ela sempre tem: M ou F
+  sexo      String? @db.Char(1)
+  /// So na caixa de estoque, e ela sempre tem. A especie dela e conferida pelo
+  /// trigger dos animais.
+  idLinhagem Int?   @map("id_linhagem")
+  ativa      Boolean @default(true)
+  /// Data do fato que esvaziou a caixa (a entrega, a baixa, a mudanca), nao o
+  /// relogio do servidor. Nula enquanto ativa.
+  dtLiberacao     DateTime? @map("dt_liberacao") @db.Date
+  /// entrega | baixa | mudanca | casal_encerrado
+  motivoLiberacao String?   @map("motivo_liberacao") @db.VarChar(20)
   dtCriacao    DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
   dtManutencao DateTime? @map("dt_manutencao") @db.Timestamptz(6)
 
-  estante Estante @relation(fields: [idEstante], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  especie Especie @relation(fields: [idEspecie], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  casais  Casal[]
-  /// Na caixa de estoque, de quais partos vieram os animais
-  lotes   Lote[]
+  estante  Estante   @relation(fields: [idEstante], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  especie  Especie   @relation(fields: [idEspecie], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  linhagem Linhagem? @relation(fields: [idLinhagem], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  casais   Casal[]
+  /// Os vivos que estao nela e os que sairam dela (mortos e entregues ficam onde
+  /// estavam quando sairam)
+  animais  Animal[]
+  ocorrenciasDeOrigem  Ocorrencia[] @relation("OrigemDaOcorrencia")
+  ocorrenciasDeDestino Ocorrencia[] @relation("DestinoDaOcorrencia")
 
   @@index([idEstante, face])
-  @@index([estado, idEspecie])
   @@map("caixa")
-  @@schema("infra")
-}
-
-/// Os desmamados de um parto que estao numa caixa de estoque, no sexo da caixa.
-/// `qtd` e o que esta la agora: a entrega desconta. O resto do parto que nao foi
-/// entregue continua na caixa do casal. A reserva segue no parto (demanda.compromisso)
-model Lote {
-  id           Int       @id @default(autoincrement())
-  idCaixa      Int       @map("id_caixa")
-  idParto      Int       @map("id_parto")
-  qtd          Int       @db.SmallInt
-  dtCriacao    DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
-  dtManutencao DateTime? @map("dt_manutencao") @db.Timestamptz(6)
-
-  caixa Caixa @relation(fields: [idCaixa], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  parto Parto @relation(fields: [idParto], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@unique([idCaixa, idParto])
-  @@index([idParto])
-  @@map("lote")
   @@schema("infra")
 }
 
@@ -128,9 +119,9 @@ model Especie {
   /// Rato | Camundongo
   nome           String @db.VarChar(40)
 
-  linhagens     Linhagem[]
-  caixas        Caixa[]
-  solicitacoes  Solicitacao[]
+  linhagens Linhagem[]
+  caixas    Caixa[]
+  pedidos   Pedido[]
 
   @@unique([nome])
   @@map("especie")
@@ -146,8 +137,10 @@ model Linhagem {
   ativa     Boolean @default(true)
 
   especie Especie @relation(fields: [idEspecie], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  casais       Casal[]
-  solicitacoes Solicitacao[]
+  casais  Casal[]
+  pedidos Pedido[]
+  /// As caixas de estoque desta linhagem
+  caixas  Caixa[]
 
   /// Alvo da FK composta (id_especie, id_linhagem) que entra por SQL.
   @@unique([idEspecie, id])
@@ -174,7 +167,8 @@ model GrupoGeneticoPar {
 // ------------------------------------------------------------ reproducao
 
 /// Maximo um casal ATIVO por caixa (unique parcial, na migration SQL).
-/// Encerra no 5o parto confirmado.
+/// Encerra no 5o parto confirmado. `ativo` vale se e somente se nao ha
+/// `dtEncerramento` (CHECK casal_ativo_coerente).
 model Casal {
   id         Int    @id @default(autoincrement())
   idCaixa    Int    @map("id_caixa")
@@ -204,42 +198,31 @@ model Casal {
   @@schema("reproducao")
 }
 
-/// A ficha de um ciclo. E onde o compromisso se ancora: a caixa tem ate 5 partos
-/// na vida do casal, entao pela caixa nao daria para saber qual ninhada foi
-/// prometida a quem.
+/// A ficha de um ciclo: as datas e quem as registrou. Quantos nasceram, morreram,
+/// desmamaram e foram entregues nao fica aqui: e contado nos animais do parto
+/// (colonia.animal), que tambem dao a idade, a linhagem e a especie de cada um.
+/// As datas previstas sao calculadas (src/modules/reproducao/cadeiaTemporal.ts).
 model Parto {
   id      Int @id @default(autoincrement())
   idCasal Int @map("id_casal")
   /// 1 a 5: o casal encerra no 5o parto.
   ordem   Int @db.SmallInt
 
-  /// Unica data digitada no ciclo 1. As previstas sao derivadas.
   dtAcasalamento   DateTime  @map("dt_acasalamento") @db.Date
-  dtPartoPrevisto  DateTime  @map("dt_parto_previsto") @db.Date
-  /// Nulo ate confirmar. Confirmar recalcula toda a cadeia a frente.
+  /// Nulo ate o nascimento.
   dtPartoReal      DateTime? @map("dt_parto_real") @db.Date
-
-  nascidoM Int? @map("nascido_m") @db.SmallInt
-  nascidoF Int? @map("nascido_f") @db.SmallInt
-
-  /// Eutanasia de selecao. Sem limite imposto pelo sistema.
-  eutanasiadoM Int?      @map("eutanasiado_m") @db.SmallInt
-  eutanasiadoF Int?      @map("eutanasiado_f") @db.SmallInt
-  dtSelecao    DateTime? @map("dt_selecao") @db.Date
-
-  dtDesmamePrevisto DateTime  @map("dt_desmame_previsto") @db.Date
-  dtDesmameReal     DateTime? @map("dt_desmame_real") @db.Date
-  desmamadoM        Int?      @map("desmamado_m") @db.SmallInt
-  desmamadoF        Int?      @map("desmamado_f") @db.SmallInt
+  dtDesmameReal    DateTime? @map("dt_desmame_real") @db.Date
+  /// O acasalamento de casal encerrado que nao deu parto: fecha o ciclo sem
+  /// ninhada, para a caixa poder ser liberada.
+  dtSemNinhada     DateTime? @map("dt_sem_ninhada") @db.Date
+  motivoSemNinhada String?   @map("motivo_sem_ninhada") @db.VarChar(200)
 
   /// Quem registrou cada evento e quando, para a trilha da ficha. `dtRegistro*`
   /// e o carimbo da ACAO no sistema (para ordenar e diferenciar dois registros
-  /// no mesmo dia) - `dtPartoReal`/`dtSelecao`/`dtDesmameReal` continuam sendo a
-  /// data do fato biologico, decidida pelo usuario, nao pelo relogio do servidor.
+  /// no mesmo dia) - `dtPartoReal`/`dtDesmameReal` continuam sendo a data do fato
+  /// biologico, decidida pelo usuario, nao pelo relogio do servidor.
   idUsuarioParto    Int?      @map("id_usuario_parto")
   dtRegistroParto   DateTime? @map("dt_registro_parto") @db.Timestamptz(6)
-  idUsuarioSelecao  Int?      @map("id_usuario_selecao")
-  dtRegistroSelecao DateTime? @map("dt_registro_selecao") @db.Timestamptz(6)
   idUsuarioDesmame  Int?      @map("id_usuario_desmame")
   dtRegistroDesmame DateTime? @map("dt_registro_desmame") @db.Timestamptz(6)
 
@@ -248,15 +231,110 @@ model Parto {
 
   casal          Casal    @relation(fields: [idCasal], references: [id], onDelete: NoAction, onUpdate: NoAction)
   usuarioParto   Usuario? @relation("RegistrouParto", fields: [idUsuarioParto], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  usuarioSelecao Usuario? @relation("RegistrouSelecao", fields: [idUsuarioSelecao], references: [id], onDelete: NoAction, onUpdate: NoAction)
   usuarioDesmame Usuario? @relation("RegistrouDesmame", fields: [idUsuarioDesmame], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  compromissos   Compromisso[]
-  /// As caixas de estoque para onde foram os desmamados deste parto
-  lotes          Lote[]
+  /// A ninhada: cada animal que nasceu deste parto, onde quer que esteja
+  animais        Animal[]
+  ocorrencias    Ocorrencia[]
 
   @@unique([idCasal, ordem])
   @@map("parto")
   @@schema("reproducao")
+}
+
+// --------------------------------------------------------------- colonia
+
+/// Um animal. Anonimo: nenhum numero fisico, e dentro da caixa so a idade o
+/// distingue dos outros do mesmo sexo. Nascimento, linhagem e especie vem do
+/// parto, sem copia aqui.
+///
+/// Um lugar, uma situacao e no maximo um pedido por animal: sao colunas da
+/// propria linha. Mudar de caixa e trocar `idCaixa`, que nao cria nem some rato.
+/// O trigger colonia.animal_coerente cobra onde um vivo pode estar, as situacoes
+/// finais e o teto do pedido.
+model Animal {
+  id          Int       @id @default(autoincrement())
+  idParto     Int       @map("id_parto")
+  sexo        String    @db.Char(1)
+  /// Onde esta (vivo) ou onde estava quando saiu (morto, entregue, anulado)
+  idCaixa     Int       @map("id_caixa")
+  /// Quando chegou na caixa atual. Nulo: nunca mudou de caixa desde que nasceu
+  dtMovimento DateTime? @map("dt_movimento") @db.Date
+  /// vivo | morto (morte ou eutanasia, a selecao inclusive) | entregue |
+  /// anulado (registro de animal que nao existiu, na correcao da contagem)
+  situacao    String    @default("vivo") @db.VarChar(10)
+  /// Data da morte ou da entrega
+  dtSaida     DateTime? @map("dt_saida") @db.Date
+  /// vivo: reservado para | entregue: entregue a | morto e anulado: estava
+  /// reservado para (fica como registro)
+  idPedido    Int?      @map("id_pedido")
+
+  dtCriacao    DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
+  dtManutencao DateTime? @map("dt_manutencao") @db.Timestamptz(6)
+
+  parto       Parto              @relation(fields: [idParto], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  caixa       Caixa              @relation(fields: [idCaixa], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pedido      Pedido?            @relation(fields: [idPedido], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ocorrencias OcorrenciaAnimal[]
+
+  @@index([idCaixa, situacao])
+  @@index([idParto, sexo])
+  @@index([idPedido])
+  @@map("animal")
+  @@schema("colonia")
+}
+
+/// O que aconteceu com os animais: a trilha. Cada acao sobre animais grava uma
+/// ocorrencia ligada aos animais que tocou (ocorrencia_animal). O resto (pedido,
+/// casal, datas, posicao) continua em auditoria.historico.
+model Ocorrencia {
+  id             Int      @id @default(autoincrement())
+  /// nascimento | baixa (morte ou eutanasia, a selecao inclusive) | mudanca de
+  /// caixa | reserva | reserva_desfeita | entrega | correcao (da contagem ou do
+  /// sexo) | anulacao (de uma baixa)
+  tipo           String   @db.VarChar(20)
+  /// A data do fato, decidida pelo usuario
+  dtFato         DateTime @map("dt_fato") @db.Date
+  /// Nulo: o proprio sistema ou a conversao para este modelo
+  idUsuario      Int?     @map("id_usuario")
+  dtRegistro     DateTime @default(now()) @map("dt_registro") @db.Timestamptz(6)
+  idParto        Int?     @map("id_parto")
+  idCaixaOrigem  Int?     @map("id_caixa_origem")
+  idCaixaDestino Int?     @map("id_caixa_destino")
+  idPedido       Int?     @map("id_pedido")
+  /// So na anulacao: a ocorrencia anulada. Cada uma e anulada uma vez so
+  idAnulada      Int?     @unique @map("id_anulada")
+  motivo         String?  @db.VarChar(200)
+
+  usuario      Usuario?           @relation(fields: [idUsuario], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  parto        Parto?             @relation(fields: [idParto], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  caixaOrigem  Caixa?             @relation("OrigemDaOcorrencia", fields: [idCaixaOrigem], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  caixaDestino Caixa?             @relation("DestinoDaOcorrencia", fields: [idCaixaDestino], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pedido       Pedido?            @relation(fields: [idPedido], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  anulada      Ocorrencia?        @relation("Anulacao", fields: [idAnulada], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  anulacao     Ocorrencia?        @relation("Anulacao")
+  animais      OcorrenciaAnimal[]
+
+  @@index([idParto])
+  @@index([idCaixaOrigem])
+  @@index([idCaixaDestino])
+  @@index([idPedido])
+  @@index([dtFato])
+  @@map("ocorrencia")
+  @@schema("colonia")
+}
+
+/// Os animais que uma ocorrencia tocou
+model OcorrenciaAnimal {
+  idOcorrencia Int @map("id_ocorrencia")
+  idAnimal     Int @map("id_animal")
+
+  ocorrencia Ocorrencia @relation(fields: [idOcorrencia], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  animal     Animal     @relation(fields: [idAnimal], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([idOcorrencia, idAnimal])
+  @@index([idAnimal])
+  @@map("ocorrencia_animal")
+  @@schema("colonia")
 }
 
 // ---------------------------------------------------------------- login
@@ -276,11 +354,10 @@ model Usuario {
   dtCriacao DateTime @default(now()) @map("dt_criacao") @db.Timestamptz(6)
 
   projetosResponsavel Projeto[]
-  solicitacoes        Solicitacao[]
-  compromissos        Compromisso[]
-  partosRegistrados   Parto[]       @relation("RegistrouParto")
-  selecoesRegistradas Parto[]       @relation("RegistrouSelecao")
-  desmamesRegistrados Parto[]       @relation("RegistrouDesmame")
+  pedidos             Pedido[]
+  partosRegistrados   Parto[]      @relation("RegistrouParto")
+  desmamesRegistrados Parto[]      @relation("RegistrouDesmame")
+  ocorrencias         Ocorrencia[]
   historico           Historico[]
 
   @@map("usuario")
@@ -328,8 +405,8 @@ model CodigoAcesso {
 
 // ----------------------------------------------------------------- etica
 
-/// Cota de etica e limite rigido. Nenhuma aprovacao alem do saldo nem
-/// com projeto fora de vigencia.
+/// Projeto aprovado na CEUA. A cota fica so cadastrada: o cliente respondeu em
+/// 20/09/2026 que ela e a liberacao do projeto, nao um saldo que cada pedido desconta.
 model Projeto {
   id     Int    @id @default(autoincrement())
   /// O processo da UFSC, 23080.XXXXXX/AAAA-XX, ou os 10 digitos do Sistema CEUA
@@ -347,8 +424,8 @@ model Projeto {
   dtCriacao    DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
   dtManutencao DateTime? @map("dt_manutencao") @db.Timestamptz(6)
 
-  usuarioResponsavel Usuario @relation(fields: [idUsuarioResponsavel], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  solicitacoes       Solicitacao[]
+  usuarioResponsavel Usuario  @relation(fields: [idUsuarioResponsavel], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pedidos            Pedido[]
 
   @@map("projeto")
   @@schema("etica")
@@ -356,7 +433,10 @@ model Projeto {
 
 // --------------------------------------------------------------- demanda
 
-model Solicitacao {
+/// Pedido de animais de um pesquisador. A reserva e a entrega ficam nos animais
+/// (colonia.animal.id_pedido): o pedido so tem o que foi pedido e o status, que o
+/// trigger demanda.pedido_coerente confere contra os animais.
+model Pedido {
   id                   Int @id @default(autoincrement())
   /// O protocolo CEUA que a pessoa digitou, conferido so no formato
   /// (src/modules/demanda/protocolo.ts). A equipe tecnica confere o resto ao analisar.
@@ -377,12 +457,11 @@ model Solicitacao {
   idadeMinDias   Int      @map("idade_min_dias") @db.SmallInt
   idadeMaxDias   Int      @map("idade_max_dias") @db.SmallInt
   dtDesejada     DateTime @map("dt_desejada") @db.Date
-  /// U unica | S semanal | Q quinzenal | M mensal | A avulsas. Por enquanto o pedido nao
-  /// escolhe cronograma e fica sempre U: quem quer varias entregas faz um pedido por data.
-  regime         String   @default("U") @db.Char(1)
-  /// RA rascunho | EN enviada | AN em analise | AP aprovada |
-  /// RE recusada | AJ ajustada | AT em atendimento | CO concluida | CA cancelada
-  status         String   @default("RA") @db.Char(2)
+  /// enviado | aprovado (aguardando animais) | reservado | entregue | recusado
+  status         String   @default("enviado") @db.VarChar(10)
+  /// A data em que os animais foram entregues. Preenchida se e somente se o
+  /// pedido esta entregue.
+  dtEntrega      DateTime? @map("dt_entrega") @db.Date
   /// Texto livre do pesquisador. Nulo quando nao escreveu nada.
   observacoes    String?  @db.VarChar(500)
 
@@ -395,62 +474,12 @@ model Solicitacao {
   /// FK COMPOSTA: linhagem coerente com a especie. Wistar e de rato;
   /// pedir Wistar de camundongo o banco recusa, nao a aplicacao.
   linhagem           Linhagem @relation(fields: [idEspecie, idLinhagem], references: [idEspecie, id], onDelete: NoAction, onUpdate: NoAction)
-  remessas           Remessa[]
+  /// Os reservados (vivos) e os entregues
+  animais            Animal[]
+  ocorrencias        Ocorrencia[]
 
   @@index([status, dtDesejada])
-  @@map("solicitacao")
-  @@schema("demanda")
-}
-
-/// Uma entrega. Um pedido pode ter remessa unica ou cronograma.
-model Remessa {
-  id                  Int       @id @default(autoincrement())
-  idSolicitacao       Int       @map("id_solicitacao")
-  sequencia           Int       @db.SmallInt
-  dtPrevista          DateTime  @map("dt_prevista") @db.Date
-  dtRealizada         DateTime? @map("dt_realizada") @db.Date
-  qtdMPrevista        Int       @map("qtd_m_prevista") @db.SmallInt
-  qtdFPrevista        Int       @map("qtd_f_prevista") @db.SmallInt
-  /// Animais de qualquer sexo previstos, como o qtd_qualquer da solicitacao.
-  qtdQualquerPrevista Int       @default(0) @map("qtd_qualquer_prevista") @db.SmallInt
-  status              String    @default("P") @db.Char(1)
-
-  solicitacao  Solicitacao   @relation(fields: [idSolicitacao], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  compromissos Compromisso[]
-
-  @@unique([idSolicitacao, sequencia])
-  @@map("remessa")
-  @@schema("demanda")
-}
-
-/// UM ANIMAL, UM COMPROMISSO.
-///
-/// E a razao de existir do sistema: a unica tabela que impede alocacao dupla.
-/// A invariante (soma dos compromissos ativos <= disponibilidade do parto) NAO
-/// cabe em CHECK de coluna, porque e agregacao entre linhas: e o trigger
-/// `compromisso_respeita_oferta`, na migration SQL.
-model Compromisso {
-  id              Int @id @default(autoincrement())
-  idRemessa       Int @map("id_remessa")
-  idParto         Int @map("id_parto")
-  idUsuarioCriacao Int @map("id_usuario_criacao")
-
-  qtdM Int @map("qtd_m") @db.SmallInt
-  qtdF Int @map("qtd_f") @db.SmallInt
-  /// Snapshot do grau no momento da reserva.
-  grauCerteza String @map("grau_certeza") @db.Char(1)
-
-  dtCriacao     DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
-  /// Nada e apagado: nulo e ativo.
-  dtCancelamento     DateTime? @map("dt_cancelamento") @db.Timestamptz(6)
-  motivoCancelamento String?   @map("motivo_cancelamento") @db.VarChar(200)
-
-  remessa        Remessa @relation(fields: [idRemessa], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  parto          Parto   @relation(fields: [idParto], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  usuarioCriacao Usuario @relation(fields: [idUsuarioCriacao], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@index([idParto, dtCancelamento])
-  @@map("compromisso")
+  @@map("pedido")
   @@schema("demanda")
 }
 

@@ -47,8 +47,7 @@ O que mora aqui:
 Os parâmetros biológicos (gestação, aleitamento, intervalo, máximo de 5 partos,
 4 machos e 4 fêmeas esperados por casal, tolerância de idade) são constantes em
 `src/shared/parametros.ts`, como no `settings.py` do sistema do cliente, e não vão
-para o banco. A exceção é o 4 e 4 esperados, que o trigger que confere a oferta de
-cada parto repete: mudou num, muda no outro. Os pares genéticos ficam no banco.
+para o banco: nenhum trigger repete esses números. Os pares genéticos ficam no banco.
 
 ## Pedido de animais e busca de atendimento
 
