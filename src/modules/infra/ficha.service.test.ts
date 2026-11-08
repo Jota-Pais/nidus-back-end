@@ -77,6 +77,7 @@ vi.mock('../../shared/prisma.ts', () => ({
         ),
       findUnique: async ({ where }: { where: { id: number } }) => partos.find((p) => p.id === where.id) ?? null,
     },
+    historico: { findMany: async () => [] },
   },
 }))
 
@@ -103,6 +104,19 @@ describe('ficha da caixa com casal novo', () => {
         casal: expect.objectContaining({ id: 1, identificacao: 'AB', ativo: false }),
         partos: [expect.objectContaining({ id: 10, ordem: 5, nascidoM: 3, nascidoF: 4 })],
       },
+    ])
+  })
+})
+
+describe('eventos da ficha', () => {
+  it('saem pela data do fato, com o acasalamento antes do parto', async () => {
+    const ficha = await fichaDoCasal()
+
+    expect(ficha.eventos.map((e) => [e.dataHora.slice(0, 10), e.tipo])).toEqual([
+      ['2026-10-04', 'acasalamento'],
+      ['2026-10-27', 'parto'],
+      ['2026-10-27', 'encerramento'],
+      ['2026-10-28', 'acasalamento'],
     ])
   })
 })

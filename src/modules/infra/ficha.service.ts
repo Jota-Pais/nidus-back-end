@@ -5,6 +5,7 @@ import { naoEncontrado } from '../../shared/erros.ts'
 import { codigoDaPosicao } from './endereco.ts'
 import { animaisNaCaixaDoCasal, fichaDoEstoque, sexoParaVirarEstoque } from './estoque.service.ts'
 import { prisma } from '../../shared/prisma.ts'
+import { NOME_DO_SISTEMA } from '../historico/historico.service.ts'
 import { codigoDaEspecie, estadoCaixa } from '../../shared/traducao.ts'
 
 async function partosDoCasal(idCasal: number, soNascidos = false) {
@@ -41,61 +42,116 @@ interface EventoDaFicha {
   autor: string
 }
 
+const ORDEM_NO_DIA: Record<string, number> = {
+  acasalamento: 0,
+  parto: 1,
+  selecao: 2,
+  desmame: 3,
+  encerramento: 4,
+}
+
 async function eventosDoCasal(idCasal: number): Promise<EventoDaFicha[]> {
-  const partos = await prisma.parto.findMany({
-    where: { idCasal },
-    orderBy: { ordem: 'asc' },
-    select: {
-      nascidoM: true,
-      nascidoF: true,
-      dtRegistroParto: true,
-      usuarioParto: { select: { nome: true } },
-      eutanasiadoM: true,
-      eutanasiadoF: true,
-      dtRegistroSelecao: true,
-      usuarioSelecao: { select: { nome: true } },
-      desmamadoM: true,
-      desmamadoF: true,
-      dtRegistroDesmame: true,
-      usuarioDesmame: { select: { nome: true } },
+  const [casal, partos] = await Promise.all([
+    prisma.casal.findUnique({
+      where: { id: idCasal },
+      select: { dtEncerramento: true, motivoEncerramento: true },
+    }),
+    prisma.parto.findMany({
+      where: { idCasal },
+      orderBy: { ordem: 'asc' },
+      select: {
+        id: true,
+        ordem: true,
+        dtAcasalamento: true,
+        dtPartoReal: true,
+        nascidoM: true,
+        nascidoF: true,
+        usuarioParto: { select: { nome: true } },
+        dtSelecao: true,
+        eutanasiadoM: true,
+        eutanasiadoF: true,
+        usuarioSelecao: { select: { nome: true } },
+        dtDesmameReal: true,
+        desmamadoM: true,
+        desmamadoF: true,
+        usuarioDesmame: { select: { nome: true } },
+      },
+    }),
+  ])
+
+  const registros = await prisma.historico.findMany({
+    where: {
+      OR: [
+        { entidade: 'parto', acao: 'acasalamento', idEntidade: { in: partos.map((parto) => parto.id) } },
+        { entidade: 'casal', acao: { in: ['formacao', 'encerramento'] }, idEntidade: idCasal },
+      ],
     },
+    orderBy: { dtHora: 'desc' },
+    select: { entidade: true, acao: true, idEntidade: true, usuario: { select: { nome: true } } },
   })
+  const autorDe = (entidade: string, acao: string, idEntidade: number) => {
+    const registro = registros.find(
+      (r) => r.entidade === entidade && r.acao === acao && r.idEntidade === idEntidade,
+    )
+    if (registro === undefined) return 'Desconhecido'
+    return registro.usuario?.nome ?? NOME_DO_SISTEMA
+  }
 
   const eventos: EventoDaFicha[] = []
+  const evento = (data: Date, tipo: string, descricao: string, autor: string) =>
+    eventos.push({ dataHora: data.toISOString(), tipo, descricao, autor })
 
   for (const parto of partos) {
-    if (parto.dtRegistroParto !== null) {
-      eventos.push({
-        dataHora: parto.dtRegistroParto.toISOString(),
-        tipo: 'parto',
-        descricao: `Parto registrado: ${parto.nascidoM} M, ${parto.nascidoF} F.`,
-        autor: parto.usuarioParto?.nome ?? 'Desconhecido',
-      })
+    const acao = parto.ordem === 1 ? 'formacao' : 'acasalamento'
+    const idAutor = parto.ordem === 1 ? idCasal : parto.id
+    evento(
+      parto.dtAcasalamento,
+      'acasalamento',
+      `Acasalamento do ${parto.ordem}o parto.`,
+      autorDe(parto.ordem === 1 ? 'casal' : 'parto', acao, idAutor),
+    )
+
+    if (parto.dtPartoReal !== null) {
+      evento(
+        parto.dtPartoReal,
+        'parto',
+        `${parto.ordem}o parto: ${parto.nascidoM} M, ${parto.nascidoF} F nascidos.`,
+        parto.usuarioParto?.nome ?? 'Desconhecido',
+      )
     }
 
-    if (parto.dtRegistroSelecao !== null) {
-      eventos.push({
-        dataHora: parto.dtRegistroSelecao.toISOString(),
-        tipo: 'selecao',
-        descricao: `Eutanasia registrada: ${parto.eutanasiadoM} M, ${parto.eutanasiadoF} F eutanasiados.`,
-        autor: parto.usuarioSelecao?.nome ?? 'Desconhecido',
-      })
+    if (parto.dtSelecao !== null) {
+      evento(
+        parto.dtSelecao,
+        'selecao',
+        `Eutanasia do ${parto.ordem}o parto: ${parto.eutanasiadoM} M, ${parto.eutanasiadoF} F.`,
+        parto.usuarioSelecao?.nome ?? 'Desconhecido',
+      )
     }
 
-    if (parto.dtRegistroDesmame !== null) {
-      eventos.push({
-        dataHora: parto.dtRegistroDesmame.toISOString(),
-        tipo: 'desmame',
-        descricao: `Desmame registrado: ${parto.desmamadoM} M, ${parto.desmamadoF} F.`,
-        autor: parto.usuarioDesmame?.nome ?? 'Desconhecido',
-      })
+    if (parto.dtDesmameReal !== null) {
+      evento(
+        parto.dtDesmameReal,
+        'desmame',
+        `Desmame do ${parto.ordem}o parto: ${parto.desmamadoM} M, ${parto.desmamadoF} F.`,
+        parto.usuarioDesmame?.nome ?? 'Desconhecido',
+      )
     }
   }
 
-  // ordem cronologica entre partos diferentes: dentro de cada parto ja sai
-  // em ordem (parto -> selecao -> desmame), mas o '.sort' cobre qualquer
-  // corrida entre carimbos de partos vizinhos
-  return eventos.sort((a, b) => a.dataHora.localeCompare(b.dataHora))
+  if (casal?.dtEncerramento) {
+    evento(
+      casal.dtEncerramento,
+      'encerramento',
+      `Casal encerrado${casal.motivoEncerramento ? `: ${casal.motivoEncerramento}` : '.'}`,
+      autorDe('casal', 'encerramento', idCasal),
+    )
+  }
+
+  return eventos.sort(
+    (a, b) =>
+      a.dataHora.localeCompare(b.dataHora) || (ORDEM_NO_DIA[a.tipo] ?? 9) - (ORDEM_NO_DIA[b.tipo] ?? 9),
+  )
 }
 
 /**
