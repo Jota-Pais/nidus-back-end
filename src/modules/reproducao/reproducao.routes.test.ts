@@ -2,7 +2,9 @@ import type { RequestHandler } from 'express'
 import request from 'supertest'
 import { describe, expect, it } from 'vitest'
 import { criarApp } from '../../app.ts'
+import { hojeISO } from '../../shared/traducao.ts'
 import type { Perfil } from '../../shared/traducao.ts'
+import { somarDias } from './cadeiaTemporal.ts'
 import { casalNovo, desmame } from './reproducao.routes.ts'
 
 // Autorizacao e validacao de forma - o mesmo recorte de
@@ -126,5 +128,69 @@ describe('validacao de entrada - desmame', () => {
     expect(resposta.status).toBe(400)
     expect(resposta.body.erro.codigo).toBe('VALIDACAO')
     expect(Object.keys(resposta.body.erro.campos)).toContain('desmamadoF')
+  })
+})
+
+describe('validacao de entrada - nada se registra no futuro', () => {
+  const amanha = somarDias(hojeISO(), 1)
+
+  it('o casal se forma hoje, nao amanha', () => {
+    expect(casalNovo.safeParse({ ...corpoValido, dtFormacao: hojeISO() }).success).toBe(true)
+    expect(casalNovo.safeParse({ ...corpoValido, dtFormacao: amanha }).success).toBe(false)
+  })
+
+  it('acasalamento, parto, selecao, desmame e encerramento com data de amanha voltam 400', async () => {
+    const rotas = [
+      ['post', '/api/casais/1/acasalamento', { dtAcasalamento: amanha }, 'dtAcasalamento'],
+      [
+        'post',
+        '/api/partos/1/nascimento',
+        { dtPartoReal: amanha, nascidoM: 5, nascidoF: 6 },
+        'dtPartoReal',
+      ],
+      [
+        'post',
+        '/api/partos/1/selecao',
+        { dtSelecao: amanha, eutanasiadoM: 1, eutanasiadoF: 1 },
+        'dtSelecao',
+      ],
+      [
+        'post',
+        '/api/partos/1/desmame',
+        { dtDesmameReal: amanha, desmamadoM: 4, desmamadoF: 5 },
+        'dtDesmameReal',
+      ],
+      [
+        'post',
+        '/api/casais/1/encerramento',
+        { dtEncerramento: amanha, motivo: 'Teste' },
+        'dtEncerramento',
+      ],
+      [
+        'patch',
+        '/api/partos/1/nascimento',
+        { dtPartoReal: amanha, nascidoM: 5, nascidoF: 6, motivo: 'Erro' },
+        'dtPartoReal',
+      ],
+      [
+        'patch',
+        '/api/partos/1/desmame',
+        { dtDesmameReal: amanha, desmamadoM: 4, desmamadoF: 5, motivo: 'Erro' },
+        'dtDesmameReal',
+      ],
+    ] as const
+
+    // a validacao barra antes do servico: nada chega ao banco
+    for (const [metodo, caminho, corpo, campo] of rotas) {
+      const resposta = await request(app('tecnico'))[metodo](caminho).send(corpo)
+      expect(resposta.status, caminho).toBe(400)
+      expect(resposta.body.erro.campos[campo], caminho).toBe('A data nao pode ser depois de hoje.')
+    }
+  })
+
+  it('o desmame de hoje passa', () => {
+    expect(
+      desmame.safeParse({ dtDesmameReal: hojeISO(), desmamadoM: 4, desmamadoF: 5 }).success,
+    ).toBe(true)
   })
 })

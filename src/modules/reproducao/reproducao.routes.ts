@@ -5,6 +5,7 @@ import {
   exigirPerfil,
   usuarioDaRequisicao,
 } from '../../shared/middlewares/autorizacao.ts'
+import { hojeISO } from '../../shared/traducao.ts'
 import { destinosDoEstoque, passarParaOEstoque } from '../infra/estoque.service.ts'
 import { corrigirDesmame, corrigirNascimento, corrigirSelecao } from './correcao.service.ts'
 import {
@@ -27,10 +28,15 @@ export const partoRoutes = Router()
 
 const idNaRota = z.object({ id: z.coerce.number().int().positive() })
 
-/** 'aaaa-mm-dd', nunca timestamp para data de calendario. */
-const dataCalendario = z.iso
+/**
+ * A data de algo que ja aconteceu na caixa (acasalamento, parto, selecao, desmame,
+ * encerramento): 'aaaa-mm-dd', nunca timestamp, e no maximo hoje em Brasilia. Previsao nao
+ * entra por aqui, sai da cadeia temporal
+ */
+const dataDoFato = z.iso
   .date('Data invalida. Use aaaa-mm-dd.')
-  .refine((data) => data >= '2000-01-01' && data <= '2100-12-31', 'Use um ano entre 2000 e 2100.')
+  .refine((data) => data >= '2000-01-01', 'Use um ano a partir de 2000.')
+  .refine((data) => data <= hojeISO(), 'A data nao pode ser depois de hoje.')
 
 const grupoGenetico = z.enum(['A', 'B', 'C', 'D', 'E'])
 
@@ -53,7 +59,7 @@ export const casalNovo = z
     idLinhagem: z.number().int().positive(),
     grupoMacho: grupoGenetico,
     grupoFemea: grupoGenetico,
-    dtFormacao: dataCalendario,
+    dtFormacao: dataDoFato,
   })
   .refine((dados) => (dados.idCaixa === undefined) !== (dados.posicao === undefined), {
     path: ['idCaixa'],
@@ -67,7 +73,7 @@ casalRoutes.post('/', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
 })
 
 const encerramento = z.object({
-  dtEncerramento: dataCalendario,
+  dtEncerramento: dataDoFato,
   motivo: z.string().trim().min(1).max(200),
 })
 
@@ -78,7 +84,7 @@ casalRoutes.post('/:id/encerramento', exigirPerfil(...OPERA_A_COLONIA), async (r
   res.json(await encerrarCasal(id, dados, usuarioDaRequisicao(req).id))
 })
 
-const acasalamento = z.object({ dtAcasalamento: dataCalendario })
+const acasalamento = z.object({ dtAcasalamento: dataDoFato })
 
 casalRoutes.post('/:id/acasalamento', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
@@ -88,7 +94,7 @@ casalRoutes.post('/:id/acasalamento', exigirPerfil(...OPERA_A_COLONIA), async (r
 })
 
 const nascimento = z.object({
-  dtPartoReal: dataCalendario,
+  dtPartoReal: dataDoFato,
   nascidoM: z.number().int().min(0),
   nascidoF: z.number().int().min(0),
 })
@@ -101,7 +107,7 @@ partoRoutes.post('/:id/nascimento', exigirPerfil(...OPERA_A_COLONIA), async (req
 })
 
 const selecao = z.object({
-  dtSelecao: dataCalendario,
+  dtSelecao: dataDoFato,
   eutanasiadoM: z.number().int().min(0),
   eutanasiadoF: z.number().int().min(0),
 })
@@ -115,7 +121,7 @@ partoRoutes.post('/:id/selecao', exigirPerfil(...OPERA_A_COLONIA), async (req, r
 
 /** Corpo de POST /api/partos/:id/desmame. Chave a mais que o front mande e descartada */
 export const desmame = z.object({
-  dtDesmameReal: dataCalendario,
+  dtDesmameReal: dataDoFato,
   desmamadoM: z.number().int().min(0),
   desmamadoF: z.number().int().min(0),
 })
