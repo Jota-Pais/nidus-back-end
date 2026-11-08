@@ -174,6 +174,7 @@ describe('lista de solicitacoes', () => {
     usuarioSolicitante: { email: 'paula@ufsc.br' },
     especie: { nome: 'Rato' },
     linhagem: { id: 3, nome: 'Wistar' },
+    remessas: [] as { dtRealizada: Date | null }[],
   }
 
   it('cada item traz o pesquisador digitado, o e-mail da conta e as observacoes', async () => {
@@ -199,6 +200,7 @@ describe('lista de solicitacoes', () => {
       idadeMin: 21,
       idadeMax: 40,
       dataEntrega: '2026-12-15',
+      dataEntregue: null,
       observacoes: 'Machos do mesmo parto.',
       status: 'enviada',
       motivoRecusa: null,

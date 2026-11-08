@@ -101,6 +101,11 @@ export async function recusarSemResposta(agora: Date = new Date()): Promise<numb
 }
 
 /** GET /api/solicitacoes */
+function ultimaEntrega(remessas: { dtRealizada: Date | null }[]): string | null {
+  const datas = remessas.flatMap((r) => (r.dtRealizada === null ? [] : [dataISO(r.dtRealizada)]))
+  return datas.length === 0 ? null : datas.sort().at(-1)!
+}
+
 export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
   const solicitacoes = await prisma.solicitacao.findMany({
     where: doPesquisador(usuario) ? { idUsuarioSolicitante: usuario.id } : {},
@@ -109,6 +114,7 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
       usuarioSolicitante: { select: { email: true } },
       especie: { select: { nome: true } },
       linhagem: { select: { id: true, nome: true } },
+      remessas: { where: { dtRealizada: { not: null } }, select: { dtRealizada: true } },
     },
   })
 
@@ -177,6 +183,7 @@ export async function listarSolicitacoes(usuario: UsuarioDaSessao) {
       idadeMin: s.idadeMinDias,
       idadeMax: s.idadeMaxDias,
       dataEntrega: dataISO(s.dtDesejada),
+      dataEntregue: s.status === 'CO' ? ultimaEntrega(s.remessas) : null,
       observacoes: s.observacoes,
       status: statusSolicitacao.paraApi(s.status),
       motivoRecusa: s.status === 'RE' ? motivoDaRecusa(s.id) : null,

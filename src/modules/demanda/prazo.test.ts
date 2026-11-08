@@ -31,6 +31,7 @@ const pedido = (id: number) => ({
   protocoloCeua: '23080.001234/2026-11',
   linhagem: { nome: 'Wistar' },
   usuarioSolicitante: { email: `pessoa${id}@ufsc.br` },
+  remessas: [],
 })
 
 vi.mock('../../shared/email.ts', () => ({
