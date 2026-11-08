@@ -26,10 +26,13 @@ type CasalDoCard = {
   partos: PartoDoCard[]
 }
 
-/** Partos com data real confirmada. Com 0 ou 1 confirmado e 1, e nunca passa de 5 */
+/**
+ * O parto em curso: o ultimo aberto. O 1o nasce com o casal e cada seguinte no acasalamento dele,
+ * entao com o acasalamento do 2o registrado o casal ja esta no 2o, mesmo antes do nascimento.
+ * Nunca passa de 5
+ */
 export function partoAtual(partos: DatasDoParto[]): number {
-  const confirmados = partos.filter((parto) => parto.dtPartoReal !== null).length
-  return Math.max(1, Math.min(confirmados, MAX_PARTOS_POR_CASAL))
+  return Math.max(1, Math.min(partos.length, MAX_PARTOS_POR_CASAL))
 }
 
 /** A previsao do primeiro parto ainda sem data real, ou null quando nao ha pendente */

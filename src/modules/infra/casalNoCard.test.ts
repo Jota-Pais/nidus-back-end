@@ -24,19 +24,24 @@ const reserva = (qtdM: number, qtdF: number, entregue: string | null) => ({
 })
 
 describe('parto atual - a bolinha colorida do card', () => {
-  it('e 1 enquanto nenhum ou um parto foi confirmado', () => {
+  it('e o 1o desde a formacao do casal, nascido ou nao', () => {
     expect(partoAtual([parto('2026-10-01')])).toBe(1)
-    expect(partoAtual([parto('2026-10-01', '2026-10-02'), parto('2026-10-31')])).toBe(1)
+    expect(partoAtual([parto('2026-10-01', '2026-10-02')])).toBe(1)
   })
 
-  it('avanca com cada parto confirmado a partir do segundo', () => {
-    const partos = [
+  it('com o acasalamento do 2o registrado ja e o 2o, antes do nascimento', () => {
+    expect(partoAtual([parto('2026-10-01', '2026-10-02'), parto('2026-10-31')])).toBe(2)
+  })
+
+  it('avanca a cada acasalamento e nunca passa de 5', () => {
+    const quatro = [
       parto('2026-06-01', '2026-06-01'),
       parto('2026-06-30', '2026-06-30'),
       parto('2026-07-29', '2026-07-30'),
       parto('2026-08-28'),
     ]
-    expect(partoAtual(partos)).toBe(3)
+    expect(partoAtual(quatro)).toBe(4)
+    expect(partoAtual([...quatro, parto('2026-09-28'), parto('2026-10-28')])).toBe(5)
   })
 })
 
