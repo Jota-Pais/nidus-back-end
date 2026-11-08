@@ -8,8 +8,9 @@
 --
 -- Uma migration so, sem BEGIN/COMMIT: o Prisma manda o arquivo inteiro de uma vez e o Postgres
 -- roda script de varios comandos numa transacao implicita. Qualquer erro daqui desfaz tudo e o
--- banco fica como estava (provado no branch de teste em 08/11/2026 com um RAISE proposital no
--- fim). Antes de tentar de novo: `prisma migrate resolve --rolled-back 20261108200000_colonia_por_animal`.
+-- banco fica como estava (provado em 08/11/2026 com um RAISE proposital no fim, no branch de teste
+-- da Neon e num Postgres local com o arquivo inteiro). Antes de tentar de novo:
+-- `prisma migrate resolve --rolled-back 20261108200000_colonia_por_animal`.
 --
 -- Ordem: 1. pre-condicoes | 2. estrutura nova | 3. conversao | 4. conferencia | 5. apaga o modelo
 -- antigo | 6. CHECKs | 7. triggers. CHECKs e triggers vem por ultimo para validarem as linhas
@@ -494,15 +495,85 @@ BEGIN
 END;
 $fn$;
 
+-- O pedido coerente com os seus animais. Com este status e estas quantidades, o pedido tem de
+-- ficar assim:
+--   - os vivos mais os entregues nao passam do que ele pede (o mesmo teto do trigger do animal,
+--     visto do pedido);
+--   - o pedido que ja entregou animais fica entregue: entregue e final, como no animal;
+--   - reservado: os vivos reservados cobrem o pedido exatamente (M >= qtd_m, F >= qtd_f e
+--     M + F = total, o qualquer virando M ou F);
+--   - entregue: nenhum vivo reservado, e os entregues cobrem o pedido exatamente;
+--   - enviado, aprovado ou recusado: nenhum vivo reservado. So o pedido reservado segura animal; a
+--     reserva entra com o pedido aprovado e ele passa a reservado na mesma transacao.
+-- Quem vem depois de quem no status e regra do codigo. Devolve a recusa ja com o prefixo do erro da
+-- API ('PEDIDO_INCOMPLETO: ...'), ou nulo quando o pedido fica coerente. Usada pelo trigger
+-- demanda.pedido_coerente e pela conferencia da conversao.
+CREATE FUNCTION "demanda"."pedido_recusado"(
+  p_id integer, p_status text, p_qtd_m integer, p_qtd_f integer, p_qtd_qualquer integer)
+RETURNS text
+LANGUAGE plpgsql
+AS $fn$
+DECLARE
+  v_total       integer := p_qtd_m + p_qtd_f + p_qtd_qualquer;
+  v_vivos_m     integer;
+  v_vivos_f     integer;
+  v_entregues_m integer;
+  v_entregues_f integer;
+BEGIN
+  SELECT count(*) FILTER (WHERE a.situacao = 'vivo' AND a.sexo = 'M'),
+         count(*) FILTER (WHERE a.situacao = 'vivo' AND a.sexo = 'F'),
+         count(*) FILTER (WHERE a.situacao = 'entregue' AND a.sexo = 'M'),
+         count(*) FILTER (WHERE a.situacao = 'entregue' AND a.sexo = 'F')
+    INTO v_vivos_m, v_vivos_f, v_entregues_m, v_entregues_f
+    FROM "colonia"."animal" a
+   WHERE a.id_pedido = p_id;
+
+  IF v_vivos_m + v_entregues_m > p_qtd_m + p_qtd_qualquer
+     OR v_vivos_f + v_entregues_f > p_qtd_f + p_qtd_qualquer
+     OR v_vivos_m + v_vivos_f + v_entregues_m + v_entregues_f > v_total THEN
+    RETURN format('PEDIDO_EXCEDIDO: o pedido %s ficaria pedindo %s machos, %s femeas e %s de qualquer sexo, e ja tem %s machos e %s femeas reservados ou entregues',
+                  p_id, p_qtd_m, p_qtd_f, p_qtd_qualquer, v_vivos_m + v_entregues_m, v_vivos_f + v_entregues_f);
+  END IF;
+
+  IF p_status <> 'entregue' AND v_entregues_m + v_entregues_f > 0 THEN
+    RETURN format('PEDIDO_ENTREGUE: o pedido %s ja entregou %s animais, e pedido entregue continua entregue',
+                  p_id, v_entregues_m + v_entregues_f);
+  END IF;
+
+  IF p_status = 'reservado'
+     AND NOT (v_vivos_m >= p_qtd_m AND v_vivos_f >= p_qtd_f AND v_vivos_m + v_vivos_f = v_total) THEN
+    RETURN format('PEDIDO_INCOMPLETO: o pedido %s pede %s machos, %s femeas e %s de qualquer sexo, e tem %s machos e %s femeas reservados',
+                  p_id, p_qtd_m, p_qtd_f, p_qtd_qualquer, v_vivos_m, v_vivos_f);
+  END IF;
+
+  IF p_status = 'entregue' AND v_vivos_m + v_vivos_f > 0 THEN
+    RETURN format('PEDIDO_INCOMPLETO: o pedido %s ainda tem %s animais reservados que nao foram entregues',
+                  p_id, v_vivos_m + v_vivos_f);
+  END IF;
+
+  IF p_status = 'entregue'
+     AND NOT (v_entregues_m >= p_qtd_m AND v_entregues_f >= p_qtd_f AND v_entregues_m + v_entregues_f = v_total) THEN
+    RETURN format('PEDIDO_INCOMPLETO: o pedido %s pede %s machos, %s femeas e %s de qualquer sexo, e foram entregues %s machos e %s femeas',
+                  p_id, p_qtd_m, p_qtd_f, p_qtd_qualquer, v_entregues_m, v_entregues_f);
+  END IF;
+
+  IF p_status NOT IN ('reservado', 'entregue') AND v_vivos_m + v_vivos_f > 0 THEN
+    RETURN format('PEDIDO_COM_RESERVA: o pedido %s ainda tem %s animais reservados: desfaca a reserva antes',
+                  p_id, v_vivos_m + v_vivos_f);
+  END IF;
+
+  RETURN NULL;
+END;
+$fn$;
+
 -- ---------------------------------------------------------------------------
 -- 3. Conversao
 -- ---------------------------------------------------------------------------
 
 -- 3.1 Caixa. O tipo passa a guardar a palavra. Os dois CHECKs antigos saem antes, porque falam
 -- C e E; os novos entram no fim. A caixa de estoque ganha a linhagem dos seus lotes (a
--- pre-condicao garante uma so), e a caixa ja liberada ganha a data e o motivo: a da linha
--- 'liberacao' do historico, ou a ultima manutencao, ou a criacao, em Brasilia. Enviado (estado X) e
--- a entrega; o resto, o casal encerrado.
+-- pre-condicao garante uma so). A data e o motivo da caixa ja liberada vem depois dos animais
+-- (3.5), porque a da caixa enviada e a da entrega que a esvaziou.
 ALTER TABLE "infra"."caixa" DROP CONSTRAINT "caixa_tipo_dominio",
 DROP CONSTRAINT "caixa_sexo_do_estoque";
 
@@ -523,18 +594,6 @@ UPDATE "infra"."caixa" c
   ) da_caixa
  WHERE da_caixa.id_caixa = c.id
    AND c.tipo = 'estoque';
-
-UPDATE "infra"."caixa" c
-   SET dt_liberacao = (COALESCE(
-                         (SELECT max(h.dt_hora)
-                            FROM "auditoria"."historico" h
-                           WHERE h.entidade = 'caixa'
-                             AND h.acao = 'liberacao'
-                             AND h.id_entidade = c.id),
-                         c.dt_manutencao,
-                         c.dt_criacao) AT TIME ZONE 'America/Sao_Paulo')::date,
-       motivo_liberacao = CASE WHEN c.estado = 'X' THEN 'entrega' ELSE 'casal_encerrado' END
- WHERE NOT c.ativa;
 
 -- 3.2 Casal: ativo e o mesmo que nao ter data de encerramento
 UPDATE "reproducao"."casal"
@@ -705,7 +764,30 @@ BEGIN
 END;
 $animais$;
 
--- 3.5 Ocorrencias, com usuario e carimbo copiados de onde existem (sem carimbo, a hora desta
+-- 3.5 Caixa ja liberada: a data e o motivo do fato que a esvaziou. A enviada (estado X) foi
+-- esvaziada pela entrega, e a data e a da ultima entrega que saiu dela, de onde o Kanban conta os
+-- dias em Enviado; o resto foi o casal encerrado. Sem entrega que tenha saido dela, vale a linha
+-- 'liberacao' do historico, ou a ultima manutencao, ou a criacao, em Brasilia.
+UPDATE "infra"."caixa" c
+   SET dt_liberacao = COALESCE(
+         CASE WHEN c.estado = 'X' THEN
+           (SELECT max(a.dt_saida)
+              FROM "colonia"."animal" a
+             WHERE a.id_caixa = c.id
+               AND a.situacao = 'entregue')
+         END,
+         (COALESCE(
+            (SELECT max(h.dt_hora)
+               FROM "auditoria"."historico" h
+              WHERE h.entidade = 'caixa'
+                AND h.acao = 'liberacao'
+                AND h.id_entidade = c.id),
+            c.dt_manutencao,
+            c.dt_criacao) AT TIME ZONE 'America/Sao_Paulo')::date),
+       motivo_liberacao = CASE WHEN c.estado = 'X' THEN 'entrega' ELSE 'casal_encerrado' END
+ WHERE NOT c.ativa;
+
+-- 3.6 Ocorrencias, com usuario e carimbo copiados de onde existem (sem carimbo, a hora desta
 -- conversao; sem usuario, nulo, que a tela mostra como Sistema):
 --   nascimento por parto nascido, com todos os animais do parto;
 --   baixa da selecao por parto com eutanasia, e baixa 'nao chegou ao desmame' para a perda;
@@ -812,7 +894,7 @@ BEGIN
 END;
 $ocorrencias$;
 
--- 3.6 Historico: a entidade solicitacao passa a se chamar pedido
+-- 3.7 Historico: a entidade solicitacao passa a se chamar pedido
 UPDATE "auditoria"."historico" SET entidade = 'pedido' WHERE entidade = 'solicitacao';
 
 -- ---------------------------------------------------------------------------
@@ -822,6 +904,17 @@ UPDATE "auditoria"."historico" SET entidade = 'pedido' WHERE entidade = 'solicit
 -- nao fechar, a migration para aqui e nada muda. Avisos (falta de reserva que ja existia, coluna
 -- do Kanban diferente do estado gravado) saem como NOTICE e nao barram.
 -- ---------------------------------------------------------------------------
+
+-- Cada pedido pela regra do trigger do pedido, que so olha as mudancas que vierem depois. Falta e o
+-- pedido reservado com menos vivos reservados do que pede: com o teto e o entregue em ordem, e o que
+-- sobra do PEDIDO_INCOMPLETO de um reservado.
+CREATE TEMP VIEW "pedido_conferido" AS
+SELECT pe.id, pe.status, r.recusa,
+       COALESCE(pe.status = 'reservado' AND r.recusa LIKE 'PEDIDO_INCOMPLETO:%', false) AS falta
+  FROM "demanda"."pedido" pe
+ CROSS JOIN LATERAL (
+   SELECT "demanda"."pedido_recusado"(pe.id, pe.status, pe.qtd_m, pe.qtd_f, pe.qtd_qualquer) AS recusa
+ ) r;
 
 DO $confere$
 DECLARE
@@ -946,6 +1039,15 @@ BEGIN
         FULL JOIN pedido_contado c ON c.id_pedido = e.id_pedido AND c.sexo = e.sexo
        WHERE COALESCE(c.reservados, 0) > COALESCE(e.pendentes, 0)
 
+      -- todo pedido coerente com os seus animais, pela regra que o trigger do pedido passa a cobrar
+      -- (o teto, o entregue exato, so o reservado segurando animal). So a falta do pedido
+      -- reservado passa, como aviso
+      UNION ALL
+      SELECT format('pedido %s (%s): %s', pe.id, pe.status, pe.recusa)
+        FROM pedido_conferido pe
+       WHERE pe.recusa IS NOT NULL
+         AND NOT pe.falta
+
       -- todo vivo num lugar que o trigger dos animais aceita
       UNION ALL
       SELECT format('animal %s: %s', a.id, colonia.lugar_recusado(a.id_parto, a.sexo, a.id_caixa))
@@ -997,16 +1099,9 @@ BEGIN
     INTO v_avisos
     FROM (
       -- pedido reservado sem cobertura exata: a falta que ja existia passa a ser do pedido
-      SELECT format('pedido %s: reservado com %s machos e %s femeas vivos para %s M, %s F e %s de qualquer sexo',
-                    pe.id, r.m, r.f, pe.qtd_m, pe.qtd_f, pe.qtd_qualquer) AS aviso
-        FROM "demanda"."pedido" pe
-        CROSS JOIN LATERAL (
-          SELECT count(*) FILTER (WHERE a.sexo = 'M') AS m, count(*) FILTER (WHERE a.sexo = 'F') AS f
-            FROM "colonia"."animal" a
-           WHERE a.id_pedido = pe.id AND a.situacao = 'vivo'
-        ) r
-       WHERE pe.status = 'reservado'
-         AND NOT (r.m >= pe.qtd_m AND r.f >= pe.qtd_f AND r.m + r.f = pe.qtd_m + pe.qtd_f + pe.qtd_qualquer)
+      SELECT format('pedido %s (falta): %s', pe.id, pe.recusa) AS aviso
+        FROM pedido_conferido pe
+       WHERE pe.falta
 
       -- a coluna do Kanban passa a ser calculada; o estado gravado podia ter sido arrastado a mao
       UNION ALL
@@ -1034,6 +1129,7 @@ DROP FUNCTION pg_temp.lancar_ocorrencia(text, date, integer, timestamptz, intege
 DROP FUNCTION pg_temp.criar_animais(integer, char, integer, integer, text, date, date, integer, text, integer, integer);
 DROP TABLE saida_do_lote;
 DROP TABLE animal_convertido;
+DROP VIEW pedido_conferido;
 DROP VIEW lote_antigo;
 DROP VIEW parto_antigo;
 
@@ -1083,13 +1179,15 @@ DROP COLUMN "regime";
 -- que le outra tabela fica nos tres triggers ou no codigo.
 -- ---------------------------------------------------------------------------
 
--- A caixa de casal nao tem sexo nem linhagem; a de estoque tem os dois. Liberada se e somente se
--- tem a data e o motivo da liberacao.
+-- A caixa de estoque tem sexo e linhagem; a de casal, nenhum dos dois. O dominio do tipo fica so
+-- no seu CHECK. Liberada se e somente se tem a data e o motivo da liberacao.
 ALTER TABLE "infra"."caixa"
   ADD CONSTRAINT "caixa_tipo_dominio" CHECK ("tipo" IN ('casal', 'estoque')),
   ADD CONSTRAINT "caixa_estoque_completo" CHECK (
-    ("tipo" = 'casal' AND "sexo" IS NULL AND "id_linhagem" IS NULL)
-    OR ("tipo" = 'estoque' AND "sexo" IN ('M', 'F') AND "id_linhagem" IS NOT NULL)
+    CASE WHEN "tipo" = 'estoque'
+      THEN "sexo" IN ('M', 'F') AND "id_linhagem" IS NOT NULL
+      ELSE "sexo" IS NULL AND "id_linhagem" IS NULL
+    END
   ),
   ADD CONSTRAINT "caixa_motivo_liberacao_dominio" CHECK ("motivo_liberacao" IN ('entrega', 'baixa', 'mudanca', 'casal_encerrado')),
   ADD CONSTRAINT "caixa_liberacao_coerente" CHECK (
@@ -1199,10 +1297,11 @@ CREATE TRIGGER "caixa_dentro_da_topologia"
 --   - O lugar do vivo: a regra de colonia.lugar_recusado.
 --   - A reserva: so de vivo, para pedido aprovado ou reservado da linhagem do parto; nao troca de
 --     pedido sem desfazer antes; desfazer so deixa o animal vivo e livre (o morto guarda o pedido
---     como registro). Quando o animal passa a contar no pedido, o pedido e travado (FOR UPDATE, o
---     que poe em fila quem reserva para ele) e os vivos mais os entregues do pedido nao passam de
---     M <= qtd_m + qualquer, F <= qtd_f + qualquer e M + F <= total. As linhas que o mesmo comando
---     ja atualizou sao vistas pela contagem.
+--     como registro). Toda reserva que entra ou sai trava o pedido (FOR UPDATE), o que poe em fila
+--     quem reserva, desfaz ou muda o status ou as quantidades dele (7.3). Quando o animal passa a
+--     contar no pedido, os vivos mais os entregues do pedido nao passam de M <= qtd_m + qualquer,
+--     F <= qtd_f + qualquer e M + F <= total. As linhas que o mesmo comando ja atualizou sao vistas
+--     pela contagem.
 CREATE FUNCTION "colonia"."animal_coerente"()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -1295,6 +1394,12 @@ BEGIN
       RAISE EXCEPTION 'PEDIDO_RESERVA: so se desfaz a reserva de animal vivo; o % guarda o pedido como registro', NEW.situacao
         USING ERRCODE = 'check_violation';
     END IF;
+
+    -- A reserva que sai trava o pedido como a que entra (abaixo): quem desfaz espera quem conta
+    -- os reservados do pedido para mudar o status dele, e vice-versa
+    IF OLD.id_pedido IS NOT NULL THEN
+      PERFORM 1 FROM "demanda"."pedido" pe WHERE pe.id = OLD.id_pedido FOR UPDATE;
+    END IF;
   END IF;
 
   -- O animal que passa a contar no pedido: reserva nova, ou reservado que volta a viver
@@ -1352,55 +1457,27 @@ CREATE TRIGGER "animal_coerente"
   FOR EACH ROW
   EXECUTE FUNCTION "colonia"."animal_coerente"();
 
--- 7.3 O pedido coerente com os seus animais, conferido quando o status muda:
---   - entrar em reservado exige os vivos reservados cobrindo o pedido exatamente (M >= qtd_m,
---     F >= qtd_f e M + F = total, o qualquer virando M ou F);
---   - entrar em entregue exige nenhum vivo reservado e os entregues cobrindo o pedido exatamente;
---   - sair de reservado para aprovado ou recusado exige nenhum vivo reservado.
--- A reserva de cada animal trava o pedido (7.2), entao contar aqui nao corre com quem reserva.
+-- 7.3 O pedido coerente com os seus animais: a regra de demanda.pedido_recusado, conferida quando o
+-- pedido nasce e quando o status ou as quantidades mudam. O pedido novo nao tem animal, entao so
+-- nasce num status que nao segura nenhum. O UPDATE trava a linha do pedido e toda reserva que entra
+-- ou sai trava o pedido (7.2), entao contar aqui nao corre com quem reserva ou desfaz.
 CREATE FUNCTION "demanda"."pedido_coerente"()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $fn$
 DECLARE
-  v_total       integer := NEW.qtd_m + NEW.qtd_f + NEW.qtd_qualquer;
-  v_vivos_m     integer;
-  v_vivos_f     integer;
-  v_entregues_m integer;
-  v_entregues_f integer;
+  v_recusa text;
 BEGIN
-  SELECT count(*) FILTER (WHERE a.situacao = 'vivo' AND a.sexo = 'M'),
-         count(*) FILTER (WHERE a.situacao = 'vivo' AND a.sexo = 'F'),
-         count(*) FILTER (WHERE a.situacao = 'entregue' AND a.sexo = 'M'),
-         count(*) FILTER (WHERE a.situacao = 'entregue' AND a.sexo = 'F')
-    INTO v_vivos_m, v_vivos_f, v_entregues_m, v_entregues_f
-    FROM "colonia"."animal" a
-   WHERE a.id_pedido = NEW.id;
-
-  IF NEW.status = 'reservado'
-     AND NOT (v_vivos_m >= NEW.qtd_m AND v_vivos_f >= NEW.qtd_f AND v_vivos_m + v_vivos_f = v_total) THEN
-    RAISE EXCEPTION 'PEDIDO_INCOMPLETO: o pedido % pede % machos, % femeas e % de qualquer sexo, e tem % machos e % femeas reservados',
-      NEW.id, NEW.qtd_m, NEW.qtd_f, NEW.qtd_qualquer, v_vivos_m, v_vivos_f
-      USING ERRCODE = 'check_violation';
+  IF TG_OP = 'UPDATE'
+     AND (NEW.status, NEW.qtd_m, NEW.qtd_f, NEW.qtd_qualquer)
+         IS NOT DISTINCT FROM (OLD.status, OLD.qtd_m, OLD.qtd_f, OLD.qtd_qualquer) THEN
+    RETURN NEW;
   END IF;
 
-  IF NEW.status = 'entregue' THEN
-    IF v_vivos_m + v_vivos_f > 0 THEN
-      RAISE EXCEPTION 'PEDIDO_INCOMPLETO: o pedido % ainda tem % animais reservados que nao foram entregues',
-        NEW.id, v_vivos_m + v_vivos_f
-        USING ERRCODE = 'check_violation';
-    END IF;
+  v_recusa := "demanda"."pedido_recusado"(NEW.id, NEW.status, NEW.qtd_m, NEW.qtd_f, NEW.qtd_qualquer);
 
-    IF NOT (v_entregues_m >= NEW.qtd_m AND v_entregues_f >= NEW.qtd_f AND v_entregues_m + v_entregues_f = v_total) THEN
-      RAISE EXCEPTION 'PEDIDO_INCOMPLETO: o pedido % pede % machos, % femeas e % de qualquer sexo, e foram entregues % machos e % femeas',
-        NEW.id, NEW.qtd_m, NEW.qtd_f, NEW.qtd_qualquer, v_entregues_m, v_entregues_f
-        USING ERRCODE = 'check_violation';
-    END IF;
-  END IF;
-
-  IF OLD.status = 'reservado' AND NEW.status IN ('aprovado', 'recusado') AND v_vivos_m + v_vivos_f > 0 THEN
-    RAISE EXCEPTION 'PEDIDO_COM_RESERVA: o pedido % ainda tem % animais reservados: desfaca a reserva antes',
-      NEW.id, v_vivos_m + v_vivos_f
+  IF v_recusa IS NOT NULL THEN
+    RAISE EXCEPTION '%', v_recusa
       USING ERRCODE = 'check_violation';
   END IF;
 
@@ -1409,8 +1486,7 @@ END;
 $fn$;
 
 CREATE TRIGGER "pedido_coerente"
-  BEFORE UPDATE OF "status"
+  BEFORE INSERT OR UPDATE OF "status", "qtd_m", "qtd_f", "qtd_qualquer"
   ON "demanda"."pedido"
   FOR EACH ROW
-  WHEN (OLD."status" IS DISTINCT FROM NEW."status")
   EXECUTE FUNCTION "demanda"."pedido_coerente"();

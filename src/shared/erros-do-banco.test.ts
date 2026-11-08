@@ -97,6 +97,7 @@ describe('trigger do banco vira 409 com o codigo do prefixo', () => {
     ['PEDIDO_EXCEDIDO', 'PEDIDO_EXCEDIDO: o pedido 1 pede 0 machos, 0 femeas e 12 de qualquer sexo, e ficaria com 10 machos e 3 femeas', 'Animal'],
     ['PEDIDO_INCOMPLETO', 'PEDIDO_INCOMPLETO: o pedido 1 pede 0 machos, 0 femeas e 12 de qualquer sexo, e tem 0 machos e 0 femeas reservados', 'Pedido'],
     ['PEDIDO_COM_RESERVA', 'PEDIDO_COM_RESERVA: o pedido 1 ainda tem 12 animais reservados: desfaca a reserva antes', 'Pedido'],
+    ['PEDIDO_ENTREGUE', 'PEDIDO_ENTREGUE: o pedido 3 ja entregou 7 animais, e pedido entregue continua entregue', 'Pedido'],
   ])('%s', (codigo, mensagem, modelo) => {
     const traduzido = traduzirErroDoBanco(trigger(mensagem, modelo))
 
@@ -191,12 +192,21 @@ describe('o que NAO deve virar 409', () => {
     expect(traduzirErroDoBanco(unique('indice_novo_qualquer', 'caixa'))).toBeUndefined()
   })
 
-  it('CHECK de dominio continua caindo em 500', () => {
-    // O zod das rotas nunca deixa chegar uma situacao, um tipo ou um status fora do dominio:
-    // se chegar, e bug do codigo, nao regra que o usuario possa corrigir
-    expect(traduzirErroDoBanco(check('animal_situacao_dominio', 'animal'))).toBeUndefined()
-    expect(traduzirErroDoBanco(check('pedido_status_dominio', 'pedido'))).toBeUndefined()
-    expect(traduzirErroDoBanco(check('caixa_liberacao_coerente', 'caixa'))).toBeUndefined()
+  it.each([
+    ['animal_situacao_dominio', 'animal'],
+    ['pedido_status_dominio', 'pedido'],
+    ['caixa_tipo_dominio', 'caixa'],
+    ['caixa_estoque_completo', 'caixa'],
+    ['caixa_liberacao_coerente', 'caixa'],
+    ['casal_ativo_coerente', 'casal'],
+    ['animal_saida_coerente', 'animal'],
+    ['pedido_entregue_tem_data', 'pedido'],
+    ['pedido_qtd_nao_negativa', 'pedido'],
+    ['parto_sem_ninhada_tem_motivo', 'parto'],
+  ])('CHECK de dominio ou de coerencia da linha (%s) continua caindo em 500', (constraint, tabela) => {
+    // Os valores deles sao o codigo que calcula, ou o zod da rota que confere antes: se um deles
+    // recusar, e bug do codigo, nao regra que o usuario possa corrigir
+    expect(traduzirErroDoBanco(check(constraint, tabela))).toBeUndefined()
   })
 
   it('prefixo de trigger que ninguem mapeou continua caindo em 500', () => {

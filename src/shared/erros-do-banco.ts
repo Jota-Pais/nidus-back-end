@@ -31,7 +31,14 @@ type Traducao = {
 
 /**
  * As constraints que o banco cobra, com o codigo de erro da API de cada uma. O Postgres so da o
- * nome da constraint, entao a mensagem para o usuario e esta
+ * nome da constraint, entao a mensagem para o usuario e esta.
+ *
+ * So entra aqui o que um usuario consegue provocar: unicidade (duplo clique, corrida) e ordem de
+ * datas, que vem digitadas. Os CHECKs de dominio e de coerencia da linha (caixa_estoque_completo,
+ * caixa_liberacao_coerente, casal_ativo_coerente, animal_saida_coerente, pedido_entregue_tem_data,
+ * parto_sem_ninhada_tem_motivo, as quantidades do pedido) ficam de fora de proposito: os valores
+ * deles sao o codigo que calcula, ou o zod da rota que confere antes. Se um deles recusar, e bug
+ * nosso, e o 500 com log e o que avisa a equipe
  */
 const POR_CONSTRAINT: Record<string, Traducao> = {
   // unicidade parcial
@@ -107,9 +114,10 @@ const POR_PREFIXO: Record<string, CodigoErro> = {
   ANIMAL_CAIXA: 'ANIMAL_CAIXA',
   PEDIDO_RESERVA: 'PEDIDO_RESERVA',
   PEDIDO_EXCEDIDO: 'PEDIDO_EXCEDIDO',
-  // demanda.pedido_coerente
+  // demanda.pedido_coerente (o teto visto do pedido tambem sai como PEDIDO_EXCEDIDO)
   PEDIDO_INCOMPLETO: 'PEDIDO_INCOMPLETO',
   PEDIDO_COM_RESERVA: 'PEDIDO_COM_RESERVA',
+  PEDIDO_ENTREGUE: 'PEDIDO_ENTREGUE',
 }
 
 /** Acha o nome da constraint dentro da mensagem do Postgres */
