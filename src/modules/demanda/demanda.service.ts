@@ -7,7 +7,7 @@ import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
-import { ajustarColunaDoCasal, baixarEstoqueNaEntrega } from '../infra/estoque.service.ts'
+import { baixarEstoqueNaEntrega } from '../infra/estoque.service.ts'
 import { liberarCaixaVazia } from '../infra/liberacaoDaCaixa.ts'
 import { faixaDoPedido } from '../motor/motor.ts'
 import { dataDoDesmame, diasEntre } from '../motor/motor.service.ts'
@@ -402,8 +402,7 @@ export async function aprovarSolicitacao(idSolicitacao: number, usuario: Usuario
 
 /**
  * POST /api/solicitacoes/:id/alocacao - o tecnico reserva para o pedido aprovado as caixas da
- * busca, que tem de cobrir o pedido inteiro. Cada item vira um compromisso com o parto; caixa que
- * estava em Livres vai para Pre-reserva
+ * busca, que tem de cobrir o pedido inteiro. Cada item vira um compromisso com o parto
  */
 export async function alocarSolicitacao(
   idSolicitacao: number,
@@ -589,12 +588,6 @@ export async function alocarSolicitacao(
       })
     }
 
-    // Pre-reserva so para a caixa do casal onde a reserva pesa: a de animais que ja estao numa
-    // caixa de estoque nao prende a caixa do casal
-    for (const idCaixa of new Set(partos.map((parto) => parto.casal.idCaixa))) {
-      await ajustarColunaDoCasal(tx, idCaixa, usuario.id, `na reserva da solicitacao #${idSolicitacao}`)
-    }
-
     await registrarHistorico(tx, {
       idUsuario: usuario.id,
       entidade: 'solicitacao',
@@ -683,18 +676,18 @@ export async function registrarEntrega(
       dados: { dtEntrega },
     })
 
-    await moverCaixasDaEntrega(tx, idSolicitacao, idUsuario)
+    await liberarCaixasDaEntrega(tx, idSolicitacao, idUsuario)
   })
 
   return { idSolicitacao, status: statusSolicitacao.paraApi('CO'), dtEntrega }
 }
 
 /**
- * Depois da entrega, a caixa do casal sem casal ativo e sem animal dentro libera a posicao, e a que
- * ficou sem reserva pesando nela volta de Pre-reserva para Livres. Le as caixas ja com a remessa
- * entregue, dentro da mesma transacao. A caixa de estoque que esvaziou ja foi para Enviado
+ * Depois da entrega, a caixa do casal sem casal ativo e sem animal dentro libera a posicao. Le as
+ * caixas ja com a remessa entregue, dentro da mesma transacao. A caixa de estoque que esvaziou ja
+ * foi para Enviado
  */
-async function moverCaixasDaEntrega(
+async function liberarCaixasDaEntrega(
   tx: Prisma.TransactionClient,
   idSolicitacao: number,
   idUsuario: number,
@@ -715,10 +708,7 @@ async function moverCaixasDaEntrega(
   })
 
   for (const caixa of caixas) {
-    const semCasalAtivo = !caixa.casais.some((casal) => casal.ativo)
-    if (semCasalAtivo && (await liberarCaixaVazia(tx, caixa.id, idUsuario))) continue
-
-    await ajustarColunaDoCasal(tx, caixa.id, idUsuario, `na entrega da solicitacao #${idSolicitacao}`)
+    if (!caixa.casais.some((casal) => casal.ativo)) await liberarCaixaVazia(tx, caixa.id, idUsuario)
   }
 }
 

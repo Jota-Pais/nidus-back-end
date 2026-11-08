@@ -12,7 +12,6 @@ vi.mock('../../shared/email.ts', () => ({
 // da alocacao
 vi.mock('../infra/estoque.service.ts', async (original) => ({
   ...(await original<typeof import('../infra/estoque.service.ts')>()),
-  ajustarColunaDoCasal: async () => {},
 }))
 
 const banco = vi.hoisted(() => ({

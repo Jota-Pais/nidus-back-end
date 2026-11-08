@@ -29,14 +29,6 @@ describe('autorizacao do kanban e da ficha', () => {
     expect(resposta.body.erro.codigo).toBe('SEM_PERMISSAO')
   })
 
-  it('pesquisador nao move caixa de coluna', async () => {
-    const resposta = await request(app('pesquisador'))
-      .patch('/api/caixas/1/estado')
-      .send({ estado: 'enviado', confirmar: false })
-
-    expect(resposta.status).toBe(403)
-  })
-
   it('pesquisador nao muda caixa de posicao', async () => {
     const resposta = await request(app('pesquisador'))
       .patch('/api/caixas/1/posicao')
@@ -55,24 +47,6 @@ describe('autorizacao do kanban e da ficha', () => {
 describe('validacao de entrada', () => {
   it('kanban sem `especie` e VALIDACAO, nao kanban vazio', async () => {
     const resposta = await request(app('tecnico')).get('/api/quadro')
-
-    expect(resposta.status).toBe(400)
-    expect(resposta.body.erro.codigo).toBe('VALIDACAO')
-  })
-
-  it('recusa coluna que nao e uma das 5 do kanban', async () => {
-    const resposta = await request(app('tecnico'))
-      .patch('/api/caixas/1/estado')
-      .send({ estado: 'expedida', confirmar: false })
-
-    expect(resposta.status).toBe(400)
-    expect(resposta.body.erro.codigo).toBe('VALIDACAO')
-  })
-
-  it('omitir `confirmar` e VALIDACAO', async () => {
-    const resposta = await request(app('tecnico'))
-      .patch('/api/caixas/1/estado')
-      .send({ estado: 'enviado' })
 
     expect(resposta.status).toBe(400)
     expect(resposta.body.erro.codigo).toBe('VALIDACAO')
@@ -98,9 +72,17 @@ describe('validacao de entrada', () => {
 
   it('id de caixa nao numerico vira 400, nao 500', async () => {
     const resposta = await request(app('tecnico'))
-      .patch('/api/caixas/abc/estado')
-      .send({ estado: 'enviado', confirmar: false })
+      .patch('/api/caixas/abc/posicao')
+      .send({ idEstante: 1, face: 'frontal', linha: 1, coluna: 1 })
 
     expect(resposta.status).toBe(400)
+  })
+
+  it('a caixa nao muda mais de coluna a mao: a rota saiu', async () => {
+    const resposta = await request(app('tecnico'))
+      .patch('/api/caixas/1/estado')
+      .send({ estado: 'livres', confirmar: false })
+
+    expect(resposta.status).toBe(404)
   })
 })

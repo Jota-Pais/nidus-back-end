@@ -1,7 +1,8 @@
 // A caixa de estoque, na conta. Depois do desmame os filhotes saem da caixa do casal para caixas
 // de estoque, cada uma com um sexo e uma linhagem. A reserva continua no parto
 // (demanda.compromisso) e o motor nao muda: aqui se decide em que caixa estao os animais de cada
-// reserva, para a coluna do kanban e para a entrega dizer de onde tirar
+// reserva, para o kanban e a grade mostrarem quantos reservados cada caixa tem e para a entrega
+// dizer de onde tirar
 
 import { naCaixa } from '../reproducao/disponibilidade.ts'
 import type {
@@ -171,8 +172,8 @@ export function reservadosPorCaixa(partos: PartoComLugares[]): Map<number, numbe
 
 /**
  * Quanto da reserva a entregar dos partos ainda pesa na caixa do casal: o que nao esta em caixa
- * de estoque. Inclui a reserva de ninhada que ainda nao nasceu ou mama. E o que deixa a caixa do
- * casal em Pre-reserva
+ * de estoque. Inclui a reserva de ninhada que ainda mama. E o "res." da caixa do casal no kanban e
+ * na grade
  */
 export function reservadoNaCaixaDoCasal(partos: PartoComLugares[]): number {
   let total = 0

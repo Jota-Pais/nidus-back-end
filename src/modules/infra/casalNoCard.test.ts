@@ -3,7 +3,11 @@ import { casalNoCard, ninhadas, partoAtual, partoPrevisto, selecaoDoCasalNoCard 
 
 const dia = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 
+type Reserva = { id: number; qtdM: number; qtdF: number; remessa: { idSolicitacao: number; dtRealizada: Date | null } }
+type Lote = { id: number; idCaixa: number; qtd: number; caixa: { sexo: string | null } }
+
 const parto = (previsto: string, real: string | null = null, nascidos = { m: 0, f: 0 }, ordem = 1) => ({
+  id: ordem,
   ordem,
   dtPartoPrevisto: dia(previsto),
   dtPartoReal: real === null ? null : dia(real),
@@ -13,15 +17,19 @@ const parto = (previsto: string, real: string | null = null, nascidos = { m: 0, 
   eutanasiadoF: null,
   desmamadoM: null,
   desmamadoF: null,
-  compromissos: [] as { qtdM: number; qtdF: number; remessa: { dtRealizada: Date | null } }[],
-  lotes: [] as { qtd: number; caixa: { sexo: string | null } }[],
+  compromissos: [] as Reserva[],
+  lotes: [] as Lote[],
 })
 
-const reserva = (qtdM: number, qtdF: number, entregue: string | null) => ({
+const reserva = (qtdM: number, qtdF: number, entregue: string | null, id = 1): Reserva => ({
+  id,
   qtdM,
   qtdF,
-  remessa: { dtRealizada: entregue === null ? null : dia(entregue) },
+  remessa: { idSolicitacao: 7, dtRealizada: entregue === null ? null : dia(entregue) },
 })
+
+/** os desmamados do parto numa caixa de estoque */
+const lote = (qtd: number, sexo: string, idCaixa = 9): Lote => ({ id: idCaixa, idCaixa, qtd, caixa: { sexo } })
 
 describe('parto atual - a bolinha colorida do card', () => {
   it('e o 1o desde a formacao do casal, nascido ou nao', () => {
@@ -103,7 +111,36 @@ describe('casalNoCard', () => {
       encerrado: false,
       aguardandoDesmame: false,
       ninhadas: [],
+      reservado: 0,
     })
+  })
+
+  it('diz quantos reservados a entregar ainda estao na caixa do casal, de todos os casais dela', () => {
+    // 5 M e 5 F desmamados, 1 M e 1 F ja entregues, 3 M na caixa de estoque 9. Dos 4 M a
+    // entregar, 1 ainda esta na caixa do casal e 3 no estoque; as 2 F estao na caixa do casal
+    const desmamado = {
+      ...parto('2026-10-01', '2026-10-01', { m: 5, f: 5 }),
+      desmamadoM: 5,
+      desmamadoF: 5,
+      lotes: [lote(3, 'M')],
+      compromissos: [reserva(4, 2, null, 1), reserva(1, 1, '2026-11-03', 2)],
+    }
+    const novo = { identificacao: 'CD', ativo: true, partos: [parto('2026-11-20')] }
+    const encerrado = { identificacao: 'AB', ativo: false, partos: [desmamado] }
+
+    expect(casalNoCard([novo, encerrado], 'R', '2026-11-06')?.reservado).toBe(3)
+  })
+
+  it('a reserva toda em caixa de estoque nao conta na caixa do casal', () => {
+    const desmamado = {
+      ...parto('2026-10-01', '2026-10-01', { m: 3, f: 0 }),
+      desmamadoM: 3,
+      desmamadoF: 0,
+      lotes: [lote(3, 'M')],
+      compromissos: [reserva(2, 0, null)],
+    }
+
+    expect(casalNoCard([{ identificacao: 'AB', ativo: true, partos: [desmamado] }], 'R')?.reservado).toBe(0)
   })
 
   it('a consulta do card e da grade traz todos os casais da caixa, o ativo primeiro', () => {
@@ -188,7 +225,7 @@ describe('ninhada que foi para o estoque', () => {
   })
 
   it('o que foi para uma caixa de estoque ja nao esta na caixa do casal', () => {
-    const parte = { ...desmamada(5, 4), lotes: [{ qtd: 3, caixa: { sexo: 'M' } }] }
+    const parte = { ...desmamada(5, 4), lotes: [lote(3, 'M')] }
 
     expect(ninhadas({ identificacao: 'AB', partos: [parte] }, '2026-11-06')).toEqual([
       { casal: 'AB', parto: 1, m: 2, f: 4, idadeDias: 36 },
@@ -198,10 +235,7 @@ describe('ninhada que foi para o estoque', () => {
   it('a ninhada que foi toda para o estoque sai do card do casal', () => {
     const toda = {
       ...desmamada(5, 4),
-      lotes: [
-        { qtd: 5, caixa: { sexo: 'M' } },
-        { qtd: 4, caixa: { sexo: 'F' } },
-      ],
+      lotes: [lote(5, 'M', 9), lote(4, 'F', 10)],
     }
 
     expect(ninhadas({ identificacao: 'AB', partos: [toda] }, '2026-11-06')).toEqual([])

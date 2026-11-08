@@ -12,7 +12,6 @@ import {
   SEXOS,
   colunaDoEstoque,
   naCaixaDoCasal,
-  reservadoNaCaixaDoCasal,
   reservadosPorCaixa,
   reservasNosLugares,
   selecaoDoPartoComLugares,
@@ -101,42 +100,6 @@ export function recusaDaCaixaOcupada(presos: AnimaisNaCaixa[], para: string) {
     'CAIXA_COM_ANIMAIS',
     `A caixa ainda tem ${primeiro.m} M e ${primeiro.f} F desmamados do ${primeiro.ordem}o parto do casal ${primeiro.casal}. Passe para o estoque antes de ${para}.`,
   )
-}
-
-/**
- * Leva a caixa do casal para Pre-reserva quando ainda pesa reserva nela, e de volta para Livres
- * quando nao. Reserva cujos animais ja estao em caixa de estoque nao prende a caixa do casal
- */
-export async function ajustarColunaDoCasal(
-  tx: Prisma.TransactionClient,
-  idCaixa: number,
-  idUsuario: number | null,
-  motivo: string,
-) {
-  const caixa = await tx.caixa.findUnique({
-    where: { id: idCaixa },
-    select: { id: true, codigo: true, estado: true, tipo: true, ativa: true },
-  })
-
-  if (caixa === null || !caixa.ativa || caixa.tipo !== 'C' || !['R', 'P'].includes(caixa.estado)) return
-
-  const reservado = reservadoNaCaixaDoCasal(await partosDaCaixaDoCasal(tx, idCaixa))
-  const depois = reservado > 0 ? 'P' : 'R'
-  if (depois === caixa.estado) return
-
-  await tx.caixa.update({ where: { id: idCaixa }, data: { estado: depois } })
-
-  const antes = estadoCaixa.paraApi(caixa.estado)
-  const novo = estadoCaixa.paraApi(depois)
-
-  await registrarHistorico(tx, {
-    idUsuario,
-    entidade: 'caixa',
-    idEntidade: idCaixa,
-    acao: 'mudanca_de_coluna',
-    descricao: `Caixa ${caixa.codigo}: ${antes} -> ${novo}, ${motivo}`,
-    dados: { antes, depois: novo },
-  })
 }
 
 // ------------------------------------------------------------ passar para o estoque
@@ -327,7 +290,6 @@ export async function passarParaOEstoque(idParto: number, dados: PassagemParaOEs
       resultado.push({ idCaixa: caixa.id, codigo: caixa.codigo, sexo: destino.sexo, qtd: destino.qtd })
     }
 
-    await ajustarColunaDoCasal(tx, parto.casal.idCaixa, idUsuario, 'os reservados foram para o estoque')
     await liberarCaixaDoCasal(tx, parto.casal.idCaixa, idUsuario)
 
     return resultado

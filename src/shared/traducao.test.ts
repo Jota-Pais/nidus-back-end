@@ -14,7 +14,7 @@ import {
 // errado aqui e silencioso e caro: um termo diferente do que o front espera
 // nao quebra build nenhum dos dois lados - so aparece como tela vazia
 const dicionarios = [
-  { nome: 'estadoCaixa', dic: estadoCaixa, codigos: ['R', 'P', 'T', 'E', 'X'] },
+  { nome: 'estadoCaixa', dic: estadoCaixa, codigos: ['R', 'T', 'E', 'X'] },
   { nome: 'perfil', dic: perfil, codigos: ['P', 'T', 'G'] },
   { nome: 'face', dic: face, codigos: ['1', '2'] },
 ]
@@ -31,7 +31,7 @@ describe('traducao do char(1)', () => {
   it('usa exatamente os termos que o front espera', () => {
     // Renomear qualquer um destes quebra o front sem quebrar build. Estao escritos a mao
     // de proposito: e a copia que o teste compara. As colunas seguem a ordem do kanban
-    expect(estadoCaixa.termos).toEqual(['livres', 'pre_reserva', 'estoque', 'reserva', 'enviado'])
+    expect(estadoCaixa.termos).toEqual(['livres', 'estoque', 'reserva', 'enviado'])
     expect(perfil.termos).toEqual(['pesquisador', 'tecnico', 'gestor'])
     expect(face.termos).toEqual(['frontal', 'traseira'])
   })

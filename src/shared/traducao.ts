@@ -31,12 +31,12 @@ function dicionario<Codigo extends string, Termo extends string>(
 }
 
 /**
- * infra.caixa.estado - as 5 colunas do kanban, com os nomes e na ordem da spec do cliente
- * (secao 1.9). A ordem aqui e a ordem das colunas na tela.
+ * infra.caixa.estado - as 4 colunas do kanban, com os nomes e na ordem da spec do cliente
+ * (secao 1.9), sem a Pre-reserva: o animal esta reservado ou nao, e a caixa do casal com reserva
+ * fica em Livres, mostrando quantos reservados tem. A ordem aqui e a ordem das colunas na tela.
  */
 export const estadoCaixa = dicionario({
   R: 'livres',
-  P: 'pre_reserva',
   E: 'estoque',
   T: 'reserva',
   X: 'enviado',

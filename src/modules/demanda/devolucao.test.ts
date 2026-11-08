@@ -7,11 +7,9 @@ import { desfazerReserva, faltaDosPedidos } from './devolucao.service.ts'
 const banco = vi.hoisted(() => ({
   solicitacao: null as Record<string, unknown> | null,
   reservas: [] as Record<string, unknown>[],
-  aindaReservadas: [] as { parto: unknown; remessa: { dtRealizada: Date | null } }[],
   devolvidas: 1,
   mudancaDeStatus: null as Record<string, unknown> | null,
   canceladas: null as Record<string, unknown> | null,
-  caixas: null as Record<string, unknown> | null,
   historico: null as Record<string, unknown> | null,
 }))
 
@@ -30,16 +28,6 @@ vi.mock('../../shared/prisma.ts', () => ({
         compromisso: {
           updateMany: async (consulta: Record<string, unknown>) => {
             banco.canceladas = consulta
-          },
-          // como o banco: com o filtro da remessa sem data de entrega, o entregue nao volta
-          findMany: async ({ where }: { where: { remessa?: { dtRealizada?: null } } }) =>
-            where.remessa?.dtRealizada === null
-              ? banco.aindaReservadas.filter((c) => c.remessa.dtRealizada === null)
-              : banco.aindaReservadas,
-        },
-        caixa: {
-          updateMany: async (consulta: Record<string, unknown>) => {
-            banco.caixas = consulta
           },
         },
         historico: {
@@ -83,11 +71,9 @@ const reserva = (id: number, idSolicitacao: number, qtdM: number, doParto: Retur
 beforeEach(() => {
   banco.solicitacao = { id: 12, status: 'AP' }
   banco.reservas = [reserva(70, 12, 4, [pedidoNoParto(12, 4)])]
-  banco.aindaReservadas = []
   banco.devolvidas = 1
   banco.mudancaDeStatus = null
   banco.canceladas = null
-  banco.caixas = null
   banco.historico = null
 })
 
@@ -108,30 +94,6 @@ describe('desfazer a reserva em falta do pedido', () => {
       acao: 'devolucao',
       dados: { falta: { m: 2, f: 0 } },
     })
-  })
-
-  it('a caixa que ficou sem nenhuma reserva volta de Pre-reserva para Livres', async () => {
-    await desfazerReserva(12, tecnica)
-
-    expect(banco.caixas).toEqual({ where: { id: { in: [3] }, estado: 'P' }, data: { estado: 'R' } })
-  })
-
-  it('a caixa que ainda tem reserva de outro pedido fica como esta', async () => {
-    banco.aindaReservadas = [{ parto: { casal: { idCaixa: 3 } }, remessa: { dtRealizada: null } }]
-
-    await desfazerReserva(12, tecnica)
-
-    expect(banco.caixas).toBeNull()
-  })
-
-  it('a reserva de outro pedido ja entregue nao prende a caixa em Pre-reserva, como na entrega', async () => {
-    banco.aindaReservadas = [
-      { parto: { casal: { idCaixa: 3 } }, remessa: { dtRealizada: new Date('2026-11-05T00:00:00.000Z') } },
-    ]
-
-    await desfazerReserva(12, tecnica)
-
-    expect(banco.caixas).toEqual({ where: { id: { in: [3] }, estado: 'P' }, data: { estado: 'R' } })
   })
 
   it('so o pedido com animais reservados tem reserva para desfazer', async () => {

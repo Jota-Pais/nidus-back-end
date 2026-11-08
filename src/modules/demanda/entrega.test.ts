@@ -6,8 +6,8 @@ const banco = vi.hoisted(() => ({
   concluidas: 1,
   remessas: null as Record<string, unknown> | null,
   historicos: [] as Record<string, unknown>[],
-  /** a caixa do casal com reserva do pedido: a coluna e se o casal esta ativo */
-  caixa: null as { estado: string; ativo: boolean } | null,
+  /** a caixa do casal com reserva do pedido: se o casal esta ativo */
+  caixa: null as { ativo: boolean } | null,
   /** os partos da caixa do casal, com as reservas e os lotes nas caixas de estoque */
   partos: [] as Parto[],
   movidas: [] as { id: number; estado?: string; ativa?: boolean }[],
@@ -78,10 +78,6 @@ vi.mock('../../shared/prisma.ts', () => ({
         caixa: {
           findMany: async () =>
             banco.caixa === null ? [] : [{ id: 3, casais: [{ ativo: banco.caixa.ativo }] }],
-          findUnique: async ({ where }: { where: { id: number } }) =>
-            where.id === 3 && banco.caixa !== null
-              ? { id: 3, codigo: 'F1A', estado: banco.caixa.estado, tipo: 'C', ativa: true }
-              : null,
           update: async ({ where, data }: { where: { id: number }; data: { estado?: string; ativa?: boolean } }) => {
             banco.movidas.push({ id: where.id, ...data })
             return { codigo: `caixa ${where.id}` }
@@ -201,7 +197,7 @@ const naCaixaDeEstoque9 = (qtd: number) => ({ id: 1, idCaixa: 9, qtd, caixa: { s
 
 describe('a caixa do casal depois da entrega', () => {
   it('casal encerrado: a entrega que esvazia a caixa a libera, e ela sai do kanban', async () => {
-    banco.caixa = { estado: 'P', ativo: false }
+    banco.caixa = { ativo: false }
     banco.partos = [desmamado(2, 1, [doPedido(1, 2, 1)])]
 
     await registrarEntrega(7, '2026-10-30', 1, agora)
@@ -210,18 +206,19 @@ describe('a caixa do casal depois da entrega', () => {
     expect(banco.movidas).toEqual([])
   })
 
-  it('casal ativo em Pre-reserva sem mais nada reservado nela: volta para Livres', async () => {
-    banco.caixa = { estado: 'P', ativo: true }
-    banco.partos = [desmamado(3, 3, [doPedido(1, 2, 1)])]
+  it('casal ativo: a entrega nao mexe na caixa do casal, que continua em Livres', async () => {
+    banco.caixa = { ativo: true }
+    banco.partos = [desmamado(3, 3, [doPedido(1, 2, 1), deOutroPedido(2, 1, 1)])]
 
     await registrarEntrega(7, '2026-10-30', 1, agora)
 
-    expect(banco.movidas).toEqual([{ id: 3, estado: 'R' }])
+    expect(banco.liberadas).toEqual([])
+    expect(banco.movidas).toEqual([])
   })
 
   it('casal encerrado com animal sobrando na caixa: ela nao libera e fica em Livres', async () => {
     banco.libera = false
-    banco.caixa = { estado: 'R', ativo: false }
+    banco.caixa = { ativo: false }
     banco.partos = [desmamado(3, 3, [doPedido(1, 2, 1)])]
 
     await registrarEntrega(7, '2026-10-30', 1, agora)
@@ -230,19 +227,11 @@ describe('a caixa do casal depois da entrega', () => {
     expect(banco.movidas).toEqual([])
   })
 
-  it('com reserva de outro pedido ainda na caixa ela fica em Pre-reserva', async () => {
-    banco.caixa = { estado: 'P', ativo: true }
-    banco.partos = [desmamado(2, 2, [doPedido(1, 1, 1), deOutroPedido(2, 1, 1)])]
-
-    await registrarEntrega(7, '2026-10-30', 1, agora)
-
-    expect(banco.movidas).toEqual([])
-  })
 })
 
 describe('a caixa de estoque na entrega', () => {
   it('os animais do pedido que estao na caixa de estoque saem dela', async () => {
-    banco.caixa = { estado: 'R', ativo: true }
+    banco.caixa = { ativo: true }
     banco.partos = [desmamado(3, 0, [doPedido(1, 2, 0)], [naCaixaDeEstoque9(3)])]
 
     await registrarEntrega(7, '2026-10-30', 1, agora)
@@ -252,7 +241,7 @@ describe('a caixa de estoque na entrega', () => {
   })
 
   it('primeiro sai o que sobrou na caixa do casal, depois a caixa de estoque', async () => {
-    banco.caixa = { estado: 'P', ativo: true }
+    banco.caixa = { ativo: true }
     // 3 machos: 1 ainda na caixa do casal, 2 na caixa de estoque 9
     banco.partos = [desmamado(3, 0, [doPedido(1, 2, 0)], [naCaixaDeEstoque9(2)])]
 
@@ -262,7 +251,7 @@ describe('a caixa de estoque na entrega', () => {
   })
 
   it('a caixa de estoque que esvazia vai para Enviado e libera a posicao', async () => {
-    banco.caixa = { estado: 'R', ativo: true }
+    banco.caixa = { ativo: true }
     banco.partos = [desmamado(2, 0, [doPedido(1, 2, 0)], [naCaixaDeEstoque9(2)])]
 
     await registrarEntrega(7, '2026-10-30', 1, agora)

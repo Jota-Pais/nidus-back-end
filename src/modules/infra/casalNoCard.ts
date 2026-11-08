@@ -1,22 +1,23 @@
 // O que o kanban e a grade mostram do casal de uma caixa, como na spec do cliente
 // (secao 1.13): a identificacao, o parto atual (a bolinha colorida), o proximo parto
 // previsto (o "P:dd/mm") e os animais que existem na caixa, por ninhada e com a idade,
-// inclusive os que um casal encerrado deixou nela
+// inclusive os que um casal encerrado deixou nela, e quantos deles estao reservados
 
 import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { dataISO, hojeISO } from '../../shared/traducao.ts'
-import { compromissosAtivosComPedido } from '../reproducao/disponibilidade.ts'
-import type { CompromissoComEntrega, ContagemDoCiclo } from '../reproducao/disponibilidade.ts'
-import { naCaixaDoCasal } from './estoque.ts'
+import type { ContagemDoCiclo } from '../reproducao/disponibilidade.ts'
+import { naCaixaDoCasal, reservadoNaCaixaDoCasal, selecaoDoPartoComLugares } from './estoque.ts'
+import type { LoteDoParto, ReservaDoParto } from './estoque.ts'
 
 type DatasDoParto = { dtPartoPrevisto: Date; dtPartoReal: Date | null }
 
 type PartoDoCard = DatasDoParto &
   ContagemDoCiclo & {
+    id: number
     ordem: number
-    compromissos: CompromissoComEntrega[]
+    compromissos: ReservaDoParto[]
     /** os desmamados que foram para caixas de estoque, que ja nao estao nesta */
-    lotes: { qtd: number; caixa: { sexo: string | null } }[]
+    lotes: LoteDoParto[]
   }
 
 type CasalDoCard = {
@@ -82,8 +83,9 @@ export function ninhadas(casal: Pick<CasalDoCard, 'identificacao' | 'partos'>, h
  * 'casais' vem na ordem de 'selecaoDoCasalNoCard': o primeiro e o casal da caixa (o ativo, ou o
  * mais recente), e os outros vieram antes dele. As ninhadas sao as de todos, das mais antigas para
  * as mais novas: casal novo na caixa nao esconde a ninhada que o casal encerrado deixou nela, que
- * o estoque e a busca ja contam. null sem casal, ou sem casal ativo e sem ninhada, ou com a caixa
- * ja enviada
+ * o estoque e a busca ja contam. 'reservado' e quanto da reserva a entregar ainda esta nesta caixa,
+ * e nao em caixa de estoque. null sem casal, ou sem casal ativo e sem ninhada, ou com a caixa ja
+ * enviada
  */
 export function casalNoCard(casais: CasalDoCard[], estado: string, hoje: string = hojeISO()) {
   const [casal] = casais
@@ -99,6 +101,7 @@ export function casalNoCard(casais: CasalDoCard[], estado: string, hoje: string 
     encerrado: !casal.ativo,
     aguardandoDesmame: !casal.ativo && casal.partos.some(mamando),
     ninhadas: todas,
+    reservado: reservadoNaCaixaDoCasal(casais.flatMap((c) => c.partos)),
   }
 }
 
@@ -112,17 +115,10 @@ export const selecaoDoCasalNoCard = {
     partos: {
       orderBy: { ordem: 'asc' as const },
       select: {
+        ...selecaoDoPartoComLugares,
         ordem: true,
         dtPartoPrevisto: true,
         dtPartoReal: true,
-        nascidoM: true,
-        nascidoF: true,
-        eutanasiadoM: true,
-        eutanasiadoF: true,
-        desmamadoM: true,
-        desmamadoF: true,
-        compromissos: compromissosAtivosComPedido,
-        lotes: { select: { qtd: true, caixa: { select: { sexo: true } } } },
       },
     },
   },

@@ -115,7 +115,7 @@ describe('a coluna da caixa de estoque', () => {
   })
 })
 
-describe('a reserva que prende a caixa do casal em Pre-reserva', () => {
+describe('quantos reservados ainda estao na caixa do casal', () => {
   it('a de animais que ja estao numa caixa de estoque nao prende', () => {
     const parto = desmamado(3, 0, [reserva(1, 3, 0)], [lote(1, 7, 'M', 3)])
 

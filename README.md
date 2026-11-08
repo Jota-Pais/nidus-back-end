@@ -16,9 +16,10 @@ tem, a gente não faz.
 
 O que mora aqui:
 
-- **Kanban** - um quadro por espécie, cinco colunas (`livres`, `pre_reserva`,
-  `estoque`, `reserva`, `enviado`). Mover uma caixa que tem animais comprometidos
-  só passa com confirmação
+- **Kanban** - um quadro por espécie, só de leitura, quatro colunas (`livres`,
+  `estoque`, `reserva`, `enviado`). Não existe Pré-reserva: o animal está
+  reservado ou não, e a caixa do casal fica em `livres` dizendo quantos reservados
+  ainda tem. A caixa de estoque muda de coluna sozinha, pelo que tem reservado
 - **Estantes** - a grade das duas faces, com a posição vazia como `caixa: null`.
   O endereço segue a etiqueta do cliente: face, linha e letra (`F1A`, `T2K`)
 - **Salas e estantes** (`/api/salas` e `/api/estantes`, escrita só do gestor) - a

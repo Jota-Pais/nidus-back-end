@@ -1,12 +1,12 @@
 import { liberarCaixaDoCasal } from './estoque.service.ts'
 
 /**
- * As caixas cujos partos contam para o estoque e a busca: a de casal em Livres ou Pre-reserva, a
- * de estoque com animal (a caixa do casal encerrado que virou de estoque tem os partos dela) e a
- * ja liberada, cujos desmamados podem estar em caixas de estoque
+ * As caixas cujos partos contam para o estoque e a busca: a de casal (em Livres), a de estoque
+ * com animal (a caixa do casal encerrado que virou de estoque tem os partos dela) e a ja
+ * liberada, cujos desmamados podem estar em caixas de estoque
  */
 export const caixaComEstoque = {
-  OR: [{ ativa: true, estado: { in: ['R', 'P', 'E'] } }, { ativa: false }],
+  OR: [{ ativa: true, estado: { in: ['R', 'E'] } }, { ativa: false }],
 }
 
 /**

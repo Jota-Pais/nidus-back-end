@@ -98,8 +98,8 @@ export async function devolvidosDesde(idsSolicitacao: number[], desde: Date): Pr
 
 /**
  * POST /api/solicitacoes/:id/devolucao - desfaz a reserva em falta: as reservas do pedido sao
- * canceladas (nada se apaga), a caixa que ficou sem reserva volta de Pre-reserva para Livres, o
- * inverso da alocacao, e o pedido continua aprovado, aguardando animais
+ * canceladas (nada se apaga), o inverso da alocacao, e o pedido continua aprovado, aguardando
+ * animais
  */
 export async function desfazerReserva(idSolicitacao: number, usuario: UsuarioDaSessao) {
   const solicitacao = await prisma.solicitacao.findUnique({
@@ -145,8 +145,6 @@ export async function desfazerReserva(idSolicitacao: number, usuario: UsuarioDaS
     }
   }
 
-  const caixas = [...new Set(reservas.map((reserva) => reserva.parto.casal.idCaixa))]
-
   await prisma.$transaction(async (tx) => {
     const desfeita = await tx.solicitacao.updateMany({
       where: { id: idSolicitacao, status: 'AP' },
@@ -164,27 +162,6 @@ export async function desfazerReserva(idSolicitacao: number, usuario: UsuarioDaS
       where: { id: { in: reservas.map((reserva) => reserva.id) }, dtCancelamento: null },
       data: { dtCancelamento: new Date(), motivoCancelamento: MOTIVO_DO_CANCELAMENTO },
     })
-
-    // a mesma conta da entrega (colunaDepoisDaEntrega): so prende a caixa o que ainda falta
-    // entregar. O compromisso entregue continua ativo, mas a remessa dele tem data realizada
-    const aindaReservadas = await tx.compromisso.findMany({
-      where: {
-        dtCancelamento: null,
-        remessa: { dtRealizada: null },
-        parto: { casal: { idCaixa: { in: caixas } } },
-      },
-      select: { parto: { select: { casal: { select: { idCaixa: true } } } } },
-    })
-    const semReserva = caixas.filter(
-      (idCaixa) => !aindaReservadas.some((c) => c.parto.casal.idCaixa === idCaixa),
-    )
-
-    if (semReserva.length > 0) {
-      await tx.caixa.updateMany({
-        where: { id: { in: semReserva }, estado: 'P' },
-        data: { estado: 'R' },
-      })
-    }
 
     await registrarHistorico(tx, {
       idUsuario: usuario.id,

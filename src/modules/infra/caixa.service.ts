@@ -1,12 +1,10 @@
-// Kanban (um por especie) e a mudanca de coluna de uma caixa
+// Kanban (um por especie, so de leitura) e a mudanca de posicao de uma caixa
 
 import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
-import { estadoCaixa, exigirCodigo } from '../../shared/traducao.ts'
-import type { EstadoCaixa } from '../../shared/traducao.ts'
+import { estadoCaixa } from '../../shared/traducao.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
 import { casalNoCard, selecaoDoCasalNoCard } from './casalNoCard.ts'
-import { conferirTransicao, selecaoDoPartoDaCaixa, situacaoDaCaixa } from './fluxoDoKanban.ts'
 import { codigoDaPosicao } from './endereco.ts'
 import { lerCaixasDeEstoque } from './estoque.service.ts'
 import { idDaEspecie } from './infra.service.ts'
@@ -15,9 +13,9 @@ import { idDaEspecie } from './infra.service.ts'
 const DIAS_EM_ENVIADO = 7
 
 /**
- * 'GET /api/quadro?especie=' - o kanban de uma especie, com as cinco colunas sempre presentes. A
- * caixa de casal fica em Livres ou Pre-reserva; a de estoque em Estoque ou Reserva, pelo que tem
- * reservado, e em Enviado por uma semana depois que a entrega a esvazia
+ * 'GET /api/quadro?especie=' - o kanban de uma especie, com as quatro colunas sempre presentes. A
+ * caixa de casal fica em Livres, com quantos reservados ainda tem; a de estoque em Estoque ou
+ * Reserva, pelo que tem reservado, e em Enviado por uma semana depois que a entrega a esvazia
  */
 export async function montarQuadro(codigoEspecie: string) {
   const idEspecie = await idDaEspecie(codigoEspecie)
@@ -83,72 +81,6 @@ export async function montarQuadro(codigoEspecie: string) {
   }
 
   return { colunas }
-}
-
-export type PedidoDeTransicao = {
-  estado: EstadoCaixa
-  confirmar: boolean
-}
-
-/**
- * PATCH /api/caixas/:id/estado - arrastar o card para outra coluna. Confere o fluxo do kanban
- * (fluxoDoKanban.ts) e, se a caixa tem animal reservado ainda nao entregue, a mudanca so passa
- * com 'confirmar: true'
- */
-export async function moverCaixa(idCaixa: number, dados: PedidoDeTransicao, idUsuario: number) {
-  const caixa = await prisma.caixa.findUnique({
-    where: { id: idCaixa },
-    select: { id: true, ativa: true, estado: true, codigo: true, tipo: true },
-  })
-
-  if (caixa === null || !caixa.ativa) {
-    throw naoEncontrado('Caixa')
-  }
-
-  if (caixa.tipo === 'E') {
-    throw erroDeRegra(
-      'TRANSICAO_INVALIDA',
-      'A caixa de estoque muda de coluna sozinha: fica em Estoque enquanto tem animal livre e vai para Reserva quando todos estao reservados.',
-    )
-  }
-
-  const estadoNovo = exigirCodigo(estadoCaixa, dados.estado, 'Estado')
-
-  // os partos de todos os casais da caixa: a ninhada que um casal encerrado deixou continua nela
-  const partos = await prisma.parto.findMany({
-    where: { casal: { idCaixa } },
-    select: selecaoDoPartoDaCaixa,
-  })
-  const situacao = situacaoDaCaixa(partos)
-
-  conferirTransicao(caixa.estado, estadoNovo)
-
-  if (situacao.aEntregar.m + situacao.aEntregar.f > 0 && !dados.confirmar) {
-    throw erroDeRegra(
-      'TRANSICAO_CONTRARIA_COMPROMISSO',
-      'Esta caixa tem animais comprometidos que esta mudanca pode afetar. Confirmar mesmo assim?',
-    )
-  }
-
-  const atualizada = await prisma.$transaction(async (tx) => {
-    const salva = await tx.caixa.update({
-      where: { id: idCaixa },
-      data: { estado: estadoNovo },
-    })
-
-    await registrarHistorico(tx, {
-      idUsuario,
-      entidade: 'caixa',
-      idEntidade: idCaixa,
-      acao: 'mudanca_de_coluna',
-      descricao: `Caixa ${caixa.codigo}: ${estadoCaixa.paraApi(caixa.estado)} -> ${dados.estado}`,
-      dados: { antes: estadoCaixa.paraApi(caixa.estado), depois: dados.estado, confirmado: dados.confirmar },
-    })
-
-    return salva
-  })
-
-  return { idCaixa: atualizada.id, estado: estadoCaixa.paraApi(atualizada.estado) }
 }
 
 export type NovaPosicao = {
