@@ -11,9 +11,10 @@ export default defineConfig({
       // em CI (e em clone novo) nao existe `.env`: o `vitest` morria no import,
       // antes de rodar teste nenhum.
       //
-      // Este valor e so para satisfazer a validacao. Nenhum teste desta suite
-      // abre conexao - quem precisa de banco de verdade e teste de integracao,
-      // que le a URL do ambiente e nao daqui.
+      // Este valor e so para satisfazer a validacao. Nenhum teste abre conexao
+      // por ele - quem precisa de banco de verdade e teste de integracao
+      // (regras-do-banco.test.ts), que le DATABASE_URL_TESTE do ambiente e
+      // nao daqui.
       DATABASE_URL: 'postgresql://placeholder/nidus-testes',
       NODE_ENV: 'test',
     },

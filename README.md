@@ -97,7 +97,7 @@ e o que você grava rodando local aparece para o cliente.
 | Script | O que faz |
 |---|---|
 | `npm run dev` | API com recarga automática (`tsx watch`) |
-| `npm test` | Vitest. Nenhum teste abre conexão com o banco |
+| `npm test` | Vitest. Só a suíte das regras do banco abre conexão, e só com `DATABASE_URL_TESTE` (abaixo) |
 | `npm run typecheck` | `tsc` sem emitir |
 | `npm run build` | Gera o Prisma Client e compila para `dist/` |
 | `npm start` | Roda o build, é o comando da Render |
@@ -106,6 +106,19 @@ e o que você grava rodando local aparece para o cliente.
 | `npm run db:usuarios` | Cria os três usuários e o projeto CEUA num banco novo. Procura cada usuário pelo e-mail: o que acha fica como está, o que não acha é criado de novo |
 | `npm run db:senha -- <email> "<senha>"` | Define a senha de um usuário que já existe. É a reserva de quem já tem conta, quando o e-mail com o código não chega ou trava por código errado demais. Não cria conta |
 | `npm run desempenho` | Mede o tempo de resposta das rotas de leitura (veja Desempenho) |
+
+Os testes de serviço trocam o Prisma por um dublê e não enxergam o que o banco
+cobra sozinho: os triggers da topologia da caixa, do animal e do pedido, e os
+CHECKs. Isso fica em `src/shared/regras-do-banco.test.ts`, que roda contra um
+banco de verdade, já migrado, e só quando `DATABASE_URL_TESTE` aponta para ele:
+
+```bash
+DATABASE_URL_TESTE="postgresql://...branch-de-teste..." npm test -- regras-do-banco
+```
+
+Use um branch de teste da Neon ou um Postgres local, nunca a produção. A suíte
+cria os próprios dados numa transação e desfaz tudo no fim; só as sequências de
+id andam. Sem a variável, ela fica de fora e o resto roda como sempre.
 
 ## Stack
 
