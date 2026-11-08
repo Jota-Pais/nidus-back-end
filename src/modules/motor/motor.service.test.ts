@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buscarAtendimento } from './motor.service.ts'
+import { buscarAtendimento, janelaDeFormarCasais } from './motor.service.ts'
 
 // O banco aqui e de mentira: 'caixa.findMany' devolve as caixas que cada teste deixou em
 // 'banco', cada uma com um casal e um parto ja desmamado. Nada e gravado
@@ -123,16 +123,21 @@ describe('deficit e acasalamento novo', () => {
 
     const busca = await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
 
-    // 30/10 + 23 + 21 dias. Com a idade maxima seria 01/01/2027, depois da entrega. O casal tem
-    // de ser formado ate 31/12 - 23 - 21 dias
-    expect(busca.acasalamentoNovo).toEqual({
-      dataMinimaDeEntrega: '2026-12-13',
-      acasalarAte: '2026-11-17',
-      viavel: true,
-    })
+    // 30/10 + 23 + 21 dias. Com a idade maxima seria 01/01/2027, depois da entrega
+    expect(busca.acasalamentoNovo).toMatchObject({ dataMinimaDeEntrega: '2026-12-13', viavel: true })
   })
 
-  it('com a data de formar o casal ja passada, o acasalamento novo nao e viavel', async () => {
+  it('os casais novos se formam numa janela: nem os filhotes passam da faixa, nem chegam sem desmamar', async () => {
+    banco.caixas = []
+
+    const busca = await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
+
+    // faixa 20 a 44 dias na entrega (31/12), mas desmamados so a partir de 22: formados de
+    // 31/12 - 23 - 44 ate 31/12 - 23 - 22
+    expect(busca.acasalamentoNovo.formarCasais).toEqual({ de: '2026-10-25', ate: '2026-11-16' })
+  })
+
+  it('na idade exata, a janela pode ser um dia so', async () => {
     banco.caixas = []
 
     const busca = await buscarAtendimento(
@@ -140,8 +145,13 @@ describe('deficit e acasalamento novo', () => {
       agora,
     )
 
-    // 01/12 - 44 dias = 18/10, antes de hoje (30/10)
-    expect(busca.acasalamentoNovo.acasalarAte).toBe('2026-10-18')
-    expect(busca.acasalamentoNovo.viavel).toBe(false)
+    // 21 dias aceita de 20 a 22, e desmamado so com 22: formado em 01/12 - 23 - 22
+    expect(busca.acasalamentoNovo.formarCasais).toEqual({ de: '2026-10-17', ate: '2026-10-17' })
+  })
+})
+
+describe('janelaDeFormarCasais', () => {
+  it('sem idade da faixa que chegue desmamada, nao ha janela', () => {
+    expect(janelaDeFormarCasais({ min: 10, max: 20 }, '2026-12-31')).toBeNull()
   })
 })

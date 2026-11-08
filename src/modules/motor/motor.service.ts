@@ -133,10 +133,8 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
   })
 
   // ultima alternativa: acasalamento novo. A entrega precisa caber em hoje + gestacao + idade
-  // minima, a menor idade que o pedido aceita; ao contrario, o casal tem de ser formado ate a
-  // entrega - gestacao - idade minima
+  // minima, a menor idade que o pedido aceita
   const dataMinima = somarDias(hoje, GESTACAO_DIAS + pedido.idadeMin)
-  const acasalarAte = somarDias(referencia, -(GESTACAO_DIAS + pedido.idadeMin))
 
   return {
     faixa,
@@ -145,8 +143,27 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
     casaisAFormar: casaisParaODeficit(deficit),
     acasalamentoNovo: {
       dataMinimaDeEntrega: dataMinima,
-      acasalarAte,
       viavel: referencia >= dataMinima,
+      formarCasais: janelaDeFormarCasais(faixa, referencia),
     },
+  }
+}
+
+/**
+ * Quando formar os casais novos para a entrega: os filhotes nascem a gestacao depois e, na
+ * entrega, tem de estar na faixa aceita e ja desmamados, como as caixas da busca. Formado antes
+ * da janela, os filhotes passam da idade; depois, ficam novos demais. Nula quando nenhuma idade
+ * da faixa chega desmamada
+ */
+export function janelaDeFormarCasais(
+  faixa: { min: number; max: number },
+  entrega: string,
+): { de: string; ate: string } | null {
+  const idadeMinima = Math.max(faixa.min, ALEITAMENTO_DIAS)
+  if (idadeMinima > faixa.max) return null
+
+  return {
+    de: somarDias(entrega, -(GESTACAO_DIAS + faixa.max)),
+    ate: somarDias(entrega, -(GESTACAO_DIAS + idadeMinima)),
   }
 }
