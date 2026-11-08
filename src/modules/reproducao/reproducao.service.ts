@@ -19,6 +19,7 @@ import { dataISO, paraData } from '../../shared/traducao.ts'
 import { liberarCaixaVazia } from '../infra/liberacaoDaCaixa.ts'
 import { naCaixaDoCasal } from '../infra/estoque.ts'
 import { animaisNaCaixaDoCasal, recusaDaCaixaOcupada } from '../infra/estoque.service.ts'
+import { exigirOrdem } from './ordemDasDatas.ts'
 
 /**
  * Valida o par genetico ANTES do insert, para dar a mensagem rica
@@ -361,6 +362,10 @@ export async function registrarNascimento(
     throw erroDeRegra('SEQUENCIA_INVALIDA', 'Este casal esta encerrado e nao recebe parto novo.')
   }
 
+  exigirOrdem('dtPartoReal', dados.dtPartoReal, {
+    depoisDe: [{ evento: 'do acasalamento', data: parto.dtAcasalamento }],
+  })
+
   // duas ninhadas nao dividem a caixa: a de antes desmama e vai para o estoque primeiro
   const recusa = recusaDaCaixaOcupada(
     (await animaisNaCaixaDoCasal(prisma, parto.casal.idCaixa)).filter((preso) => preso.idParto !== idParto),
@@ -437,6 +442,11 @@ export async function registrarAcasalamento(idCasal: number, dados: Acasalamento
     )
   }
 
+  // no mesmo dia do parto anterior pode: a femea entra no cio logo depois de parir
+  exigirOrdem('dtAcasalamento', dados.dtAcasalamento, {
+    depoisDe: [{ evento: `do ${ultimo?.ordem}o parto`, data: ultimo?.dtPartoReal }],
+  })
+
   const ordem = (ultimo?.ordem ?? 0) + 1
 
   if (ordem > MAX_PARTOS_POR_CASAL) {
@@ -502,6 +512,10 @@ export async function registrarSelecao(idParto: number, dados: Selecao, idUsuari
   if (parto.dtSelecao !== null) {
     throw erroDeRegra('SEQUENCIA_INVALIDA', 'A eutanasia deste parto ja foi registrada.')
   }
+
+  exigirOrdem('dtSelecao', dados.dtSelecao, {
+    depoisDe: [{ evento: 'do parto', data: parto.dtPartoReal }],
+  })
 
   const eutanasiaPassou = {
     m: dados.eutanasiadoM > parto.nascidoM,
@@ -570,6 +584,13 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
     throw erroDeRegra('SEQUENCIA_INVALIDA', 'O desmame deste parto ja foi registrado.')
   }
 
+  exigirOrdem('dtDesmameReal', dados.dtDesmameReal, {
+    depoisDe: [
+      { evento: 'do parto', data: parto.dtPartoReal },
+      { evento: 'da eutanasia', data: parto.dtSelecao },
+    ],
+  })
+
   const vivosM = parto.nascidoM - (parto.eutanasiadoM ?? 0)
   const vivosF = parto.nascidoF - (parto.eutanasiadoF ?? 0)
   const desmamePassou = { m: dados.desmamadoM > vivosM, f: dados.desmamadoF > vivosF }
@@ -618,7 +639,10 @@ export type Encerramento = {
 
 /** POST /api/casais/:id/encerramento - nada e apagado, so encerra */
 export async function encerrarCasal(idCasal: number, dados: Encerramento, idUsuario: number) {
-  const casal = await prisma.casal.findUnique({ where: { id: idCasal } })
+  const casal = await prisma.casal.findUnique({
+    where: { id: idCasal },
+    include: { partos: { orderBy: { ordem: 'desc' }, take: 1 } },
+  })
 
   if (casal === null) {
     throw naoEncontrado('Casal')
@@ -629,6 +653,17 @@ export async function encerrarCasal(idCasal: number, dados: Encerramento, idUsua
       campos: { idCasal: 'Este casal ja esta encerrado.' },
     })
   }
+
+  // o parto pode vir depois do encerramento, porque a femea separada do macho ainda pare a ninhada
+  // que carrega. O acasalamento nao
+  const [ultimo] = casal.partos
+
+  exigirOrdem('dtEncerramento', dados.dtEncerramento, {
+    depoisDe: [
+      { evento: 'da formacao do casal', data: casal.dtFormacao },
+      { evento: `do acasalamento do ${ultimo?.ordem}o parto`, data: ultimo?.dtAcasalamento },
+    ],
+  })
 
   await prisma.$transaction(async (tx) => {
     await tx.casal.update({

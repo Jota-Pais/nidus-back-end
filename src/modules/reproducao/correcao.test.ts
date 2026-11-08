@@ -133,6 +133,38 @@ describe('correcao do parto', () => {
     expect(banco.atualizados[0]?.data).toMatchObject({ dtPartoReal: d('2026-09-23') })
   })
 
+  it('o parto corrigido fica entre o acasalamento e a eutanasia; no mesmo dia pode', async () => {
+    await expect(
+      corrigirNascimento(1, { dtPartoReal: '2026-08-31', nascidoM: 5, nascidoF: 5, motivo: 'x' }, 1),
+    ).rejects.toEqual(nosCampos('dtPartoReal'))
+    await expect(
+      corrigirNascimento(1, { dtPartoReal: '2026-09-26', nascidoM: 5, nascidoF: 5, motivo: 'x' }, 1),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        extras: { campos: { dtPartoReal: 'Nao pode ser depois da eutanasia (25/09/2026).' } },
+      }),
+    )
+    expect(banco.atualizados).toEqual([])
+
+    await corrigirNascimento(1, { dtPartoReal: '2026-09-25', nascidoM: 5, nascidoF: 5, motivo: 'x' }, 1)
+    expect(banco.atualizados[0]?.data).toMatchObject({ dtPartoReal: d('2026-09-25') })
+  })
+
+  it('o parto corrigido nao passa do acasalamento do parto seguinte', async () => {
+    banco.parto = { ...partoRegistrado, dtSelecao: null, eutanasiadoM: null, eutanasiadoF: null }
+    banco.proximo = { dtAcasalamento: d('2026-09-24') }
+
+    await expect(
+      corrigirNascimento(1, { dtPartoReal: '2026-09-25', nascidoM: 5, nascidoF: 5, motivo: 'x' }, 1),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        extras: {
+          campos: { dtPartoReal: 'Nao pode ser depois do acasalamento do 2o parto (24/09/2026).' },
+        },
+      }),
+    )
+  })
+
   it('avisa quando os compromissos passam do que o parto tem depois da correcao', async () => {
     banco.parto = {
       ...partoRegistrado,
@@ -214,6 +246,32 @@ describe('correcao da selecao e do desmame', () => {
       acao: 'correcao_selecao',
       dados: { antes: { eutanasiadoF: 1 }, depois: { eutanasiadoF: 0 } },
     })
+  })
+
+  it('a eutanasia corrigida fica entre o parto e o desmame', async () => {
+    const corrigir = (dtSelecao: string) =>
+      corrigirSelecao(1, { dtSelecao, eutanasiadoM: 1, eutanasiadoF: 1, motivo: 'x' }, 1)
+
+    await expect(corrigir('2026-09-23')).rejects.toEqual(nosCampos('dtSelecao'))
+    await expect(corrigir('2026-10-17')).rejects.toEqual(nosCampos('dtSelecao'))
+    expect(banco.atualizados).toEqual([])
+
+    await corrigir('2026-10-16')
+    expect(banco.atualizados[0]?.data).toMatchObject({ dtSelecao: d('2026-10-16') })
+  })
+
+  it('o desmame corrigido nao fica antes da eutanasia; no mesmo dia pode', async () => {
+    const corrigir = (dtDesmameReal: string) =>
+      corrigirDesmame(1, { dtDesmameReal, desmamadoM: 4, desmamadoF: 4, motivo: 'x' }, 1)
+
+    await expect(corrigir('2026-09-24')).rejects.toEqual(
+      expect.objectContaining({
+        extras: { campos: { dtDesmameReal: 'Nao pode ser antes da eutanasia (25/09/2026).' } },
+      }),
+    )
+
+    await corrigir('2026-09-25')
+    expect(banco.atualizados[0]?.data).toMatchObject({ dtDesmameReal: d('2026-09-25') })
   })
 
   it('desmame acima do nascido menos a selecao e recusado', async () => {

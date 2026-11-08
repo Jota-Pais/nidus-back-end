@@ -180,8 +180,22 @@ describe('nascimento', () => {
     expect(banco.gravou).toBe(false)
   })
 
-  it.each(['2026-08-31', '2026-10-29', '2026-10-31'])(
-    'o parto aceita a data que o tecnico digitar (%s)',
+  it('o parto nao pode ser antes do acasalamento', async () => {
+    banco.parto = { ...pendente, dtPartoPrevisto: d('2026-09-24'), compromissos: [] }
+
+    await expect(
+      registrarNascimento(1, { dtPartoReal: '2026-08-31', nascidoM: 5, nascidoF: 5 }, 1),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        extras: { campos: { dtPartoReal: 'Nao pode ser antes do acasalamento (01/09/2026).' } },
+      }),
+    )
+    expect(banco.gravou).toBe(false)
+  })
+
+  // no mesmo dia do acasalamento pode: quem passa os dados antigos para o sistema junta tudo
+  it.each(['2026-09-01', '2026-10-29', '2026-10-31'])(
+    'o parto aceita do dia do acasalamento em diante, sem minimo de dias (%s)',
     async (dtPartoReal) => {
       banco.parto = { ...pendente, dtPartoPrevisto: d('2026-09-24'), compromissos: [] }
 
@@ -291,6 +305,18 @@ describe('selecao', () => {
     ).rejects.toEqual(nosCampos('eutanasiadoF'))
   })
 
+  it('nao pode ser antes do parto; no mesmo dia pode', async () => {
+    banco.parto = { ...partoNascido, dtPartoPrevisto: d('2026-09-24'), compromissos: [] }
+
+    await expect(
+      registrarSelecao(1, { dtSelecao: '2026-09-23', eutanasiadoM: 1, eutanasiadoF: 1 }, 1),
+    ).rejects.toEqual(nosCampos('dtSelecao'))
+    expect(banco.gravou).toBe(false)
+
+    await registrarSelecao(1, { dtSelecao: '2026-09-24', eutanasiadoM: 1, eutanasiadoF: 1 }, 1)
+    expect(banco.partoAtualizado).toMatchObject({ dtSelecao: d('2026-09-24') })
+  })
+
   it('segunda selecao do mesmo parto e recusada', async () => {
     banco.parto = { ...partoNascido, dtSelecao: d('2026-09-25') }
 
@@ -322,12 +348,33 @@ describe('desmame', () => {
     ).rejects.toEqual(nosCampos('desmamadoM', 'desmamadoF'))
   })
 
-  it('aceita a data que o tecnico digitar, mesmo antes do parto', async () => {
+  it('nao pode ser antes do parto', async () => {
     banco.parto = { ...partoNascido, dtPartoPrevisto: d('2026-09-24'), compromissos: [] }
 
-    await registrarDesmame(1, { dtDesmameReal: '2026-09-20', desmamadoM: 4, desmamadoF: 4 }, 1)
+    await expect(
+      registrarDesmame(1, { dtDesmameReal: '2026-09-20', desmamadoM: 4, desmamadoF: 4 }, 1),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        extras: { campos: { dtDesmameReal: 'Nao pode ser antes do parto (24/09/2026).' } },
+      }),
+    )
+    expect(banco.gravou).toBe(false)
+  })
 
-    expect(banco.partoAtualizado).toMatchObject({ dtDesmameReal: d('2026-09-20') })
+  it('nao pode ser antes da eutanasia', async () => {
+    banco.parto = { ...partoNascido, dtSelecao: d('2026-09-30'), eutanasiadoM: 1, eutanasiadoF: 1 }
+
+    await expect(
+      registrarDesmame(1, { dtDesmameReal: '2026-09-29', desmamadoM: 4, desmamadoF: 4 }, 1),
+    ).rejects.toEqual(nosCampos('dtDesmameReal'))
+  })
+
+  it('no mesmo dia do parto pode', async () => {
+    banco.parto = { ...partoNascido, dtPartoPrevisto: d('2026-09-24'), compromissos: [] }
+
+    await registrarDesmame(1, { dtDesmameReal: '2026-09-24', desmamadoM: 4, desmamadoF: 4 }, 1)
+
+    expect(banco.partoAtualizado).toMatchObject({ dtDesmameReal: d('2026-09-24') })
   })
 
   it('com menos animais do que o reservado grava, e a resposta diz quanto falta e de quais pedidos', async () => {
@@ -422,23 +469,45 @@ describe('formacao do casal', () => {
 })
 
 describe('encerramento', () => {
-  it('aceita a data que o tecnico digitar e libera a caixa se ela ficou vazia', async () => {
-    banco.casal = {
-      id: 1,
-      idCaixa: 7,
-      ativo: true,
-      identificacao: 'AB',
-      grupoMacho: 'A',
-      grupoFemea: 'B',
-      dtFormacao: d('2026-09-01'),
-      dtEncerramento: null,
-      linhagem: { nome: 'Wistar' },
-    }
+  // formado em 01/09, o 2o parto acasalou em 25/09 e ainda nao nasceu
+  const casalAtivo = {
+    id: 1,
+    idCaixa: 7,
+    ativo: true,
+    identificacao: 'AB',
+    grupoMacho: 'A',
+    grupoFemea: 'B',
+    dtFormacao: d('2026-09-01'),
+    dtEncerramento: null,
+    linhagem: { nome: 'Wistar' },
+    partos: [{ ordem: 2, dtAcasalamento: d('2026-09-25'), dtPartoReal: null }],
+  }
 
-    await encerrarCasal(1, { dtEncerramento: '2026-08-30', motivo: 'teste' }, 1)
+  it('encerra no dia do ultimo acasalamento ou depois e libera a caixa se ela ficou vazia', async () => {
+    banco.casal = casalAtivo
+
+    await encerrarCasal(1, { dtEncerramento: '2026-09-25', motivo: 'teste' }, 1)
 
     expect(banco.gravou).toBe(true)
     expect(banco.liberou).toEqual([7])
+  })
+
+  it('nao encerra antes do ultimo acasalamento nem antes da formacao', async () => {
+    banco.casal = casalAtivo
+
+    await expect(encerrarCasal(1, { dtEncerramento: '2026-09-24', motivo: 'teste' }, 1)).rejects.toEqual(
+      expect.objectContaining({
+        extras: {
+          campos: { dtEncerramento: 'Nao pode ser antes do acasalamento do 2o parto (25/09/2026).' },
+        },
+      }),
+    )
+
+    banco.casal = { ...casalAtivo, partos: [] }
+    await expect(encerrarCasal(1, { dtEncerramento: '2026-08-30', motivo: 'teste' }, 1)).rejects.toEqual(
+      nosCampos('dtEncerramento'),
+    )
+    expect(banco.gravou).toBe(false)
   })
 })
 
@@ -459,6 +528,21 @@ describe('acasalamento', () => {
     expect(banco.criados).toEqual([
       expect.objectContaining({ idCasal: 1, ordem: 2, dtAcasalamento: d('2026-09-25') }),
     ])
+  })
+
+  it('no dia do parto anterior pode, antes dele nao', async () => {
+    banco.casal = casal([{ ordem: 1, dtPartoReal: d('2026-09-24') }])
+    banco.parto = { ...partoNascido, ordem: 2, dtPartoPrevisto: d('2026-10-17'), compromissos: [] }
+
+    await expect(registrarAcasalamento(1, { dtAcasalamento: '2026-09-23' }, 1)).rejects.toEqual(
+      expect.objectContaining({
+        extras: { campos: { dtAcasalamento: 'Nao pode ser antes do 1o parto (24/09/2026).' } },
+      }),
+    )
+    expect(banco.criados).toEqual([])
+
+    await registrarAcasalamento(1, { dtAcasalamento: '2026-09-24' }, 1)
+    expect(banco.criados).toEqual([expect.objectContaining({ ordem: 2, dtAcasalamento: d('2026-09-24') })])
   })
 
   it('so depois de registrar o parto anterior', async () => {

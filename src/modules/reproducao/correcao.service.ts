@@ -7,6 +7,7 @@ import { calcularDesmamePrevisto } from './cadeiaTemporal.ts'
 import { compromissosAtivosComPedido, faltaNaReserva, separarEntregues } from './disponibilidade.ts'
 import { noEstoque } from '../infra/estoque.ts'
 import type { ContagemDoCiclo } from './disponibilidade.ts'
+import { exigirOrdem } from './ordemDasDatas.ts'
 import { cicloFicha, contagemInvalida } from './reproducao.service.ts'
 import type { Desmame, Nascimento, Selecao } from './reproducao.service.ts'
 
@@ -69,6 +70,20 @@ export async function corrigirNascimento(
       'Este parto ainda nao foi registrado: registre antes de corrigir.',
     )
   }
+
+  const seguinte = await prisma.parto.findFirst({
+    where: { idCasal: parto.idCasal, ordem: parto.ordem + 1 },
+    select: { dtAcasalamento: true },
+  })
+
+  exigirOrdem('dtPartoReal', dados.dtPartoReal, {
+    depoisDe: [{ evento: 'do acasalamento', data: parto.dtAcasalamento }],
+    antesDe: [
+      { evento: 'da eutanasia', data: parto.dtSelecao },
+      { evento: 'do desmame', data: parto.dtDesmameReal },
+      { evento: `do acasalamento do ${parto.ordem + 1}o parto`, data: seguinte?.dtAcasalamento },
+    ],
+  })
 
   const vivosM = dados.nascidoM - (parto.eutanasiadoM ?? 0)
   const vivosF = dados.nascidoF - (parto.eutanasiadoF ?? 0)
@@ -155,6 +170,11 @@ export async function corrigirSelecao(
     throw erroDeRegra('SEQUENCIA_INVALIDA', 'A eutanasia deste parto ainda nao foi registrada.')
   }
 
+  exigirOrdem('dtSelecao', dados.dtSelecao, {
+    depoisDe: [{ evento: 'do parto', data: parto.dtPartoReal }],
+    antesDe: [{ evento: 'do desmame', data: parto.dtDesmameReal }],
+  })
+
   const vivosM = parto.nascidoM - dados.eutanasiadoM
   const vivosF = parto.nascidoF - dados.eutanasiadoF
 
@@ -239,6 +259,13 @@ export async function corrigirDesmame(
   ) {
     throw erroDeRegra('SEQUENCIA_INVALIDA', 'O desmame deste parto ainda nao foi registrado.')
   }
+
+  exigirOrdem('dtDesmameReal', dados.dtDesmameReal, {
+    depoisDe: [
+      { evento: 'do parto', data: parto.dtPartoReal },
+      { evento: 'da eutanasia', data: parto.dtSelecao },
+    ],
+  })
 
   const vivosM = parto.nascidoM - (parto.eutanasiadoM ?? 0)
   const vivosF = parto.nascidoF - (parto.eutanasiadoF ?? 0)
