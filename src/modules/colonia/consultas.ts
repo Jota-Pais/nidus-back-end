@@ -104,6 +104,7 @@ export const selecaoDoAnimalDoParto = {
   situacao: true,
   idCaixa: true,
   idPedido: true,
+  dtMovimento: true,
   dtSaida: true,
   caixa: { select: { codigo: true, tipo: true, estante: { select: { numeroVisivel: true } } } },
 } satisfies Prisma.AnimalSelect

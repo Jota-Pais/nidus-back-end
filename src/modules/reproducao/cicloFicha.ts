@@ -6,11 +6,9 @@ import { prisma } from '../../shared/prisma.ts'
 import { dataISO } from '../../shared/traducao.ts'
 import { animaisDoParto } from '../colonia/consultas.ts'
 import type { AnimalDoParto } from '../colonia/consultas.ts'
-import { contarPorSexo, somarUm } from '../colonia/tipos.ts'
-import type { PorSexo, Sexo } from '../colonia/tipos.ts'
+import { contarPorSexo, sexoDe, somarUm } from '../colonia/tipos.ts'
+import type { PorSexo } from '../colonia/tipos.ts'
 import { calcularCicloInicial, calcularDesmamePrevisto } from './cadeiaTemporal.ts'
-
-const sexoDo = (animal: { sexo: string }): Sexo => (animal.sexo === 'M' ? 'M' : 'F')
 
 /** Uma caixa onde estao vivos do parto */
 export type OndeEstao = {
@@ -61,7 +59,7 @@ export function contarDoParto(dtDesmameReal: Date | null, animais: AnimalDoParto
       f: 0,
       reservados: 0,
     }
-    const sexo = sexoDo(animal)
+    const sexo = sexoDe(animal)
 
     onde.set(animal.idCaixa, {
       ...lugar,

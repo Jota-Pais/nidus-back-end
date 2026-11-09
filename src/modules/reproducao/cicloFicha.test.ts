@@ -29,6 +29,7 @@ const animal = (parcial: Partial<AnimalDoParto>): AnimalDoParto => ({
   situacao: 'vivo',
   idCaixa: 1,
   idPedido: null,
+  dtMovimento: null,
   dtSaida: null,
   caixa: casal,
   ...parcial,

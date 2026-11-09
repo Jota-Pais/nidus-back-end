@@ -6,7 +6,7 @@
 // (colonia/travas.ts): casal -> parto -> caixa.
 
 import type { Prisma } from '@prisma/client'
-import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
+import { ErroDeAplicacao, campoInvalido, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { dataISO, paraData } from '../../shared/traducao.ts'
@@ -22,14 +22,9 @@ import type { PorSexo } from '../colonia/tipos.ts'
 import { travarCaixas, travarCasal, travarParto } from '../colonia/travas.ts'
 import { cicloFicha } from './cicloFicha.ts'
 import { exigirOrdem } from './ordemDasDatas.ts'
+import { contarNoDesmame, exigirDataDoDesmame } from './trilhaDoParto.ts'
 
 type Transacao = Prisma.TransactionClient
-
-export function campoInvalido(campo: string, mensagem: string) {
-  return new ErroDeAplicacao(400, 'VALIDACAO', 'Confira os campos destacados.', {
-    campos: { [campo]: mensagem },
-  })
-}
 
 /**
  * Contagem que passou do limite, com a mensagem no campo de cada sexo que passou
@@ -146,6 +141,7 @@ export async function travarELerParto(tx: Transacao, idParto: number) {
           id: true,
           ativo: true,
           idCaixa: true,
+          idLinhagem: true,
           identificacao: true,
           dtFormacao: true,
           dtEncerramento: true,
@@ -500,29 +496,6 @@ export async function registrarNascimento(idParto: number, dados: Nascimento, id
 // ------------------------------------------------------------ selecao e desmame
 
 /**
- * A ninhada na caixa do casal: os vivos do parto la dentro, por sexo, e a data da ultima morte de
- * um animal do parto (null se nenhum morreu)
- */
-async function ninhadaNaCaixaDoCasal(
-  tx: Transacao,
-  parto: PartoTravado,
-): Promise<{ vivos: PorSexo; ultimaMorte: Date | null }> {
-  const animais = await animaisDoParto(tx, parto.id)
-  const vivos = contarPorSexo(
-    animais.filter((animal) => animal.situacao === 'vivo' && animal.idCaixa === parto.casal.idCaixa),
-  )
-  const ultimaMorte = animais.reduce<Date | null>(
-    (ultima, animal) =>
-      animal.situacao === 'morto' && animal.dtSaida !== null && (ultima === null || animal.dtSaida > ultima)
-        ? animal.dtSaida
-        : ultima,
-    null,
-  )
-
-  return { vivos, ultimaMorte }
-}
-
-/**
  * A baixa de animais do parto na caixa do casal (a selecao e a diferenca do desmame): livres
  * primeiro, depois os reservados do pedido indicado. Devolve os escolhidos, ja baixados
  */
@@ -596,7 +569,11 @@ export async function registrarSelecao(idParto: number, dados: Selecao, idUsuari
 
     await travarCaixas(tx, [parto.casal.idCaixa])
 
-    const { vivos } = await ninhadaNaCaixaDoCasal(tx, parto)
+    const vivos = contarPorSexo(
+      (await animaisDoParto(tx, idParto)).filter(
+        (animal) => animal.situacao === 'vivo' && animal.idCaixa === parto.casal.idCaixa,
+      ),
+    )
     const passou = { m: dados.eutanasiadoM > vivos.m, f: dados.eutanasiadoF > vivos.f }
 
     if (passou.m || passou.f) {
@@ -632,9 +609,11 @@ export type Desmame = {
 }
 
 /**
- * POST /api/partos/:id/desmame - grava a data. A contagem e conferencia: abaixo dos vivos do
- * parto na caixa do casal, a diferenca vira baixa ('nao chegou ao desmame') na data do desmame;
- * acima, e erro de contagem do nascimento, que se corrige la. Ninguem muda de caixa aqui
+ * POST /api/partos/:id/desmame - grava a data. A contagem e conferencia contra os vivos do parto
+ * na caixa do casal no dia do desmame (contarNoDesmame): abaixo deles, a diferenca vira baixa
+ * ('nao chegou ao desmame') na data do desmame; acima, e erro de contagem do nascimento, que se
+ * corrige la. Quem morreu depois da data, ja lancado na baixa da caixa, chegou ao desmame e conta
+ * nele. Ninguem muda de caixa aqui
  */
 export async function registrarDesmame(idParto: number, dados: Desmame, idUsuario: number) {
   const faltas = await prisma.$transaction(async (tx) => {
@@ -653,23 +632,27 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
 
     await travarCaixas(tx, [parto.casal.idCaixa])
 
-    const { vivos, ultimaMorte } = await ninhadaNaCaixaDoCasal(tx, parto)
+    const animais = await animaisDoParto(tx, idParto)
+    await exigirDataDoDesmame(tx, parto, dados.dtDesmameReal, animais)
 
-    // a morte de antes conta como antes do desmame: ele nao pode vir antes dela
-    exigirOrdem('dtDesmameReal', dados.dtDesmameReal, {
-      depoisDe: [
-        { evento: 'do parto', data: parto.dtPartoReal },
-        { evento: 'da ultima baixa de animal deste parto', data: ultimaMorte },
-      ],
-    })
+    const { vivos, morreramDepois } = contarNoDesmame(animais, parto.casal.idCaixa, dados.dtDesmameReal)
+    const acima = { m: dados.desmamadoM > vivos.m, f: dados.desmamadoF > vivos.f }
 
-    const passou = { m: dados.desmamadoM > vivos.m, f: dados.desmamadoF > vivos.f }
-
-    if (passou.m || passou.f) {
+    if (acima.m || acima.f) {
       throw contagemInvalida(
         'desmamado',
-        passou,
-        `Nao pode passar dos vivos deste parto na caixa do casal (${vivos.m} M, ${vivos.f} F). Se nasceram mais, corrija o nascimento.`,
+        acima,
+        `Nao pode passar dos vivos deste parto na caixa do casal no dia do desmame (${vivos.m} M, ${vivos.f} F). Se nasceram mais, corrija o nascimento.`,
+      )
+    }
+
+    const abaixo = { m: dados.desmamadoM < morreramDepois.m, f: dados.desmamadoF < morreramDepois.f }
+
+    if (abaixo.m || abaixo.f) {
+      throw contagemInvalida(
+        'desmamado',
+        abaixo,
+        `${morreramDepois.m} M e ${morreramDepois.f} F deste parto morreram depois desta data: chegaram ao desmame e contam nele.`,
       )
     }
 
