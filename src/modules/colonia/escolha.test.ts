@@ -83,6 +83,16 @@ describe('escolha dentro do grupo', () => {
     expect(escolhidos).toEqual([animal(8, 9)])
   })
 
+  it('o pedido indicado completa os livres: e o remedio que a recusa PEDIDO_NAO_INDICADO pede', async () => {
+    respostas = [[animal(1), animal(2), animal(3)], [{ idPedido: 7 }, { idPedido: 9 }], [animal(8, 9), animal(10, 9)]]
+
+    const escolhidos = await escolherAnimais(tx as never, { idCaixa: 3, sexo: 'M' }, 5, { idPedido: 9 })
+
+    expect(escolhidos.map((a) => a.id)).toEqual([1, 2, 3, 8, 10])
+    // os que faltam saem do pedido indicado: LIMIT 2
+    expect(consultas[2]?.values).toEqual(expect.arrayContaining([9, 2]))
+  })
+
   it('sem animais que bastem, recusa com SEM_ANIMAIS', async () => {
     respostas = [[animal(1)], []]
 

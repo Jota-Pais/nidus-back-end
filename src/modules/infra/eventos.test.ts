@@ -13,7 +13,10 @@ const banco = vi.hoisted(() => ({
   casais: [] as unknown[],
   ocorrencias: [] as unknown[],
   historico: [] as unknown[],
+  partosDeFora: [] as unknown[],
   ondeOcorrencias: null as unknown,
+  ondePartos: null as unknown,
+  ondeHistorico: null as unknown,
 }))
 
 vi.mock('../../shared/prisma.ts', () => ({
@@ -26,7 +29,18 @@ vi.mock('../../shared/prisma.ts', () => ({
         return banco.ocorrencias
       },
     },
-    historico: { findMany: async () => banco.historico },
+    parto: {
+      findMany: async ({ where }: { where: unknown }) => {
+        banco.ondePartos = where
+        return banco.partosDeFora
+      },
+    },
+    historico: {
+      findMany: async ({ where }: { where: unknown }) => {
+        banco.ondeHistorico = where
+        return banco.historico
+      },
+    },
   },
 }))
 
@@ -65,6 +79,7 @@ const historico = (entidade: string, acao: string, idEntidade: number, dia: stri
 
 beforeEach(() => {
   banco.caixa = { dtLiberacao: null }
+  banco.partosDeFora = []
   banco.casais = [
     {
       id: 1,
@@ -185,6 +200,53 @@ describe('os eventos da ficha', () => {
       ['2026-10-02', 'mudanca', '0 M, 3 F chegaram da caixa T1B.'],
       ['2026-10-20', 'liberacao', 'Caixa F1A liberada em 2026-10-20'],
     ])
+  })
+
+  it('a caixa que nunca foi de casal mostra a correcao do nascimento que criou ou anulou animais nela', async () => {
+    banco.casais = []
+    banco.partosDeFora = [{ id: 30, casal: { identificacao: 'CD ' } }]
+    banco.ocorrencias = [
+      ocorrencia(6, 'mudanca', '2026-10-02', {
+        idCaixaOrigem: 3,
+        idCaixaDestino: 7,
+        parto: null,
+        caixaOrigem: { codigo: 'T1B' },
+        animais: animais(0, 3),
+      }),
+    ]
+    banco.historico = [
+      historico('parto', 'correcao_nascimento', 30, '2026-10-05', { descricao: 'Correcao do 2o parto: contou 2 a menos' }),
+    ]
+
+    const eventos = await eventosDaCaixa(7, new Map())
+
+    expect(eventos.map((e) => [e.dataHora.slice(0, 10), e.tipo, e.descricao, e.autor])).toEqual([
+      ['2026-10-02', 'mudanca', '0 M, 3 F chegaram da caixa T1B.', 'Ana'],
+      ['2026-10-05', 'correcao', 'Casal CD: Correcao do 2o parto: contou 2 a menos', 'Bia'],
+    ])
+  })
+
+  it('os partos de fora sao os dos animais que estao ou passaram pela caixa, e deles so a correcao dos animais', async () => {
+    banco.partosDeFora = [{ id: 30, casal: { identificacao: 'CD' } }]
+
+    await eventosDaCaixa(7, new Map())
+
+    expect(banco.ondePartos).toEqual({
+      casal: { idCaixa: { not: 7 } },
+      animais: {
+        some: {
+          OR: [
+            { idCaixa: 7 },
+            { ocorrencias: { some: { ocorrencia: { OR: [{ idCaixaOrigem: 7 }, { idCaixaDestino: 7 }] } } } },
+          ],
+        },
+      },
+    })
+    expect((banco.ondeHistorico as { OR: unknown[] }).OR).toContainEqual({
+      entidade: 'parto',
+      idEntidade: { in: [30] },
+      acao: { in: ['correcao_nascimento', 'correcao_desmame'] },
+    })
   })
 
   it('o fato sem registro no historico fica com autor desconhecido', async () => {

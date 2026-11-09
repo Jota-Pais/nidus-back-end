@@ -44,8 +44,9 @@ O que mora aqui:
 - **Caixas** - a caixa é só o lugar. Desmamados mudam de caixa por
   `POST /api/caixas/:id/mudanca`: da caixa do casal para o estoque, ou de estoque
   para estoque, cada sexo para uma caixa de estoque do mesmo sexo e linhagem ou
-  para uma caixa nova numa posição vazia. Saem os livres primeiro, ou só os
-  reservados do pedido indicado, e a reserva vai junto. A caixa do casal
+  para uma caixa nova numa posição vazia. Saem os livres primeiro e, se não
+  bastarem, os reservados do pedido indicado (`idPedido`); com `soDoPedido`,
+  só os reservados dele. A reserva vai junto. A caixa do casal
   encerrado com desmamados de um sexo vira de estoque no lugar
   (`POST /api/caixas/:id/estoque`). A caixa que esvazia é liberada com a data e o
   motivo do fato. A coluna do Kanban não é gravada: sai do que a caixa tem

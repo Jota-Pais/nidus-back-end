@@ -1,7 +1,10 @@
 // Os eventos da ficha de uma caixa, por data: o que aconteceu com os animais dela (a trilha de
 // ocorrencias), as datas do ciclo dos casais que passaram por ela e o que mudou na propria caixa
 // (posicao, virar estoque, liberacao). Cada fato aparece uma vez: o que e dos animais vem da
-// trilha, o resto das tabelas, e o historico so diz quem registrou e as correcoes
+// trilha, o resto das tabelas, e o historico so diz quem registrou e as correcoes. A correcao
+// entra pelo historico, com o motivo: a dos partos dos casais da caixa e, quando a caixa recebeu
+// animais de outra, a do nascimento ou do desmame dos partos desses animais, que pode ter criado,
+// anulado ou trocado de sexo animais daqui
 
 import { prisma } from '../../shared/prisma.ts'
 import { dataISO, hojeISO } from '../../shared/traducao.ts'
@@ -37,6 +40,8 @@ const ORDEM_NO_DIA: Record<string, number> = {
 }
 
 const CORRECOES = ['correcao_acasalamento', 'correcao_nascimento', 'correcao_desmame']
+/** As correcoes que dizem respeito aos animais, e nao ao casal: as que valem fora da caixa dele */
+const CORRECOES_DOS_ANIMAIS = ['correcao_nascimento', 'correcao_desmame']
 const DA_CAIXA = ['mudanca_de_posicao', 'virar_estoque', 'liberacao']
 
 const DESCONHECIDO = 'Desconhecido'
@@ -72,7 +77,7 @@ type OcorrenciaLida = Awaited<ReturnType<typeof lerOcorrencias>>[number]
 function lerOcorrencias(idCaixa: number) {
   return prisma.ocorrencia.findMany({
     where: {
-      // a correcao aparece pelo historico, com o motivo e o antes e depois
+      // a correcao aparece pelo historico (partosDeFora), com o motivo e o antes e depois
       tipo: { not: 'correcao' },
       OR: [
         { idCaixaOrigem: idCaixa },
@@ -159,6 +164,27 @@ function eventoDaOcorrencia(ocorrencia: OcorrenciaLida, idCaixa: number): Evento
   )
 }
 
+/**
+ * Os partos de casais de outras caixas com animais que estao nesta (vivos ou nao) ou passaram por
+ * ela: a correcao deles muda animais daqui, e a ficha mostra
+ */
+function partosDeFora(idCaixa: number) {
+  return prisma.parto.findMany({
+    where: {
+      casal: { idCaixa: { not: idCaixa } },
+      animais: {
+        some: {
+          OR: [
+            { idCaixa },
+            { ocorrencias: { some: { ocorrencia: { OR: [{ idCaixaOrigem: idCaixa }, { idCaixaDestino: idCaixa }] } } } },
+          ],
+        },
+      },
+    },
+    select: { id: true, casal: { select: { identificacao: true } } },
+  })
+}
+
 // ------------------------------------------------------------ o resto
 
 /**
@@ -166,7 +192,7 @@ function eventoDaOcorrencia(ocorrencia: OcorrenciaLida, idCaixa: number): Evento
  * desmame de cada parto (por id), que a ficha ja contou nos animais
  */
 export async function eventosDaCaixa(idCaixa: number, desmamados: Map<number, PorSexo>): Promise<EventoDaFicha[]> {
-  const [caixa, casais, ocorrencias] = await Promise.all([
+  const [caixa, casais, ocorrencias, deFora] = await Promise.all([
     prisma.caixa.findUnique({ where: { id: idCaixa }, select: { dtLiberacao: true } }),
     prisma.casal.findMany({
       where: { idCaixa },
@@ -191,7 +217,11 @@ export async function eventosDaCaixa(idCaixa: number, desmamados: Map<number, Po
       },
     }),
     lerOcorrencias(idCaixa),
+    partosDeFora(idCaixa),
   ])
+
+  // o casal de cada parto de fora, para a correcao dizer de quem e
+  const casalDeFora = new Map(deFora.map((parto) => [parto.id, parto.casal.identificacao.trim()]))
 
   const registros = await prisma.historico.findMany({
     where: {
@@ -202,6 +232,7 @@ export async function eventosDaCaixa(idCaixa: number, desmamados: Map<number, Po
           idEntidade: { in: casais.flatMap((casal) => casal.partos.map((parto) => parto.id)) },
           acao: { in: ['acasalamento', 'sem_ninhada', ...CORRECOES] },
         },
+        { entidade: 'parto', idEntidade: { in: [...casalDeFora.keys()] }, acao: { in: CORRECOES_DOS_ANIMAIS } },
         { entidade: 'caixa', idEntidade: idCaixa, acao: { in: DA_CAIXA } },
       ],
     },
@@ -283,11 +314,13 @@ export async function eventosDaCaixa(idCaixa: number, desmamados: Map<number, Po
     const daCaixa = registro.entidade === 'caixa' && registro.acao !== 'liberacao'
     if (!correcao && !daCaixa) continue
 
+    const deOutroCasal = registro.entidade === 'parto' ? casalDeFora.get(registro.idEntidade) : undefined
+
     eventos.push(
       evento(
         hojeISO(registro.dtHora),
         correcao ? 'correcao' : registro.acao === 'mudanca_de_posicao' ? 'posicao' : registro.acao,
-        registro.descricao,
+        deOutroCasal === undefined ? registro.descricao : `Casal ${deOutroCasal}: ${registro.descricao}`,
         autorDo(registro),
         registro.dtHora,
       ),

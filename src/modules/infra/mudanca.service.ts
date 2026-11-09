@@ -36,8 +36,13 @@ export type GrupoQueMuda = {
   qtd: number
   /** So quando a caixa tem mais de uma idade naquele sexo */
   dtNascimento?: string | undefined
-  /** Leva so os reservados deste pedido; sem ele, os livres primeiro */
+  /**
+   * De qual pedido saem os reservados quando os livres nao bastam, como na baixa. Com soDoPedido,
+   * o pedido cujos reservados mudam
+   */
   idPedido?: number | undefined
+  /** Leva so os reservados de idPedido, sem passar pelos livres: juntar numa caixa os de um pedido */
+  soDoPedido?: boolean | undefined
   destino: DestinoDaMudanca
 }
 
@@ -84,7 +89,8 @@ async function linhagemDosDesmamados(tx: Transacao, escolhidos: Escolhido[], dtF
 
 /**
  * A caixa que recebe os animais: a de estoque indicada, que tem de aceitar o sexo e a linhagem
- * deles, ou uma caixa de estoque nova na posicao vazia, com o sexo e a linhagem dos animais
+ * deles e ja existir na data do fato, ou uma caixa de estoque nova na posicao vazia, com o sexo e
+ * a linhagem dos animais
  */
 async function caixaDeDestino(
   tx: Transacao,
@@ -92,11 +98,12 @@ async function caixaDeDestino(
   destino: DestinoDaMudanca,
   campo: string,
   quem: { sexo: Sexo; idLinhagem: number },
+  dtFato: string,
 ): Promise<{ id: number; codigo: string }> {
   if ('idCaixa' in destino) {
     if (destino.idCaixa === origem.id) throw campoInvalido(campo, 'Os animais ja estao nesta caixa.')
 
-    const { codigo } = await exigirEstoqueQueRecebe(tx, destino.idCaixa, campo, quem)
+    const { codigo } = await exigirEstoqueQueRecebe(tx, destino.idCaixa, campo, quem, dtFato)
     return { id: destino.idCaixa, codigo }
   }
 
@@ -135,7 +142,8 @@ function exigirPosicoesDiferentes(dados: Mudanca): void {
  * POST /api/caixas/:id/mudanca - animais desmamados mudam de caixa: da caixa do casal para o
  * estoque (a passagem) ou de uma caixa de estoque para outra, para juntar ou separar. Machos e
  * femeas, cada sexo para uma caixa de estoque que ja existe ou para uma nova, numa posicao vazia.
- * Saem os livres primeiro, ou so os reservados do pedido indicado, e a reserva vai junto. A
+ * Saem os livres primeiro e, se nao bastarem, os reservados do pedido indicado (escolherAnimais);
+ * com soDoPedido, so os reservados dele. A reserva vai junto. A
  * caixa de onde sairam e liberada se esvaziou (a de casal, so com o casal encerrado e sem parto
  * pendente)
  */
@@ -166,17 +174,21 @@ export async function registrarMudanca(idOrigem: number, dados: Mudanca, idUsuar
 
       const escolhidos = await escolherAnimais(tx, { idCaixa: idOrigem, sexo: grupo.sexo, dtNascimento }, grupo.qtd, {
         idPedido: grupo.idPedido,
-        soDoPedido: grupo.idPedido !== undefined,
+        soDoPedido: grupo.soDoPedido === true,
         campoDoPedido: `${grupo.campo}.idPedido`,
       })
 
       exigirDepoisDaChegada('dtFato', dados.dtFato, escolhidos)
       const idLinhagem = await linhagemDosDesmamados(tx, escolhidos, dados.dtFato)
 
-      const destino = await caixaDeDestino(tx, origem, grupo.destino, `${grupo.campo}.destino`, {
-        sexo: grupo.sexo,
-        idLinhagem,
-      })
+      const destino = await caixaDeDestino(
+        tx,
+        origem,
+        grupo.destino,
+        `${grupo.campo}.destino`,
+        { sexo: grupo.sexo, idLinhagem },
+        dados.dtFato,
+      )
 
       await lancarOcorrencia(tx, {
         tipo: 'mudanca',

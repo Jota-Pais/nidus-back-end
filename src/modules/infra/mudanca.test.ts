@@ -6,7 +6,8 @@ import type { CaixaParaVirar } from './mudanca.service.ts'
 
 // Uma colonia de mentira, em memoria: caixas, casais, partos e os animais (uma linha por rato). O
 // Prisma e as funcoes do modulo colonia sao trocados por versoes que leem e escrevem aqui, com o
-// mesmo contrato: a escolha pega os livres primeiro (ou so os reservados do pedido indicado), o
+// mesmo contrato: a escolha pega os livres primeiro e completa com os reservados do pedido (o
+// indicado ou o unico, pela regra de verdade do modulo), ou so os do pedido com soDoPedido; o
 // lancamento muda a caixa dos animais, e a liberacao so libera caixa sem vivo (a de casal, tambem
 // sem casal ativo). As regras finas de cada uma estao nos testes do modulo colonia; aqui ficam as
 // regras da mudanca e do virar estoque
@@ -49,6 +50,8 @@ const banco = vi.hoisted(() => ({
   partos: new Map<number, Parto>(),
   animais: [] as Animal[],
   ocorrencias: [] as Record<string, unknown>[],
+  /** a primeira chegada de animais em cada caixa, antes deste teste */
+  chegadas: new Map<number, Date>(),
   historicos: [] as Record<string, unknown>[],
   liberadas: [] as { idCaixa: number; dtFato: string; motivo: string }[],
   proximoId: 1000,
@@ -92,6 +95,11 @@ const db = {
     update: async ({ where, data }: { where: { id: number }; data: Partial<Caixa> }) => {
       Object.assign(banco.caixas.get(where.id) as Caixa, data)
     },
+  },
+  ocorrencia: {
+    aggregate: async ({ where }: { where: { idCaixaDestino: number } }) => ({
+      _min: { dtFato: banco.chegadas.get(where.idCaixaDestino) ?? null },
+    }),
   },
   parto: {
     findMany: async ({ where }: { where: { animais: { some: { id: { in: number[] } } } } }) => {
@@ -149,37 +157,44 @@ vi.mock('../colonia/consultas.ts', async (original) => ({
     ),
 }))
 
-vi.mock('../colonia/escolha.ts', async (original) => ({
-  ...(await original<typeof import('../colonia/escolha.ts')>()),
-  escolherAnimais: async (_tx: unknown, grupo: Grupo, qtd: number, escolha: Escolha = {}) => {
-    const doGrupo = banco.animais.filter(
-      (a) =>
-        a.situacao === 'vivo' &&
-        a.sexo === grupo.sexo &&
-        a.idCaixa === grupo.idCaixa &&
-        (grupo.dtNascimento === undefined || nascimento(a) === grupo.dtNascimento),
-    )
-    const livres = doGrupo.filter((a) => a.idPedido === null)
-    const doPedido = (id: number | undefined) => doGrupo.filter((a) => a.idPedido !== null && a.idPedido === id)
-    const pedidos = [...new Set(doGrupo.flatMap((a) => (a.idPedido === null ? [] : [a.idPedido])))]
-    const escolhidos =
-      escolha.soDoPedido === true
-        ? doPedido(escolha.idPedido).slice(0, qtd)
-        : [...livres, ...doPedido(escolha.idPedido ?? (pedidos.length === 1 ? pedidos[0] : undefined))].slice(0, qtd)
+vi.mock('../colonia/escolha.ts', async (original) => {
+  const real = await original<typeof import('../colonia/escolha.ts')>()
 
-    if (escolhidos.length < qtd) throw Object.assign(new Error('sem animais'), { status: 409, codigo: 'SEM_ANIMAIS' })
+  return {
+    ...real,
+    escolherAnimais: async (_tx: unknown, grupo: Grupo, qtd: number, escolha: Escolha = {}) => {
+      const doGrupo = banco.animais.filter(
+        (a) =>
+          a.situacao === 'vivo' &&
+          a.sexo === grupo.sexo &&
+          a.idCaixa === grupo.idCaixa &&
+          (grupo.dtNascimento === undefined || nascimento(a) === grupo.dtNascimento),
+      )
+      const livres = doGrupo.filter((a) => a.idPedido === null).slice(0, qtd)
+      const doPedido = (id: number | null | undefined) => doGrupo.filter((a) => a.idPedido !== null && a.idPedido === id)
+      const pedidos = [...new Set(doGrupo.flatMap((a) => (a.idPedido === null ? [] : [a.idPedido])))].sort((a, b) => a - b)
+      // de qual pedido saem os que faltam: a regra de verdade (pedidoDosReservados), com a recusa dela
+      const escolhidos =
+        escolha.soDoPedido === true
+          ? doPedido(escolha.idPedido).slice(0, qtd)
+          : livres.length === qtd
+            ? livres
+            : [...livres, ...doPedido(real.pedidoDosReservados(pedidos, escolha.idPedido, escolha.campoDoPedido))].slice(0, qtd)
 
-    return escolhidos.map(
-      (a): Escolhido => ({
-        id: a.id,
-        idCaixa: a.idCaixa,
-        idPedido: a.idPedido,
-        dtMovimento: a.dtMovimento,
-        dtNascimento: (banco.partos.get(a.idParto) as Parto).dtPartoReal as Date,
-      }),
-    )
-  },
-}))
+      if (escolhidos.length < qtd) throw Object.assign(new Error('sem animais'), { status: 409, codigo: 'SEM_ANIMAIS' })
+
+      return escolhidos.map(
+        (a): Escolhido => ({
+          id: a.id,
+          idCaixa: a.idCaixa,
+          idPedido: a.idPedido,
+          dtMovimento: a.dtMovimento,
+          dtNascimento: (banco.partos.get(a.idParto) as Parto).dtPartoReal as Date,
+        }),
+      )
+    },
+  }
+})
 
 vi.mock('../colonia/ocorrencia.ts', () => ({
   lancarOcorrencia: async (_tx: unknown, l: Lancamento) => {
@@ -245,6 +260,7 @@ beforeEach(() => {
   banco.partos.clear()
   banco.animais = []
   banco.ocorrencias = []
+  banco.chegadas.clear()
   banco.historicos = []
   banco.liberadas = []
   banco.proximoId = 1000
@@ -312,13 +328,40 @@ describe('a passagem da caixa do casal para o estoque', () => {
     expect(vivosEm(1).filter((a) => a.sexo === 'M').map((a) => a.idPedido)).toEqual([9])
   })
 
-  it('com o pedido indicado, leva so os reservados dele, e a reserva vai junto', async () => {
+  it('com reservados de dois pedidos e livres que nao bastam, pede o pedido; com ele, completa os livres', async () => {
+    // 5 machos: 3 livres, 1 do pedido #7 e 1 do #9; mudam 4
+    const [, , , do7, do9] = banco.animais.filter((a) => a.idCaixa === 1 && a.sexo === 'M')
+    if (do7 === undefined || do9 === undefined) throw new Error('sem animal')
+    do7.idPedido = 7
+    do9.idPedido = 9
+
+    await expect(
+      registrarMudanca(1, { dtFato: '2026-09-25', machos: { qtd: 4, destino: { posicao: vazia } } }, 7),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        codigo: 'PEDIDO_NAO_INDICADO',
+        extras: { campos: { 'machos.idPedido': 'Escolha um dos pedidos: #7, #9.' } },
+      }),
+    )
+
+    // o tecnico faz o que a recusa pede: diz o pedido, e os livres vao junto
+    const feita = await registrarMudanca(
+      1,
+      { dtFato: '2026-09-25', machos: { qtd: 4, idPedido: 9, destino: { posicao: vazia } } },
+      7,
+    )
+
+    expect(vivosEm(feita.caixas[0]?.idCaixa as number).map((a) => a.idPedido)).toEqual([null, null, null, 9])
+    expect(vivosEm(1).filter((a) => a.sexo === 'M').map((a) => a.idPedido)).toEqual([7])
+  })
+
+  it('so do pedido: leva so os reservados dele, mesmo com livres na caixa, e a reserva vai junto', async () => {
     const machos = banco.animais.filter((a) => a.idCaixa === 1 && a.sexo === 'M')
     for (const a of machos.slice(3)) a.idPedido = 9
 
     const feita = await registrarMudanca(
       1,
-      { dtFato: '2026-09-25', machos: { qtd: 2, idPedido: 9, destino: { posicao: vazia } } },
+      { dtFato: '2026-09-25', machos: { qtd: 2, idPedido: 9, soDoPedido: true, destino: { posicao: vazia } } },
       7,
     )
 
@@ -327,9 +370,13 @@ describe('a passagem da caixa do casal para o estoque', () => {
     expect(vivosEm(1).filter((a) => a.sexo === 'M').map((a) => a.idPedido)).toEqual([null, null, null])
   })
 
-  it('com o pedido indicado e sem reservados que bastem, nada muda', async () => {
+  it('so do pedido e sem reservados que bastem, nada muda', async () => {
     await expect(
-      registrarMudanca(1, { dtFato: '2026-09-25', machos: { qtd: 1, idPedido: 9, destino: { posicao: vazia } } }, 7),
+      registrarMudanca(
+        1,
+        { dtFato: '2026-09-25', machos: { qtd: 1, idPedido: 9, soDoPedido: true, destino: { posicao: vazia } } },
+        7,
+      ),
     ).rejects.toEqual(recusa(409, 'SEM_ANIMAIS'))
     expect(banco.ocorrencias).toEqual([])
   })
@@ -362,6 +409,26 @@ describe('a mudanca de estoque para estoque', () => {
 
     expect(vivosEm(feita.caixas[0]?.idCaixa as number).map(nascimento)).toEqual(['2026-09-01', '2026-09-01', '2026-09-01'])
     expect(vivosEm(2).map(nascimento)).toEqual(['2026-08-01', '2026-08-01'])
+  })
+
+  it('a caixa de destino ja existe na data: antes dos primeiros animais dela e recusado', async () => {
+    caixa(3, 'estoque', { sexo: 'F', idLinhagem: 3 })
+    animais(21, 3, 'F', 1, { dtMovimento: d('2026-10-10') })
+    banco.chegadas.set(3, d('2026-10-10'))
+    animais(20, 2, 'F', 3, { dtMovimento: d('2026-09-30') })
+    const femeas = (dtFato: string) => ({
+      dtFato,
+      femeas: { qtd: 3, dtNascimento: '2026-09-01', destino: { idCaixa: 3 } },
+    })
+
+    await expect(registrarMudanca(2, femeas('2026-10-01'), 7)).rejects.toEqual(
+      noCampo('dtFato', 'primeiros animais na caixa F1C'),
+    )
+    expect(banco.ocorrencias).toEqual([])
+
+    await expect(registrarMudanca(2, femeas('2026-10-10'), 7)).resolves.toMatchObject({
+      caixas: [{ idCaixa: 3, qtd: 3 }],
+    })
   })
 
   it('a chegada nunca volta no tempo: antes da chegada dos animais na caixa e recusado', async () => {

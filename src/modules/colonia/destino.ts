@@ -1,8 +1,9 @@
-// A caixa de estoque que recebe animais vindos de fora dela sem ser por mudanca: a volta da
+// A caixa de estoque que ja existe e recebe animais vindos de fora dela: a mudanca, a volta da
 // anulacao quando a caixa da baixa nao serve mais, e os animais a mais da correcao do nascimento
 
 import type { Prisma } from '@prisma/client'
 import { campoInvalido } from '../../shared/erros.ts'
+import { exigirOrdem } from '../reproducao/ordemDasDatas.ts'
 import type { Sexo } from './tipos.ts'
 
 /** O que a caixa de estoque confere em quem entra nela */
@@ -25,13 +26,16 @@ export function recusaDoEstoque(caixa: CaixaQueRecebe, quem: QuemEntra): string 
 /**
  * Recusa no campo do formulario a caixa que nao pode receber os animais (recusaDoEstoque). O
  * trigger dos animais cobra o mesmo no banco; aqui a recusa sai com o porque. A caixa ja esta
- * travada. Devolve o codigo da caixa, para a resposta dizer para onde os animais foram
+ * travada. Com 'chegada' ('aaaa-mm-dd', no campo dtFato), a caixa tem de ja existir nesse dia: a
+ * chegada nao e antes dos primeiros animais que entraram nela. Devolve o codigo da caixa, para a
+ * resposta dizer para onde os animais foram
  */
 export async function exigirEstoqueQueRecebe(
-  tx: Pick<Prisma.TransactionClient, 'caixa'>,
+  tx: Pick<Prisma.TransactionClient, 'caixa' | 'ocorrencia'>,
   idCaixa: number,
   campo: string,
   quem: QuemEntra,
+  chegada?: string,
 ): Promise<{ codigo: string }> {
   const caixa = await tx.caixa.findUnique({
     where: { id: idCaixa },
@@ -42,6 +46,15 @@ export async function exigirEstoqueQueRecebe(
 
   const recusa = recusaDoEstoque(caixa, quem)
   if (recusa !== null) throw campoInvalido(campo, recusa)
+
+  if (chegada !== undefined) {
+    // os primeiros animais da caixa: o nascimento, na que foi de casal, ou a mudanca que a criou
+    const primeira = await tx.ocorrencia.aggregate({ where: { idCaixaDestino: idCaixa }, _min: { dtFato: true } })
+
+    exigirOrdem('dtFato', chegada, {
+      depoisDe: [{ evento: `da chegada dos primeiros animais na caixa ${caixa.codigo}`, data: primeira._min.dtFato }],
+    })
+  }
 
   return { codigo: caixa.codigo }
 }

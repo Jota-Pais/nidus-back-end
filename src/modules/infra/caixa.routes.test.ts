@@ -126,6 +126,14 @@ describe('mudanca de animais', () => {
     expect(resposta.body.erro.campos).toHaveProperty('dtFato')
   })
 
+  it('so do pedido pede o pedido, no campo dele', () => {
+    const semPedido = mudanca.safeParse({ dtFato: ontem, machos: { ...machos, soDoPedido: true } })
+
+    expect(semPedido.success).toBe(false)
+    expect(semPedido.error?.issues.map((issue) => issue.path)).toEqual([['machos', 'idPedido']])
+    expect(mudanca.safeParse({ dtFato: ontem, machos: { ...machos, idPedido: 9, soDoPedido: true } }).success).toBe(true)
+  })
+
   it('sem destino, ou com quantidade zero, e VALIDACAO', () => {
     expect(mudanca.safeParse({ dtFato: ontem, machos: { qtd: 3 } }).success).toBe(false)
     expect(mudanca.safeParse({ dtFato: ontem, machos: { qtd: 0, destino: { idCaixa: 2 } } }).success).toBe(false)
