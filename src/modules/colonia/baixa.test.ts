@@ -389,6 +389,43 @@ describe('anulacao de baixa', () => {
     ])
   })
 
+  it('sem a caixa de nenhum dos sexos, pede as duas de uma vez, cada uma no seu campo', async () => {
+    banco.caixas.set(6, caixaDeCasal(6, 'F1A', false))
+    banco.baixa = machosEFemea()
+
+    await expect(anularBaixa(30, { motivo: 'engano' }, 4)).rejects.toEqual(
+      expect.objectContaining({
+        status: 400,
+        extras: {
+          campos: {
+            idCaixaMachos: expect.stringContaining('diga para qual caixa de estoque voltam 2 machos'),
+            idCaixaFemeas: expect.stringContaining('diga para qual caixa de estoque volta 1 femea'),
+          },
+        },
+      }),
+    )
+    expect(banco.lancados).toEqual([])
+  })
+
+  it('a caixa indicada que nao recebe e a que falta saem juntas', async () => {
+    banco.caixas.set(6, caixaDeCasal(6, 'F1A', false))
+    banco.caixas.set(9, estoque(9, 'F5C', 'F'))
+    banco.baixa = machosEFemea()
+
+    // a 9 e de femeas: nao recebe os machos, e as femeas ainda nao tem caixa
+    await expect(anularBaixa(30, { motivo: 'engano', idCaixaMachos: 9 }, 4)).rejects.toEqual(
+      expect.objectContaining({
+        status: 400,
+        extras: {
+          campos: {
+            idCaixaMachos: expect.stringContaining('outro sexo'),
+            idCaixaFemeas: expect.stringContaining('diga para qual caixa de estoque volta 1 femea'),
+          },
+        },
+      }),
+    )
+  })
+
   it('os soltos de cada ocorrencia sao os animais dela', async () => {
     banco.caixas.set(6, caixaDeCasal(6, 'F1A', false))
     banco.caixas.set(9, estoque(9, 'F5C', 'F'))
@@ -410,7 +447,7 @@ describe('anulacao de baixa', () => {
     banco.baixa = machosEFemea()
 
     await expect(anularBaixa(30, { motivo: 'engano' }, 4)).rejects.toEqual(
-      noCampo('idCaixaFemeas', 'agora e caixa de estoque de machos'),
+      noCampo('idCaixaFemeas', 'virou caixa de estoque de machos'),
     )
     await expect(anularBaixa(30, { motivo: 'engano', idCaixaMachos: 7, idCaixaFemeas: 9 }, 4)).rejects.toEqual(
       noCampo('idCaixaMachos', 'continua servindo'),

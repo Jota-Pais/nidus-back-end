@@ -61,9 +61,12 @@ export class ErroDeAplicacao extends Error {
   }
 }
 
+/** 400 - campos com problema, todos de uma vez: cada mensagem vai no seu campo, que o formulario destaca */
+export const camposInvalidos = (campos: Record<string, string>) =>
+  new ErroDeAplicacao(400, 'VALIDACAO', 'Confira os campos destacados.', { campos })
+
 /** 400 - um campo com problema: a mensagem vai no campo, que o formulario destaca */
-export const campoInvalido = (campo: string, mensagem: string) =>
-  new ErroDeAplicacao(400, 'VALIDACAO', 'Confira os campos destacados.', { campos: { [campo]: mensagem } })
+export const campoInvalido = (campo: string, mensagem: string) => camposInvalidos({ [campo]: mensagem })
 
 /** 401 - sem cookie de sessao valido */
 export const naoAutenticado = () =>

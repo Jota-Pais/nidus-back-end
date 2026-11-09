@@ -121,11 +121,11 @@ describe('a idade na data real da entrega', () => {
     expect(() => exigirQueServemNaEntrega([reservado(1), reservado(2)], faixa, '2026-11-21')).toThrow(
       recusa(
         'IDADE_FORA_DA_FAIXA',
-        'A idade de 2 machos da caixa F2A (nascimento em 01/09/2026) em 21/11/2026 e de 81 dias, fora da idade aceita no pedido (53 a 80 dias).',
+        'Na entrega em 21/11/2026, 2 machos da caixa F2A (nascimento em 01/09/2026) teriam 81 dias, fora da idade aceita no pedido (53 a 80 dias).',
       ),
     )
     expect(() => exigirQueServemNaEntrega([reservado(1)], faixa, '2026-10-23')).toThrow(
-      recusa('IDADE_FORA_DA_FAIXA', 'A idade de 1 macho da caixa F2A (nascimento em 01/09/2026) em 23/10/2026 e de 52 dias'),
+      recusa('IDADE_FORA_DA_FAIXA', 'Na entrega em 23/10/2026, 1 macho da caixa F2A (nascimento em 01/09/2026) teria 52 dias'),
     )
   })
 
@@ -133,7 +133,7 @@ describe('a idade na data real da entrega', () => {
     const novos = reservado(3, { idParto: 2, dtNascimento: d('2026-10-01'), dtDesmameReal: d('2026-10-23'), sexo: 'F' })
 
     expect(() => exigirQueServemNaEntrega([reservado(1), novos], faixa, '2026-11-08')).toThrow(
-      recusa('IDADE_FORA_DA_FAIXA', 'A idade de 1 femea da caixa F2A (nascimento em 01/10/2026) em 08/11/2026 e de 38 dias'),
+      recusa('IDADE_FORA_DA_FAIXA', 'Na entrega em 08/11/2026, 1 femea da caixa F2A (nascimento em 01/10/2026) teria 38 dias'),
     )
   })
 

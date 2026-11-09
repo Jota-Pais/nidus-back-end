@@ -40,7 +40,8 @@ O que mora aqui:
   caixa; a seleção e a diferença do desmame são baixas do parto. Baixa lançada
   por engano se anula, uma vez só (`POST /api/ocorrencias/:id/anulacao`): cada
   sexo volta para a caixa onde estava ou, se ela não serve mais para ele, para a
-  caixa de estoque indicada (`idCaixaMachos`, `idCaixaFemeas`). Cada ação grava uma
+  caixa de estoque indicada (`idCaixaMachos`, `idCaixaFemeas`); faltando as duas, a
+  recusa pede as duas no mesmo 400. Cada ação grava uma
   ocorrência com os animais que tocou, e só `lancarOcorrencia`
   (`src/modules/colonia/ocorrencia.ts`) escreve nos animais
 - **Caixas** - a caixa é só o lugar. Desmamados mudam de caixa por

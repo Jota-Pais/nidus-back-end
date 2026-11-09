@@ -70,9 +70,10 @@ export function exigirQueServemNaEntrega(
     if (naoServe?.motivo === 'idade') {
       const dias = `${naoServe.idade} ${noNumero(naoServe.idade, 'dia', 'dias')}`
 
+      // sem "e de 40 dias": sem o acento, o "e" se le como conjuncao
       throw erroDeRegra(
         'IDADE_FORA_DA_FAIXA',
-        `A idade de ${quem} em ${dataLegivel(dtEntrega)} e de ${dias}, fora da idade aceita no pedido (${naoServe.faixa.min} a ${naoServe.faixa.max} dias). Desfaca a reserva e reserve animais na idade.`,
+        `Na entrega em ${dataLegivel(dtEntrega)}, ${quem} ${noNumero(grupo.length, 'teria', 'teriam')} ${dias}, fora da idade aceita no pedido (${naoServe.faixa.min} a ${naoServe.faixa.max} dias). Desfaca a reserva e reserve animais na idade.`,
       )
     }
   }

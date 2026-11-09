@@ -1,7 +1,7 @@
 // Morte ou eutanasia em qualquer caixa (uma acao so: a baixa) e a anulacao de uma baixa lancada
 // por engano
 
-import { campoInvalido, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
+import { ErroDeAplicacao, campoInvalido, camposInvalidos, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { hojeISO } from '../../shared/traducao.ts'
 import type { Prisma } from '@prisma/client'
@@ -136,7 +136,7 @@ async function porQueNaoVolta(
 
   const cabem = animais.every((animal) => animal.desmamado && recusaDoEstoque(origem, animal) === null)
 
-  return cabem ? null : `agora e caixa de estoque de ${ROTULO_DO_SEXO[sexoDe({ sexo: origem.sexo ?? '' })]}`
+  return cabem ? null : `virou caixa de estoque de ${ROTULO_DO_SEXO[sexoDe({ sexo: origem.sexo ?? '' })]}`
 }
 
 /**
@@ -277,14 +277,24 @@ export async function anularBaixa(
 
     const dtVolta = hojeISO()
     const voltas: (Volta & { animais: AnimalDaBaixa[] })[] = []
+    // a caixa que falta ou nao serve, de cada sexo, vai junto num 400 so: a tela pede as duas de uma
+    // vez, e nao uma depois da outra
+    const recusas: Record<string, string> = {}
 
     for (const sexo of SEXOS) {
       const doSexo = animais.filter((animal) => animal.sexo === sexo)
       if (doSexo.length === 0) continue
 
-      const destino = await caixaDaVolta(tx, origem, sexo, doSexo, indicadas[sexo], dtVolta)
-      voltas.push({ sexo, qtd: doSexo.length, ...destino, animais: doSexo })
+      try {
+        const destino = await caixaDaVolta(tx, origem, sexo, doSexo, indicadas[sexo], dtVolta)
+        voltas.push({ sexo, qtd: doSexo.length, ...destino, animais: doSexo })
+      } catch (erro) {
+        if (!(erro instanceof ErroDeAplicacao) || erro.status !== 400 || erro.extras.campos === undefined) throw erro
+        Object.assign(recusas, erro.extras.campos)
+      }
     }
+
+    if (Object.keys(recusas).length > 0) throw camposInvalidos(recusas)
 
     const pedidos = pedidosTocados(animais)
     await travarPedidos(tx, pedidos)

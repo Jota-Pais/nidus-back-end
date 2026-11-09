@@ -895,7 +895,7 @@ describe('entrega', () => {
     await reservado()
 
     // em 30/11 o parto 1 tem 90 dias, fora dos 53 a 80 aceitos
-    await expect(registrarEntrega(10, '2026-11-30', 2)).rejects.toEqual(mensagem('IDADE_FORA_DA_FAIXA', 'em 30/11/2026 e de 90 dias'))
+    await expect(registrarEntrega(10, '2026-11-30', 2)).rejects.toEqual(mensagem('IDADE_FORA_DA_FAIXA', 'Na entrega em 30/11/2026, '))
     expect(doPedido(10)).toHaveLength(5)
     expect(banco.pedidos.get(10)).toMatchObject({ status: 'reservado', dtEntrega: null })
 
