@@ -434,6 +434,58 @@ describe.skipIf(!URL_TESTE)('regras do banco', { timeout: 30_000 }, () => {
     })
   })
 
+  // O defeito achado pelo Arthur no modelo antigo: o trigger da oferta somava as reservas do parto
+  // inteiro e conferia os dois sexos, e reservar so femeas falhava porque outro pedido tinha machos
+  // em falta na mesma ninhada. Aqui cada reserva confere so o teto do proprio pedido
+  describe('o caso do Arthur: a reserva confere so o proprio pedido (colonia.animal_coerente)', () => {
+    const vivosReservados = (pedidos: number[]): Comando => ({
+      sql: `SELECT id_pedido AS pedido, sexo, count(*)::int AS vivos FROM colonia.animal
+             WHERE id_pedido = ANY($1) AND situacao = 'vivo' GROUP BY 1, 2 ORDER BY 1, 2`,
+      valores: [pedidos],
+    })
+
+    it('com o pedido A em falta de um macho da ninhada, reservar 1 femea dela para o pedido B passa', async () => {
+      const pedidoA = await pedido(m.linhagemW, m.rato, 'aprovado', 2, 0, 0)
+      const pedidoB = await pedido(m.linhagemW, m.rato, 'aprovado', 0, 1, 0)
+      const [morto, vivo] = m.machosNoCasal
+
+      expect(await rodar(
+        reservar(pedidoA, [morto!, vivo!]),
+        statusDo(pedidoA, 'reservado'),
+        morrer([morto!]),
+        reservar(pedidoB, [m.femeas[0]!]),
+        statusDo(pedidoB, 'reservado'),
+        vivosReservados([pedidoA, pedidoB]),
+      )).toEqual([
+        { pedido: pedidoA, sexo: 'M', vivos: 1 },
+        { pedido: pedidoB, sexo: 'F', vivos: 1 },
+      ])
+    })
+
+    it('a reserva de outro pedido na ninhada nao pesa no teto: B recebe o macho e a femea que pede', async () => {
+      // somando a ninhada, seriam 3 machos reservados para o 1 macho de B
+      const pedidoA = await pedido(m.linhagemW, m.rato, 'aprovado', 2, 0, 0)
+      const pedidoB = await pedido(m.linhagemW, m.rato, 'aprovado', 1, 1, 0)
+      const [machoA1, machoA2, machoB] = m.machosNoCasal
+
+      expect(await valor(
+        reservar(pedidoA, [machoA1!, machoA2!]),
+        reservar(pedidoB, [machoB!, m.femeas[0]!]),
+        statusDo(pedidoB, 'reservado'),
+        `SELECT status FROM demanda.pedido WHERE id = ${pedidoB}`,
+      )).toBe('reservado')
+    })
+
+    it('o teto conta os machos e as femeas do pedido da linha: o 2o macho de B passa do que B pede', async () => {
+      const pedidoA = await pedido(m.linhagemW, m.rato, 'aprovado', 2, 0, 0)
+      const pedidoB = await pedido(m.linhagemW, m.rato, 'aprovado', 1, 1, 0)
+      const [machoA1, machoA2, machoB] = m.machosNoCasal
+
+      await rodar(reservar(pedidoA, [machoA1!, machoA2!]), reservar(pedidoB, [machoB!, m.femeas[0]!]))
+      await recusaDoTrigger('PEDIDO_EXCEDIDO', reservar(pedidoB, [m.machosNoEstoque[0]!]))
+    })
+  })
+
   describe('o pedido coerente com os seus animais (demanda.pedido_coerente)', () => {
     it('nao nasce reservado nem entregue, porque o pedido novo nao tem animal', async () => {
       const novo = (status: string, dtEntrega: string | null): Comando => ({

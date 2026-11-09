@@ -13,8 +13,8 @@ export default defineConfig({
       //
       // Este valor e so para satisfazer a validacao. Nenhum teste abre conexao
       // por ele - quem precisa de banco de verdade e teste de integracao
-      // (regras-do-banco.test.ts), que le DATABASE_URL_TESTE do ambiente e
-      // nao daqui.
+      // (regras-do-banco.test.ts e pedido-no-banco.test.ts), que le
+      // DATABASE_URL_TESTE do ambiente e nao daqui.
       DATABASE_URL: 'postgresql://placeholder/nidus-testes',
       NODE_ENV: 'test',
     },

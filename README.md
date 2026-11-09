@@ -150,16 +150,20 @@ e o que você grava rodando local aparece para o cliente.
 
 Os testes de serviço trocam o Prisma por um dublê e não enxergam o que o banco
 cobra sozinho: os triggers da topologia da caixa, do animal e do pedido, e os
-CHECKs. Isso fica em `src/shared/regras-do-banco.test.ts`, que roda contra um
-banco de verdade, já migrado, e só quando `DATABASE_URL_TESTE` aponta para ele:
+CHECKs. Duas suítes rodam contra um banco de verdade, já migrado, e só quando
+`DATABASE_URL_TESTE` aponta para ele: `src/shared/regras-do-banco.test.ts`, as
+recusas dos triggers e dos CHECKs em SQL puro, e
+`src/modules/demanda/pedido-no-banco.test.ts`, os serviços do pedido de ponta a
+ponta (reservar, completar, desfazer, recusar, entregar), com o SQL deles e os
+triggers juntos:
 
 ```bash
-DATABASE_URL_TESTE="postgresql://...branch-de-teste..." npm test -- regras-do-banco
+DATABASE_URL_TESTE="postgresql://...branch-de-teste..." npm test -- regras-do-banco pedido-no-banco
 ```
 
-Use um branch de teste da Neon ou um Postgres local, nunca a produção. A suíte
-cria os próprios dados numa transação e desfaz tudo no fim; só as sequências de
-id andam. Sem a variável, ela fica de fora e o resto roda como sempre.
+Use um branch de teste da Neon ou um Postgres local, nunca a produção. As suítes
+criam os próprios dados numa transação e desfazem tudo no fim; só as sequências
+de id andam. Sem a variável, elas ficam de fora e o resto roda como sempre.
 
 ## Stack
 
