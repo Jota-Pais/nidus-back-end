@@ -60,6 +60,10 @@ export class ErroDeAplicacao extends Error {
   }
 }
 
+/** 400 - um campo com problema: a mensagem vai no campo, que o formulario destaca */
+export const campoInvalido = (campo: string, mensagem: string) =>
+  new ErroDeAplicacao(400, 'VALIDACAO', 'Confira os campos destacados.', { campos: { [campo]: mensagem } })
+
 /** 401 - sem cookie de sessao valido */
 export const naoAutenticado = () =>
   new ErroDeAplicacao(401, 'NAO_AUTENTICADO', 'Faca login para continuar.')

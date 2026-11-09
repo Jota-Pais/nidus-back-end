@@ -17,9 +17,13 @@ type Animal = {
   dtMovimento: string | null
 }
 
+type Caixa = { id: number; codigo: string; ativa: boolean; tipo: string; sexo: string | null; idLinhagem: number | null }
+
 const banco = vi.hoisted(() => ({
   animais: [] as Animal[],
-  caixas: new Map<number, { id: number; codigo: string; ativa: boolean }>(),
+  caixas: new Map<number, Caixa>(),
+  /** As ninhadas (vivos por parto) de cada caixa de casal */
+  ninhadas: new Map<number, { idParto: number; ordem: number; casal: string; m: number; f: number; desmamado: boolean }[]>(),
   baixa: null as Record<string, unknown> | null,
   pedidos: new Map<number, { status: string; pedido: { qtdM: number; qtdF: number; qtdQualquer: number }; tem: { m: number; f: number } }>(),
   lancados: [] as Lancamento[],
@@ -99,6 +103,7 @@ vi.mock('./consultas.ts', () => ({
   faltasDosPedidos: async (_tx: unknown, ids: number[]) => ids.map((idPedido) => ({ idPedido, m: 1, f: 0, qualquer: 0 })),
   contagemDosPedidos: async (_tx: unknown, ids: number[]) =>
     new Map([...banco.pedidos.entries()].filter(([id]) => ids.includes(id))),
+  ninhadasNaCaixa: async (_tx: unknown, idCaixa: number) => banco.ninhadas.get(idCaixa) ?? [],
 }))
 
 const vivo = (id: number, parcial: Partial<Animal> = {}): Animal => ({
@@ -113,13 +118,33 @@ const vivo = (id: number, parcial: Partial<Animal> = {}): Animal => ({
 })
 
 const recusa = (status: number, codigo: string) => expect.objectContaining({ status, codigo })
+const noCampo = (campo: string, trecho: string) =>
+  expect.objectContaining({ status: 400, extras: { campos: { [campo]: expect.stringContaining(trecho) } } })
+
+const estoque = (id: number, codigo: string, sexo = 'M', idLinhagem = 3): Caixa => ({
+  id,
+  codigo,
+  ativa: true,
+  tipo: 'estoque',
+  sexo,
+  idLinhagem,
+})
+const caixaDeCasal = (id: number, codigo: string, ativa = true): Caixa => ({
+  id,
+  codigo,
+  ativa,
+  tipo: 'casal',
+  sexo: null,
+  idLinhagem: null,
+})
 
 beforeEach(() => {
   banco.animais = []
   banco.caixas = new Map([
-    [6, { id: 6, codigo: 'F2C', ativa: true }],
-    [7, { id: 7, codigo: 'F3C', ativa: true }],
+    [6, estoque(6, 'F2C')],
+    [7, estoque(7, 'F3C')],
   ])
+  banco.ninhadas = new Map()
   banco.baixa = null
   banco.pedidos = new Map()
   banco.lancados = []
@@ -203,7 +228,7 @@ describe('baixa em qualquer caixa', () => {
   })
 
   it('caixa liberada nao recebe baixa', async () => {
-    banco.caixas.set(6, { id: 6, codigo: 'F2C', ativa: false })
+    banco.caixas.set(6, { ...estoque(6, 'F2C'), ativa: false })
 
     await expect(registrarBaixa(6, { dtFato: '2026-11-02', itens: [{ sexo: 'M', qtd: 1 }] }, 4)).rejects.toEqual(
       recusa(409, 'CAIXA_LIBERADA'),
@@ -218,7 +243,9 @@ describe('baixa em qualquer caixa', () => {
 })
 
 describe('anulacao de baixa', () => {
-  const baixaDe = (animais: { id: number; sexo: string; idPedido: number | null; desmame?: string | null }[]) => ({
+  const baixaDe = (
+    animais: { id: number; sexo: string; idPedido: number | null; desmame?: string | null; idParto?: number }[],
+  ) => ({
     tipo: 'baixa',
     idParto: null,
     idCaixaOrigem: 6,
@@ -228,7 +255,11 @@ describe('anulacao de baixa', () => {
         id: a.id,
         sexo: a.sexo,
         idPedido: a.idPedido,
-        parto: { dtDesmameReal: a.desmame === null ? null : d(a.desmame ?? '2026-09-23') },
+        idParto: a.idParto ?? 1,
+        parto: {
+          dtDesmameReal: a.desmame === null ? null : d(a.desmame ?? '2026-09-23'),
+          casal: { idLinhagem: 3 },
+        },
       },
     })),
   })
@@ -266,7 +297,7 @@ describe('anulacao de baixa', () => {
   })
 
   it('com a caixa ja liberada, pede para onde os animais voltam', async () => {
-    banco.caixas.set(6, { id: 6, codigo: 'F2C', ativa: false })
+    banco.caixas.set(6, { ...estoque(6, 'F2C'), ativa: false })
     banco.baixa = baixaDe([{ id: 1, sexo: 'M', idPedido: null }])
 
     await expect(anularBaixa(30, { motivo: 'engano' }, 4)).rejects.toEqual(
@@ -275,7 +306,7 @@ describe('anulacao de baixa', () => {
   })
 
   it('com a caixa liberada e a caixa indicada, a volta vira mudanca para ela', async () => {
-    banco.caixas.set(6, { id: 6, codigo: 'F2C', ativa: false })
+    banco.caixas.set(6, { ...estoque(6, 'F2C'), ativa: false })
     banco.baixa = baixaDe([{ id: 1, sexo: 'M', idPedido: null }])
 
     const resultado = await anularBaixa(30, { motivo: 'engano', idCaixa: 7 }, 4)
@@ -293,12 +324,68 @@ describe('anulacao de baixa', () => {
   })
 
   it('filhote que mama nao muda para outra caixa na anulacao', async () => {
-    banco.caixas.set(6, { id: 6, codigo: 'F1A', ativa: false })
+    banco.caixas.set(6, caixaDeCasal(6, 'F1A', false))
     banco.baixa = baixaDe([{ id: 1, sexo: 'M', idPedido: null, desmame: null }])
 
     await expect(anularBaixa(30, { motivo: 'engano', idCaixa: 7 }, 4)).rejects.toEqual(
       recusa(409, 'SEQUENCIA_INVALIDA'),
     )
+  })
+
+  it('a caixa do casal com a ninhada de outro parto nao recebe a volta: duas ninhadas nao dividem a caixa', async () => {
+    banco.caixas.set(6, caixaDeCasal(6, 'F1A'))
+    banco.ninhadas.set(6, [{ idParto: 2, ordem: 2, casal: 'AB', m: 4, f: 4, desmamado: false }])
+    banco.baixa = baixaDe([{ id: 1, sexo: 'M', idPedido: null, idParto: 1 }])
+
+    await expect(anularBaixa(30, { motivo: 'engano' }, 4)).rejects.toEqual(
+      noCampo('idCaixa', 'tem agora a ninhada do 2o parto'),
+    )
+
+    const resultado = await anularBaixa(30, { motivo: 'engano', idCaixa: 7 }, 4)
+
+    expect(resultado.idCaixa).toBe(7)
+    expect(banco.lancados[0]).toMatchObject({ idCaixaOrigem: 6, idCaixaDestino: 7 })
+  })
+
+  it('os vivos do proprio parto na caixa do casal nao impedem a volta', async () => {
+    banco.caixas.set(6, caixaDeCasal(6, 'F1A'))
+    banco.ninhadas.set(6, [{ idParto: 1, ordem: 1, casal: 'AB', m: 3, f: 2, desmamado: false }])
+    banco.baixa = baixaDe([{ id: 1, sexo: 'M', idPedido: null, idParto: 1, desmame: null }])
+
+    const resultado = await anularBaixa(30, { motivo: 'engano' }, 4)
+
+    expect(resultado.idCaixa).toBe(6)
+  })
+
+  it('filhote que mama nao volta para a caixa com a ninhada de outro parto, nem vai para o estoque', async () => {
+    banco.caixas.set(6, caixaDeCasal(6, 'F1A'))
+    banco.ninhadas.set(6, [{ idParto: 2, ordem: 2, casal: 'AB', m: 4, f: 4, desmamado: false }])
+    banco.baixa = baixaDe([{ id: 1, sexo: 'M', idPedido: null, idParto: 1, desmame: null }])
+
+    await expect(anularBaixa(30, { motivo: 'engano', idCaixa: 7 }, 4)).rejects.toEqual(
+      recusa(409, 'SEQUENCIA_INVALIDA'),
+    )
+    expect(banco.lancados).toEqual([])
+  })
+
+  it('a caixa indicada e de estoque, do sexo e da linhagem dos animais', async () => {
+    banco.caixas.set(6, caixaDeCasal(6, 'F1A', false))
+    banco.caixas.set(8, caixaDeCasal(8, 'F4C'))
+    banco.caixas.set(9, estoque(9, 'F5C', 'F'))
+    banco.caixas.set(10, estoque(10, 'F6C', 'M', 4))
+    banco.baixa = baixaDe([{ id: 1, sexo: 'M', idPedido: null }])
+
+    await expect(anularBaixa(30, { motivo: 'engano', idCaixa: 8 }, 4)).rejects.toEqual(noCampo('idCaixa', 'estoque'))
+    await expect(anularBaixa(30, { motivo: 'engano', idCaixa: 9 }, 4)).rejects.toEqual(noCampo('idCaixa', 'outro sexo'))
+    await expect(anularBaixa(30, { motivo: 'engano', idCaixa: 10 }, 4)).rejects.toEqual(
+      noCampo('idCaixa', 'outra linhagem'),
+    )
+
+    banco.baixa = baixaDe([{ id: 1, sexo: 'M', idPedido: null }, { id: 2, sexo: 'F', idPedido: null }])
+    await expect(anularBaixa(30, { motivo: 'engano', idCaixa: 7 }, 4)).rejects.toEqual(
+      noCampo('idCaixa', 'machos e femeas'),
+    )
+    expect(banco.lancados).toEqual([])
   })
 
   it('so a baixa se anula, e uma vez so', async () => {

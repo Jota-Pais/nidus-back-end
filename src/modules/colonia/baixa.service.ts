@@ -1,25 +1,20 @@
 // Morte ou eutanasia em qualquer caixa (uma acao so: a baixa) e a anulacao de uma baixa lancada
 // por engano
 
-import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
+import { campoInvalido, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { hojeISO } from '../../shared/traducao.ts'
 import type { Prisma } from '@prisma/client'
-import { contagemDosPedidos, faltasDosPedidos, idadesNaCaixa } from './consultas.ts'
+import { contagemDosPedidos, faltasDosPedidos, idadesNaCaixa, ninhadasNaCaixa } from './consultas.ts'
+import { exigirEstoqueQueRecebe } from './destino.ts'
 import { escolherAnimais, exigirDepoisDaChegada, pedidosTocados } from './escolha.ts'
 import type { Escolhido } from './escolha.ts'
 import { caixaLiberada, liberarSeVazia } from './liberacao.ts'
 import { lancarOcorrencia } from './ocorrencia.ts'
 import { soltosNaAnulacao } from './reserva.ts'
-import { ROTULO_DO_SEXO, contarPorSexo } from './tipos.ts'
+import { ROTULO_DO_SEXO, contarPorSexo, sexoDe } from './tipos.ts'
 import type { PorSexo, Sexo } from './tipos.ts'
 import { travarCaixas, travarPedidos } from './travas.ts'
-
-function campoInvalido(campo: string, mensagem: string) {
-  return new ErroDeAplicacao(400, 'VALIDACAO', 'Confira os campos destacados.', {
-    campos: { [campo]: mensagem },
-  })
-}
 
 // ------------------------------------------------------------ baixa
 
@@ -110,21 +105,39 @@ export async function registrarBaixa(idCaixa: number, dados: Baixa, idUsuario: n
 
 export type AnulacaoDeBaixa = {
   motivo: string
-  /** Para onde os animais voltam quando a caixa da baixa ja foi liberada */
+  /** Para onde os animais voltam quando a caixa da baixa ja foi liberada ou tem outra ninhada */
   idCaixa?: number | undefined
 }
 
+/** Um animal da baixa a anular, com o que decide para onde ele volta */
+type AnimalDaBaixa = {
+  id: number
+  sexo: Sexo
+  idPedido: number | null
+  idParto: number
+  desmamado: boolean
+  idLinhagem: number
+}
+
 /**
- * A caixa para onde os animais da baixa voltam: a deles, se continua ativa; senao, a indicada.
- * Mudar de caixa e sair da caixa do casal: so depois do desmame
+ * A caixa para onde os animais da baixa voltam: a deles, se continua ativa e cabe neles; senao, a
+ * indicada, de estoque. A caixa de casal nao cabe quando ja tem vivos de outro parto: duas
+ * ninhadas nao dividem a caixa (a mesma regra do nascimento). Sair da caixa do casal, so depois
+ * do desmame
  */
 async function caixaDaVolta(
   tx: Prisma.TransactionClient,
-  origem: { id: number; codigo: string; ativa: boolean },
+  origem: { id: number; codigo: string; ativa: boolean; tipo: string },
   indicada: number | undefined,
-  desmamados: boolean,
+  animais: AnimalDaBaixa[],
 ): Promise<number> {
-  if (origem.ativa) {
+  const partos = new Set(animais.map((animal) => animal.idParto))
+  const outraNinhada =
+    origem.ativa && origem.tipo === 'casal'
+      ? (await ninhadasNaCaixa(tx, origem.id)).find((ninhada) => !partos.has(ninhada.idParto))
+      : undefined
+
+  if (origem.ativa && outraNinhada === undefined) {
     if (indicada !== undefined && indicada !== origem.id) {
       throw campoInvalido('idCaixa', `A caixa ${origem.codigo} continua ativa: os animais voltam para ela.`)
     }
@@ -132,28 +145,38 @@ async function caixaDaVolta(
     return origem.id
   }
 
-  if (indicada === undefined) {
-    throw campoInvalido('idCaixa', `A caixa ${origem.codigo} ja foi liberada: diga para qual caixa os animais voltam.`)
-  }
+  const estado =
+    outraNinhada === undefined
+      ? 'ja foi liberada'
+      : `tem agora a ninhada do ${outraNinhada.ordem}o parto do casal ${outraNinhada.casal}`
 
-  const destino = await tx.caixa.findUnique({ where: { id: indicada }, select: { ativa: true } })
-
-  if (destino === null) throw campoInvalido('idCaixa', 'Esta caixa nao existe.')
-  if (!destino.ativa) throw campoInvalido('idCaixa', 'Esta caixa tambem ja foi liberada.')
-
-  if (!desmamados) {
+  if (!animais.every((animal) => animal.desmamado)) {
     throw erroDeRegra(
       'SEQUENCIA_INVALIDA',
-      `Os animais ainda nao desmamaram, e a caixa ${origem.codigo} do casal ja foi liberada: filhote que mama so fica com a mae.`,
+      `Os animais ainda nao desmamaram, e a caixa ${origem.codigo} do casal ${estado}: filhote que mama so fica com a mae.`,
     )
   }
+
+  if (indicada === undefined || indicada === origem.id) {
+    throw campoInvalido('idCaixa', `A caixa ${origem.codigo} ${estado}: diga para qual caixa de estoque os animais voltam.`)
+  }
+
+  const sexos = [...new Set(animais.map((animal) => animal.sexo))]
+  const [sexo] = sexos
+  const [primeiro] = animais
+
+  if (sexo === undefined || primeiro === undefined || sexos.length > 1) {
+    throw campoInvalido('idCaixa', 'A baixa tem machos e femeas, e cada caixa de estoque guarda um sexo so.')
+  }
+
+  await exigirEstoqueQueRecebe(tx, indicada, 'idCaixa', { sexo, idLinhagem: primeiro.idLinhagem })
 
   return indicada
 }
 
 /**
  * POST /api/ocorrencias/:id/anulacao - desfaz uma baixa lancada por engano: os animais voltam a
- * viver na caixa onde estavam, ou na indicada se ela ja foi liberada. A reserva volta junto
+ * viver na caixa onde estavam, ou na indicada se ela ja foi liberada ou tem outra ninhada. A reserva volta junto
  * quando o pedido continua reservado e comporta o animal; senao, ele volta livre. Grava a
  * anulacao apontando a baixa, que so se anula uma vez. E tambem como se corrige a contagem do
  * desmame e da selecao
@@ -170,7 +193,13 @@ export async function anularBaixa(idOcorrencia: number, dados: AnulacaoDeBaixa, 
         animais: {
           select: {
             animal: {
-              select: { id: true, sexo: true, idPedido: true, parto: { select: { dtDesmameReal: true } } },
+              select: {
+                id: true,
+                sexo: true,
+                idPedido: true,
+                idParto: true,
+                parto: { select: { dtDesmameReal: true, casal: { select: { idLinhagem: true } } } },
+              },
             },
           },
         },
@@ -187,22 +216,27 @@ export async function anularBaixa(idOcorrencia: number, dados: AnulacaoDeBaixa, 
       throw erroDeRegra('OCORRENCIA_JA_ANULADA', 'Esta baixa ja foi anulada. Atualize a ficha.')
     }
 
-    const animais = baixa.animais.map((ligacao) => ({
-      ...ligacao.animal,
-      sexo: (ligacao.animal.sexo === 'M' ? 'M' : 'F') as Sexo,
-    }))
+    const animais = baixa.animais.map(
+      ({ animal }): AnimalDaBaixa => ({
+        id: animal.id,
+        sexo: sexoDe(animal),
+        idPedido: animal.idPedido,
+        idParto: animal.idParto,
+        desmamado: animal.parto.dtDesmameReal !== null,
+        idLinhagem: animal.parto.casal.idLinhagem,
+      }),
+    )
 
     await travarCaixas(tx, [baixa.idCaixaOrigem, ...(dados.idCaixa === undefined ? [] : [dados.idCaixa])])
 
     const origem = await tx.caixa.findUnique({
       where: { id: baixa.idCaixaOrigem },
-      select: { id: true, codigo: true, ativa: true },
+      select: { id: true, codigo: true, ativa: true, tipo: true },
     })
 
     if (origem === null) throw naoEncontrado('Caixa')
 
-    const desmamados = animais.every((animal) => animal.parto.dtDesmameReal !== null)
-    const idCaixa = await caixaDaVolta(tx, origem, dados.idCaixa, desmamados)
+    const idCaixa = await caixaDaVolta(tx, origem, dados.idCaixa, animais)
 
     const pedidos = pedidosTocados(animais)
     await travarPedidos(tx, pedidos)
