@@ -1,7 +1,6 @@
-import { PrismaPg } from '@prisma/adapter-pg'
-import { Prisma, PrismaClient } from '@prisma/client'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
+import { abrirCaso, abrirTransacaoDoTeste, desfazerCaso } from '../../shared/testes/transacao.ts'
 import { hojeISO } from '../../shared/traducao.ts'
 import { registrarBaixa } from '../colonia/baixa.service.ts'
 import { listarHistorico } from '../historico/historico.service.ts'
@@ -26,54 +25,17 @@ import { retiradaDoPedido } from './retirada.service.ts'
 // pedido.regras.test.ts, contra a colonia de mentira; aqui so o caminho inteiro de cada uma.
 //
 // Teste de INTEGRACAO: so roda com DATABASE_URL_TESTE apontando para um banco ja migrado (um branch
-// de teste da Neon ou um Postgres local), como o regras-do-banco.test.ts. Sem a variavel, fica de fora.
+// de teste da Neon ou um Postgres local), pelo npm run test:banco. Sem a variavel, fica de fora.
 //
-// Nada fica gravado. O Prisma dos servicos e trocado por uma transacao so, aberta no inicio e
-// desfeita no fim; o $transaction de cada servico vira um SAVEPOINT dentro dela (tudo ou nada,
-// como a transacao de verdade), e cada caso roda noutro SAVEPOINT, desfeito no fim do caso. O mundo
-// (especie, estante, caixas, casal, parto, animais e usuarios) nasce dentro dela, com nomes proprios
+// Nada fica gravado: o Prisma dos servicos e trocado pela transacao do teste (shared/testes/transacao.ts),
+// desfeita no fim, e cada caso roda num SAVEPOINT. O mundo (especie, estante, caixas, casal, parto,
+// animais e usuarios) nasce dentro dela, com nomes proprios
 
 const URL_TESTE = process.env.DATABASE_URL_TESTE
 
-type Transacao = Prisma.TransactionClient
-
-const conexao = vi.hoisted(() => ({ tx: undefined as unknown }))
-
-vi.mock('../../shared/prisma.ts', () => {
-  const tx = () => {
-    if (conexao.tx === undefined) throw new Error('a transacao do teste nao esta aberta')
-    return conexao.tx as Transacao
-  }
-
-  /** O $transaction do servico: um SAVEPOINT na transacao do teste, desfeito se o servico falha */
-  async function transacao<T>(servico: (tx: Transacao) => Promise<T>): Promise<T> {
-    await tx().$executeRawUnsafe('SAVEPOINT servico')
-
-    try {
-      const resultado = await servico(tx())
-      await tx().$executeRawUnsafe('RELEASE SAVEPOINT servico')
-      return resultado
-    } catch (erro) {
-      await tx().$executeRawUnsafe('ROLLBACK TO SAVEPOINT servico')
-      throw erro
-    }
-  }
-
-  const prisma = new Proxy(
-    {},
-    {
-      get(_, campo) {
-        if (campo === '$transaction') return transacao
-        // quem so sonda o objeto (await, inspecao) nao precisa da transacao aberta
-        if (typeof campo === 'symbol' || campo === 'then') return undefined
-        const valor: unknown = Reflect.get(tx(), campo)
-        return typeof valor === 'function' ? valor.bind(tx()) : valor
-      },
-    },
-  )
-
-  return { prisma }
-})
+vi.mock('../../shared/prisma.ts', async () => ({
+  prisma: (await import('../../shared/testes/transacao.ts')).prismaDaTransacao,
+}))
 
 /** Os ids do mundo de teste */
 type Mundo = {
@@ -95,12 +57,10 @@ const hoje = hojeISO()
 const daqui = (dias: number) => somarDias(hoje, dias)
 
 describe.skipIf(!URL_TESTE)('o pedido no banco de verdade', { timeout: 60_000 }, () => {
-  let cliente: PrismaClient
-  let aberta: Promise<unknown>
-  let desfazer: () => void = () => undefined
+  let teste: Awaited<ReturnType<typeof abrirTransacaoDoTeste>>
   let m: Mundo
 
-  const tx = () => conexao.tx as Transacao
+  const tx = () => teste.tx
 
   const id = async (sql: string, ...valores: unknown[]) =>
     Number((await tx().$queryRawUnsafe<{ id: number }[]>(sql, ...valores))[0]?.id)
@@ -108,25 +68,7 @@ describe.skipIf(!URL_TESTE)('o pedido no banco de verdade', { timeout: 60_000 },
   const linhas = <T,>(sql: string, ...valores: unknown[]) => tx().$queryRawUnsafe<T[]>(sql, ...valores)
 
   beforeAll(async () => {
-    cliente = new PrismaClient({ adapter: new PrismaPg({ connectionString: URL_TESTE }) })
-
-    // a transacao do teste fica aberta ate o afterAll, que a desfaz
-    await new Promise<void>((pronta, falhou) => {
-      aberta = cliente
-        .$transaction(
-          async (aquela) => {
-            conexao.tx = aquela
-            pronta()
-            await new Promise<never>((_, desfaz) => {
-              desfazer = () => desfaz(new Error('fim do teste: desfaz tudo'))
-            })
-          },
-          { maxWait: 60_000, timeout: 900_000 },
-        )
-        .catch((erro: unknown) => {
-          if (conexao.tx === undefined) falhou(erro)
-        })
-    })
+    teste = await abrirTransacaoDoTeste(URL_TESTE as string)
 
     const nomeDaEspecie = 'Rato do teste dos pedidos'
     const especie = await id(`INSERT INTO catalogo.especie (nome) VALUES ($1) RETURNING id`, nomeDaEspecie)
@@ -201,19 +143,9 @@ describe.skipIf(!URL_TESTE)('o pedido no banco de verdade', { timeout: 60_000 },
     }
   }, 180_000)
 
-  afterAll(async () => {
-    desfazer()
-    await aberta
-    await cliente?.$disconnect()
-  })
-
-  beforeEach(async () => {
-    await tx().$executeRawUnsafe('SAVEPOINT caso')
-  })
-
-  afterEach(async () => {
-    await tx().$executeRawUnsafe('ROLLBACK TO SAVEPOINT caso')
-  })
+  afterAll(() => teste.desfazer())
+  beforeEach(abrirCaso)
+  afterEach(desfazerCaso)
 
   // ------------------------------------------------------------------ ajudantes
 

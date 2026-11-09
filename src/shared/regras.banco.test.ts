@@ -9,7 +9,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 // Teste de INTEGRACAO: so roda com DATABASE_URL_TESTE apontando para um banco ja migrado, um branch
 // de teste da Neon ou um Postgres local. Sem a variavel, a suite fica de fora (skip).
 //
-//   DATABASE_URL_TESTE="postgresql://..." npm test -- regras-do-banco
+//   DATABASE_URL_TESTE="postgresql://..." npm run test:banco
 //
 // Nada fica gravado: tudo roda numa transacao que termina em ROLLBACK. O mundo minimo (especies,
 // estante, caixas, casais, partos, animais e pedidos) nasce dentro dela, com nomes proprios, e cada
@@ -256,6 +256,13 @@ describe.skipIf(!URL_TESTE)('regras do banco', { timeout: 30_000 }, () => {
         sql: `INSERT INTO infra.caixa (id_estante, face, linha, coluna, id_especie) VALUES ($1, 1, 9, 1, (SELECT id_especie FROM infra.caixa WHERE id = $2))`,
         valores: [m.estante, m.caixaCasal1],
       })
+    })
+
+    it('recusa a estante com colunas demais para as 26 letras do endereco', async () => {
+      await recusaDoTrigger('TOPOLOGIA',
+        `UPDATE infra.estante SET colunas = 14, capacidade = faces * linhas * 14 WHERE id = ${m.estante}`,
+        `INSERT INTO infra.caixa (id_estante, face, linha, coluna, id_especie)
+         SELECT id_estante, 2, 1, 14, id_especie FROM infra.caixa WHERE id = ${m.caixaCasal1}`)
     })
 
     it('escreve o codigo no INSERT, a traseira continuando as letras da frontal', async () => {
@@ -606,6 +613,24 @@ describe.skipIf(!URL_TESTE)('regras do banco', { timeout: 30_000 }, () => {
       ['pedido_status_dominio', () => `UPDATE demanda.pedido SET status = 'cancelado' WHERE id = ${m.pedido}`],
       ['pedido_entregue_tem_data', () => `UPDATE demanda.pedido SET dt_entrega = '2026-11-05' WHERE id = ${m.pedido}`],
       ['pedido_qtd_nao_negativa', () => `UPDATE demanda.pedido SET qtd_m = -1, qtd_qualquer = 3 WHERE id = ${m.pedido}`],
+      // os de antes do modelo por rato, que continuam valendo
+      ['estante_capacidade_derivada', () => `UPDATE infra.estante SET capacidade = capacidade + 1 WHERE id = ${m.estante}`],
+      ['caixa_posicao_positiva', () => `UPDATE infra.caixa SET linha = 0 WHERE id = ${m.caixaCasal1}`],
+      ['estante_topologia_positiva', () => `UPDATE infra.estante SET linhas = 0, capacidade = 0 WHERE id = ${m.estante}`],
+      ['caixa_uma_por_posicao', () => `INSERT INTO infra.caixa (id_estante, face, linha, coluna, id_especie, tipo)
+                                       SELECT id_estante, face, linha, coluna, id_especie, 'casal' FROM infra.caixa WHERE id = ${m.caixaCasal1}`],
+      ['casal_grupo_macho_dominio', () => `UPDATE reproducao.casal SET grupo_macho = 'Z', identificacao = 'Z' || grupo_femea WHERE id_caixa = ${m.caixaCasal1}`],
+      ['casal_grupo_femea_dominio', () => `UPDATE reproducao.casal SET grupo_femea = 'Z', identificacao = grupo_macho || 'Z' WHERE id_caixa = ${m.caixaCasal1}`],
+      ['casal_identificacao_derivada', () => `UPDATE reproducao.casal SET identificacao = 'XX' WHERE id_caixa = ${m.caixaCasal1}`],
+      ['casal_um_ativo_por_caixa', () => `INSERT INTO reproducao.casal (id_caixa, id_linhagem, grupo_macho, grupo_femea, identificacao, dt_formacao)
+                                          SELECT id_caixa, id_linhagem, grupo_macho, grupo_femea, identificacao, dt_formacao FROM reproducao.casal WHERE id_caixa = ${m.caixaCasal1}`],
+      ['parto_ordem_ciclo', () => `UPDATE reproducao.parto SET ordem = 6 WHERE id = ${m.partoNaoNascido}`],
+      ['parto_id_casal_ordem_key', () => `INSERT INTO reproducao.parto (id_casal, ordem, dt_acasalamento)
+                                          SELECT id_casal, ordem, dt_acasalamento FROM reproducao.parto WHERE id = ${m.parto1}`],
+      ['usuario_perfil_dominio', () => `UPDATE login.usuario SET perfil = 'X' WHERE id = ${m.usuario}`],
+      ['pedido_ao_menos_um_animal', () => `UPDATE demanda.pedido SET qtd_m = 0, qtd_f = 0, qtd_qualquer = 0 WHERE id = ${m.pedidoEnviado}`],
+      ['pedido_faixa_de_idade', () => `UPDATE demanda.pedido SET idade_min_dias = 10 WHERE id = ${m.pedidoEnviado}`],
+      ['pedido_qtd_qualquer_nao_negativa', () => `UPDATE demanda.pedido SET qtd_qualquer = -1, qtd_m = 5, qtd_f = 5 WHERE id = ${m.pedidoEnviado}`],
     ])('%s recusa o que nao cabe nele', async (constraint, sql) => {
       await recusaDaConstraint(constraint, sql())
     })

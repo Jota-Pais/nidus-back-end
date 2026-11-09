@@ -138,7 +138,8 @@ e o que você grava rodando local aparece para o cliente.
 | Script | O que faz |
 |---|---|
 | `npm run dev` | API com recarga automática (`tsx watch`) |
-| `npm test` | Vitest. Só a suíte das regras do banco abre conexão, e só com `DATABASE_URL_TESTE` (abaixo) |
+| `npm test` | Vitest, a suíte unitária. Não abre conexão com banco nenhum |
+| `npm run test:banco` | Vitest, a suíte de integração (`*.banco.test.ts`), contra o banco de `DATABASE_URL_TESTE` (abaixo) |
 | `npm run typecheck` | `tsc` sem emitir |
 | `npm run build` | Gera o Prisma Client e compila para `dist/` |
 | `npm start` | Roda o build, é o comando da Render |
@@ -150,20 +151,27 @@ e o que você grava rodando local aparece para o cliente.
 
 Os testes de serviço trocam o Prisma por um dublê e não enxergam o que o banco
 cobra sozinho: os triggers da topologia da caixa, do animal e do pedido, e os
-CHECKs. Duas suítes rodam contra um banco de verdade, já migrado, e só quando
-`DATABASE_URL_TESTE` aponta para ele: `src/shared/regras-do-banco.test.ts`, as
-recusas dos triggers e dos CHECKs em SQL puro, e
-`src/modules/demanda/pedido-no-banco.test.ts`, os serviços do pedido de ponta a
-ponta (reservar, completar, desfazer, recusar, entregar), com o SQL deles e os
-triggers juntos:
+CHECKs. A suíte de integração roda contra um banco de verdade, já migrado, e só
+quando `DATABASE_URL_TESTE` aponta para ele. Fica separada da unitária: os
+arquivos `*.banco.test.ts` saem do `npm test` e entram no `npm run test:banco`
+(`vitest.banco.config.ts`, um arquivo de cada vez):
+
+- `src/shared/regras.banco.test.ts`: cada recusa dos triggers e dos CHECKs, em SQL puro;
+- `src/modules/colonia/colonia.banco.test.ts`: os serviços da colônia de ponta a
+  ponta (formar casal, nascer, selecionar, desmamar, mudar de caixa, baixa e
+  anulação, encerrar, sem ninhada, virar estoque, correções), com o quadro, a
+  grade, a ficha e o estoque lendo os mesmos animais;
+- `src/modules/demanda/pedido.banco.test.ts`: os serviços do pedido (reservar,
+  completar, desfazer, recusar, entregar).
 
 ```bash
-DATABASE_URL_TESTE="postgresql://...branch-de-teste..." npm test -- regras-do-banco pedido-no-banco
+DATABASE_URL_TESTE="postgresql://...branch-de-teste..." npm run test:banco
 ```
 
-Use um branch de teste da Neon ou um Postgres local, nunca a produção. As suítes
-criam os próprios dados numa transação e desfazem tudo no fim; só as sequências
-de id andam. Sem a variável, elas ficam de fora e o resto roda como sempre.
+Use um branch de teste da Neon ou um Postgres local, nunca a produção. Cada suíte
+cria os próprios dados numa transação e desfaz tudo no fim; só as sequências de id
+andam. Nas de serviço, o Prisma vira essa transação (`src/shared/testes/transacao.ts`,
+fora do build). Sem a variável, as suítes ficam de fora.
 
 ## Stack
 

@@ -20,7 +20,7 @@ import { desfazerReserva, reservarAnimais } from './reserva.service.ts'
 // escolha, o lancamento e a liberacao) sao trocados por versoes que leem e escrevem aqui. A de
 // mentira cobra o que o banco cobra (o teto do proprio pedido na reserva, a cobertura exata ao
 // mudar o status) e desfaz tudo quando a transacao falha. O banco de verdade e o
-// pedido-no-banco.test.ts; aqui ficam as regras do pedido
+// pedido.banco.test.ts; aqui ficam as regras do pedido
 
 type Caixa = {
   id: number
