@@ -792,6 +792,8 @@ describe('correcao do acasalamento', () => {
     expect(ciclo).toMatchObject({ dtAcasalamento: '2026-09-05', dtPartoPrevisto: '2026-09-28' })
     expect(banco.historicos.at(-1)).toMatchObject({
       acao: 'correcao_acasalamento',
+      // a ficha mostra o evento pela descricao: ela diz o que mudou
+      descricao: 'Correcao do acasalamento do 1o parto (de 01/09/2026 para 05/09/2026): nova monta',
       dados: { motivo: 'nova monta', antes: { dtAcasalamento: '2026-09-01' }, depois: { dtAcasalamento: '2026-09-05' } },
     })
   })
@@ -828,6 +830,7 @@ describe('correcao do nascimento', () => {
     expect(banco.ocorrencias).toHaveLength(1)
     expect(banco.historicos.at(-1)).toMatchObject({
       acao: 'correcao_nascimento',
+      descricao: 'Correcao do 1o parto (nascimento de 24/09/2026 para 22/09/2026): contagem errada',
       dados: expect.objectContaining({ antes: expect.objectContaining({ dtPartoReal: '2026-09-24' }) }),
     })
   })
@@ -1022,6 +1025,11 @@ describe('correcao da data do desmame', () => {
     expect(animaisCom(baixa?.ids ?? []).map((a) => iso(a.dtSaida))).toEqual(['2026-10-18'])
     expect(banco.ocorrencias.at(-1)).toMatchObject({ tipo: 'correcao', motivo: 'data errada' })
     expect(banco.partos.get(1)?.dtDesmameReal).toEqual(d('2026-10-18'))
+    // a ficha mostra o evento pela descricao: ela diz o que mudou
+    expect(banco.historicos.at(-1)).toMatchObject({
+      acao: 'correcao_desmame',
+      descricao: 'Correcao do desmame do 1o parto (de 16/10/2026 para 18/10/2026): data errada',
+    })
   })
 
   it('nunca depois da primeira mudanca ou entrega dos animais do parto', async () => {

@@ -9,7 +9,7 @@ import type { Prisma } from '@prisma/client'
 import { campoInvalido, erroDeRegra } from '../../shared/erros.ts'
 import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { prisma } from '../../shared/prisma.ts'
-import { dataISO, paraData } from '../../shared/traducao.ts'
+import { dataISO, dataLegivel, paraData } from '../../shared/traducao.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
 import { animaisDoParto, faltasDosPedidos, ninhadasNaCaixa } from '../colonia/consultas.ts'
 import { exigirEstoqueQueRecebe } from '../colonia/destino.ts'
@@ -29,6 +29,26 @@ import { baixaDoParto, exigirDataDoDesmame, primeiroFato, rotuloDoFato } from '.
 type Transacao = Prisma.TransactionClient
 
 export type ComMotivo<T> = T & { motivo: string }
+
+/** '[o que] de antes para depois', ou null quando nao mudou */
+export function dePara(antes: string, depois: string, oQue?: string): string | null {
+  if (antes === depois) return null
+
+  return `${oQue === undefined ? '' : `${oQue} `}de ${antes} para ${depois}`
+}
+
+/**
+ * A descricao da correcao no historico, que a ficha mostra como evento: o que mudou entre
+ * parenteses e o motivo. 'Correcao do acasalamento do 2o parto (de 10/10/2026 para 08/10/2026):
+ * digitado errado'
+ */
+export function descricaoDaCorrecao(titulo: string, mudancas: (string | null)[], motivo: string): string {
+  const mudou = mudancas.filter((mudanca) => mudanca !== null)
+
+  return `${titulo}${mudou.length === 0 ? '' : ` (${mudou.join('; ')})`}: ${motivo}`
+}
+
+const contagem = (n: PorSexo) => `${n.m} M e ${n.f} F`
 
 // ------------------------------------------------------------ acasalamento
 
@@ -74,7 +94,11 @@ export async function corrigirAcasalamento(
       entidade: 'parto',
       idEntidade: idParto,
       acao: 'correcao_acasalamento',
-      descricao: `Correcao do acasalamento do ${parto.ordem}o parto: ${dados.motivo}`,
+      descricao: descricaoDaCorrecao(
+        `Correcao do acasalamento do ${parto.ordem}o parto`,
+        [dePara(dataLegivel(antes), dataLegivel(dados.dtAcasalamento))],
+        dados.motivo,
+      ),
       dados: {
         motivo: dados.motivo,
         antes: { dtAcasalamento: antes },
@@ -324,7 +348,14 @@ export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNasci
       entidade: 'parto',
       idEntidade: idParto,
       acao: 'correcao_nascimento',
-      descricao: `Correcao do ${parto.ordem}o parto: ${dados.motivo}`,
+      descricao: descricaoDaCorrecao(
+        `Correcao do ${parto.ordem}o parto`,
+        [
+          dePara(dataLegivel(dataAntiga), dataLegivel(dados.dtPartoReal), 'nascimento'),
+          dePara(contagem(nascidos), contagem({ m: dados.nascidoM, f: dados.nascidoF }), 'contagem'),
+        ],
+        dados.motivo,
+      ),
       dados: {
         motivo: dados.motivo,
         antes: { dtPartoReal: dataAntiga, nascidoM: nascidos.m, nascidoF: nascidos.f },
@@ -396,7 +427,11 @@ export async function corrigirDesmame(
       entidade: 'parto',
       idEntidade: idParto,
       acao: 'correcao_desmame',
-      descricao: `Correcao do desmame do ${parto.ordem}o parto: ${dados.motivo}`,
+      descricao: descricaoDaCorrecao(
+        `Correcao do desmame do ${parto.ordem}o parto`,
+        [dePara(dataLegivel(antes), dataLegivel(dados.dtDesmameReal))],
+        dados.motivo,
+      ),
       dados: {
         motivo: dados.motivo,
         antes: { dtDesmameReal: antes },

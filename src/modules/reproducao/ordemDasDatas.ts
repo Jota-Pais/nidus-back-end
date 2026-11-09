@@ -1,5 +1,5 @@
 import { ErroDeAplicacao } from '../../shared/erros.ts'
-import { dataISO } from '../../shared/traducao.ts'
+import { dataISO, dataLegivel } from '../../shared/traducao.ts'
 
 /**
  * A ordem das datas da vida do casal: formacao, acasalamento, parto, eutanasia, desmame. Cada
@@ -21,24 +21,18 @@ export type Limites = {
   antesDe?: Marco[]
 }
 
-/** 'aaaa-mm-dd' -> 'dd/mm/aaaa', como o tecnico le no formulario */
-function legivel(iso: string): string {
-  const [ano, mes, dia] = iso.split('-')
-  return `${dia}/${mes}/${ano}`
-}
-
 /** O motivo de a data 'aaaa-mm-dd' estar fora da ordem, ou null quando ela cabe */
 export function foraDaOrdem(data: string, limites: Limites): string | null {
   for (const marco of limites.depoisDe ?? []) {
     if (marco.data === null || marco.data === undefined) continue
     const limite = dataISO(marco.data)
-    if (data < limite) return `Nao pode ser antes ${marco.evento} (${legivel(limite)}).`
+    if (data < limite) return `Nao pode ser antes ${marco.evento} (${dataLegivel(limite)}).`
   }
 
   for (const marco of limites.antesDe ?? []) {
     if (marco.data === null || marco.data === undefined) continue
     const limite = dataISO(marco.data)
-    if (data > limite) return `Nao pode ser depois ${marco.evento} (${legivel(limite)}).`
+    if (data > limite) return `Nao pode ser depois ${marco.evento} (${dataLegivel(limite)}).`
   }
 
   return null
