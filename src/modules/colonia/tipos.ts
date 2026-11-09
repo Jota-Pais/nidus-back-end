@@ -10,9 +10,35 @@ export type PorSexo = { m: number; f: number }
 
 export const ROTULO_DO_SEXO: Record<Sexo, string> = { M: 'machos', F: 'femeas' }
 
+const UM_DO_SEXO: Record<Sexo, string> = { M: 'macho', F: 'femea' }
+
 /** A quantidade de um sexo dentro de um PorSexo */
 export function doSexo(contagem: PorSexo, sexo: Sexo): number {
   return sexo === 'M' ? contagem.m : contagem.f
+}
+
+// ------------------------------------------------------------ como o texto conta animal
+//
+// Toda mensagem e descricao que conta animais passa por aqui, para nunca sair "1 machos" nem
+// "0 F". Quando o verbo vem depois da quantidade, ele concorda pelo noNumero.
+
+/** "1 macho", "2 machos", "1 femea", "2 femeas" */
+export function quantosDoSexo(qtd: number, sexo: Sexo): string {
+  return `${qtd} ${qtd === 1 ? UM_DO_SEXO[sexo] : ROTULO_DO_SEXO[sexo]}`
+}
+
+/** "2 machos e 1 femea", "3 femeas": so o sexo que tem animal. Sem nenhum, "nenhum animal" */
+export function quantosAnimais(contagem: PorSexo): string {
+  const partes = SEXOS.filter((sexo) => doSexo(contagem, sexo) > 0).map((sexo) =>
+    quantosDoSexo(doSexo(contagem, sexo), sexo),
+  )
+
+  return partes.length === 0 ? 'nenhum animal' : partes.join(' e ')
+}
+
+/** O verbo concorda com quantos animais: noNumero(1, 'voltou', 'voltaram') e 'voltou' */
+export function noNumero(qtd: number, singular: string, plural: string): string {
+  return qtd === 1 ? singular : plural
 }
 
 /** Soma um animal do sexo a contagem, sem mexer na original */

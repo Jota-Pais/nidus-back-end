@@ -19,7 +19,7 @@ const ROTULO_DO_FATO: Record<string, string> = { baixa: 'baixa', mudanca: 'mudan
  */
 export function primeiroFato(tx: Transacao, idParto: number, tipos: string[]) {
   return tx.ocorrencia.findFirst({
-    where: { tipo: { in: tipos }, anulacao: { is: null }, animais: { some: { animal: { idParto } } } },
+    where: { tipo: { in: tipos }, anulacoes: { none: {} }, animais: { some: { animal: { idParto } } } },
     orderBy: { dtFato: 'asc' },
     select: { tipo: true, dtFato: true },
   })
@@ -36,7 +36,7 @@ export function rotuloDoFato(fato: { tipo: string } | null): string {
  */
 export function baixaDoParto(tx: Transacao, idParto: number, motivo: string, ordem: 'asc' | 'desc') {
   return tx.ocorrencia.findFirst({
-    where: { tipo: 'baixa', idParto, motivo, anulacao: { is: null } },
+    where: { tipo: 'baixa', idParto, motivo, anulacoes: { none: {} } },
     orderBy: { dtFato: ordem },
     select: { id: true, dtFato: true, animais: { select: { idAnimal: true } } },
   })
@@ -74,10 +74,9 @@ export async function exigirDataDoDesmame(
   dtDesmame: string,
   animais: AnimalDoParto[],
 ): Promise<void> {
-  const [ultimaSelecao, saida] = await Promise.all([
-    baixaDoParto(tx, parto.id, MOTIVO_SELECAO, 'desc'),
-    primeiroFato(tx, parto.id, ['mudanca', 'entrega']),
-  ])
+  // uma consulta de cada vez: a transacao e uma conexao so
+  const ultimaSelecao = await baixaDoParto(tx, parto.id, MOTIVO_SELECAO, 'desc')
+  const saida = await primeiroFato(tx, parto.id, ['mudanca', 'entrega'])
 
   exigirOrdem('dtDesmameReal', dtDesmame, {
     depoisDe: [

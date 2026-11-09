@@ -80,6 +80,8 @@ const banco = vi.hoisted(() => ({
   linhagem: { id: 3, idEspecie: 1, nome: 'Wistar', ativa: true },
   parValido: true,
   proximoId: 1000,
+  /** o dia da primeira chegada de animais em cada caixa (a primeira ocorrencia com destino nela) */
+  primeiraChegada: new Map<number, Date>(),
 }))
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
@@ -198,10 +200,23 @@ const db = {
       const ocorrencia = banco.ocorrencias.find((o) => o.id === where.id) as Ocorrencia
       ocorrencia.dtFato = data.dtFato
     },
+    aggregate: async ({ where }: { where: { idCaixaDestino: number } }) => ({
+      _min: { dtFato: banco.primeiraChegada.get(where.idCaixaDestino) ?? null },
+    }),
   },
   historico: {
     create: async ({ data }: { data: Record<string, unknown> }) => {
       banco.historicos.push(data)
+    },
+  },
+  animal: {
+    // a primeira chegada dos animais do parto na caixa, sem contar registro anulado
+    aggregate: async ({ where }: { where: { idParto: number; idCaixa: number } }) => {
+      const chegadas = banco.animais
+        .filter((a) => a.idParto === where.idParto && a.idCaixa === where.idCaixa && a.situacao !== 'anulado')
+        .flatMap((a) => (a.dtMovimento === null ? [] : [a.dtMovimento]))
+        .sort((x, y) => x.getTime() - y.getTime())
+      return { _min: { dtMovimento: chegadas[0] ?? null } }
     },
   },
 }
@@ -365,6 +380,10 @@ function cenario() {
   banco.linhagem = { id: 3, idEspecie: 1, nome: 'Wistar', ativa: true }
   banco.parValido = true
   banco.proximoId = 1000
+  banco.primeiraChegada = new Map([
+    [6, d('2026-09-01')],
+    [7, d('2026-09-01')],
+  ])
   parto({ id: 1, ordem: 1, dtAcasalamento: d('2026-09-01') })
 }
 
@@ -878,7 +897,10 @@ describe('correcao do nascimento', () => {
     for (const a of doParto(1)) if (a.sexo === 'F') a.idPedido = 7
 
     await expect(corrigirNascimento(1, correcao({ nascidoM: 6, nascidoF: 0 }), 4)).rejects.toEqual(
-      expect.objectContaining({ codigo: 'SEQUENCIA_INVALIDA', message: expect.stringContaining('livres') }),
+      expect.objectContaining({
+        codigo: 'SEQUENCIA_INVALIDA',
+        message: expect.stringContaining('So troca de sexo o animal vivo, livre e na caixa do casal (nunca numa caixa de estoque): a correcao troca 1 femea, e so ha 0 assim.'),
+      }),
     )
   })
 
@@ -926,11 +948,13 @@ describe('correcao do nascimento', () => {
     expect(banco.animais.at(-1)).toMatchObject({ idCaixa: 1, dtMovimento: null, sexo: 'M' })
   })
 
-  it('com a caixa do casal liberada, os a mais pedem a caixa; na de estoque chegam no desmame', async () => {
+  it('com a caixa do casal liberada, os a mais pedem a caixa; na de estoque chegam com a ninhada', async () => {
     const ids = nascido(2, 0)
-    for (const a of animaisCom(ids)) Object.assign(a, { idCaixa: 6, dtMovimento: d('2026-10-16') })
+    for (const a of animaisCom(ids)) Object.assign(a, { idCaixa: 6, dtMovimento: d('2026-10-20') })
     Object.assign(banco.partos.get(1) as Parto, { dtDesmameReal: d('2026-10-16') })
     Object.assign(banco.caixas.get(1) as Caixa, { ativa: false })
+    // a caixa F2C so passou a existir com a chegada da ninhada
+    banco.primeiraChegada.set(6, d('2026-10-20'))
 
     await expect(corrigirNascimento(1, correcao({ nascidoM: 3, nascidoF: 0 }), 4)).rejects.toEqual(
       noCampo('idCaixa', 'liberada'),
@@ -938,8 +962,35 @@ describe('correcao do nascimento', () => {
 
     await corrigirNascimento(1, correcao({ nascidoM: 3, nascidoF: 0, idCaixa: 6 }), 4)
 
+    // chegam no dia em que a ninhada chegou, e nao no desmame, quando a caixa ainda nao existia
     const novo = banco.animais.at(-1)
-    expect(novo).toMatchObject({ idCaixa: 6, dtMovimento: d('2026-10-16'), sexo: 'M' })
+    expect(novo).toMatchObject({ idCaixa: 6, dtMovimento: d('2026-10-20'), sexo: 'M' })
+  })
+
+  it('sem animal da ninhada na caixa indicada, os a mais chegam no desmame, e a caixa tem de ja existir nesse dia', async () => {
+    const ids = nascido(1, 1)
+    for (const a of animaisCom(ids)) Object.assign(a, { idCaixa: 6, sexo: 'M', dtMovimento: d('2026-10-20') })
+    Object.assign(banco.partos.get(1) as Parto, { dtDesmameReal: d('2026-10-16') })
+    Object.assign(banco.caixas.get(1) as Caixa, { ativa: false })
+    banco.primeiraChegada.set(7, d('2026-10-18'))
+
+    await expect(corrigirNascimento(1, correcao({ nascidoM: 2, nascidoF: 1, idCaixa: 7 }), 4)).rejects.toEqual(
+      expect.objectContaining({
+        status: 400,
+        extras: {
+          campos: {
+            idCaixa:
+              'A caixa F3C so recebeu os primeiros animais em 18/10/2026, depois do desmame (16/10/2026), quando estes animais chegariam nela.',
+          },
+        },
+      }),
+    )
+    expect(banco.animais).toHaveLength(2)
+
+    banco.primeiraChegada.set(7, d('2026-10-10'))
+    await corrigirNascimento(1, correcao({ nascidoM: 2, nascidoF: 1, idCaixa: 7 }), 4)
+
+    expect(banco.animais.at(-1)).toMatchObject({ idCaixa: 7, dtMovimento: d('2026-10-16'), sexo: 'F' })
   })
 
   it('a caixa de estoque so recebe os a mais depois do desmame', async () => {

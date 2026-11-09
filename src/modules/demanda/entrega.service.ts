@@ -4,13 +4,13 @@
 import type { Prisma } from '@prisma/client'
 import { campoInvalido, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
-import { dataISO, hojeISO, paraData } from '../../shared/traducao.ts'
+import { dataISO, dataLegivel, hojeISO, paraData } from '../../shared/traducao.ts'
 import { exigirDepoisDaChegada, travarReservados } from '../colonia/escolha.ts'
 import type { Reservado } from '../colonia/escolha.ts'
 import { liberarSeVazia } from '../colonia/liberacao.ts'
 import { lancarOcorrencia } from '../colonia/ocorrencia.ts'
 import { faltaDaReserva, temFalta } from '../colonia/reserva.ts'
-import { ROTULO_DO_SEXO, contarPorSexo, sexoDe } from '../colonia/tipos.ts'
+import { contarPorSexo, noNumero, quantosDoSexo, sexoDe } from '../colonia/tipos.ts'
 import { travarCaixas, travarPedidos } from '../colonia/travas.ts'
 import { faixaDoPedido, porQueNaoServe } from '../motor/motor.ts'
 import { descreverQuantidade, statusDo } from './pedido.ts'
@@ -49,12 +49,12 @@ export function exigirQueServemNaEntrega(
     if (animal === undefined) continue
 
     const dtNascimento = dataISO(animal.dtNascimento)
-    const quem = `${grupo.length} ${ROTULO_DO_SEXO[sexoDe(animal)]} da caixa ${animal.codigo}, nascidos em ${dtNascimento}`
+    const quem = `${quantosDoSexo(grupo.length, sexoDe(animal))} da caixa ${animal.codigo} (nascimento em ${dataLegivel(dtNascimento)})`
 
     if (animal.dtDesmameReal === null) {
       throw erroDeRegra(
         'NAO_DESMAMADO',
-        `O desmame dos ${quem}, ainda nao foi registrado: registre o desmame antes da entrega.`,
+        `O desmame de ${quem} ainda nao foi registrado: registre o desmame antes da entrega.`,
       )
     }
 
@@ -63,14 +63,16 @@ export function exigirQueServemNaEntrega(
     if (naoServe?.motivo === 'desmame') {
       throw erroDeRegra(
         'NAO_DESMAMADO',
-        `Os ${quem}, desmamaram em ${naoServe.dtDesmame}, depois da data da entrega.`,
+        `O desmame de ${quem} foi em ${dataLegivel(naoServe.dtDesmame)}, depois da data da entrega.`,
       )
     }
 
     if (naoServe?.motivo === 'idade') {
+      const dias = `${naoServe.idade} ${noNumero(naoServe.idade, 'dia', 'dias')}`
+
       throw erroDeRegra(
         'IDADE_FORA_DA_FAIXA',
-        `Os ${quem}, tem ${naoServe.idade} dias em ${dtEntrega}, fora da idade aceita no pedido (${naoServe.faixa.min} a ${naoServe.faixa.max} dias). Desfaca a reserva e reserve animais na idade.`,
+        `A idade de ${quem} em ${dataLegivel(dtEntrega)} e de ${dias}, fora da idade aceita no pedido (${naoServe.faixa.min} a ${naoServe.faixa.max} dias). Desfaca a reserva e reserve animais na idade.`,
       )
     }
   }

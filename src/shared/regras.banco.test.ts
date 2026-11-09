@@ -641,10 +641,11 @@ describe.skipIf(!URL_TESTE)('regras do banco', { timeout: 30_000 }, () => {
         statusDo(m.pedido, 'entregue'), `UPDATE demanda.pedido SET dt_entrega = NULL WHERE id = ${m.pedido}`)
     })
 
-    it('a mesma baixa nao se anula duas vezes', async () => {
+    it('a baixa aceita uma anulacao por caixa de destino: que ela se anula uma vez so e do codigo', async () => {
       const anular = `INSERT INTO colonia.ocorrencia (tipo, dt_fato, id_anulada, motivo) VALUES ('anulacao', '2026-11-05', ${m.baixa}, 'erro')`
 
-      await recusaDaConstraint('ocorrencia_id_anulada_key', anular, anular)
+      await rodar(anular, anular)
+      expect(await valor(`SELECT count(*)::int FROM colonia.ocorrencia WHERE id_anulada = ${m.baixa}`)).toBe(2)
     })
   })
 })

@@ -362,7 +362,10 @@ CREATE INDEX "animal_id_parto_sexo_idx" ON "colonia"."animal"("id_parto", "sexo"
 CREATE INDEX "animal_id_pedido_idx" ON "colonia"."animal"("id_pedido");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "ocorrencia_id_anulada_key" ON "colonia"."ocorrencia"("id_anulada");
+-- Sem UNIQUE: a anulacao grava uma ocorrencia por caixa para onde os animais voltam (machos numa
+-- caixa de estoque, femeas noutra), todas apontando a mesma baixa. Que a baixa se anula uma vez so
+-- e o codigo que cobra, com a baixa travada.
+CREATE INDEX "ocorrencia_id_anulada_idx" ON "colonia"."ocorrencia"("id_anulada");
 
 -- CreateIndex
 CREATE INDEX "ocorrencia_id_parto_idx" ON "colonia"."ocorrencia"("id_parto");

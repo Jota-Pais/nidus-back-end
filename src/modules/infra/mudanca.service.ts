@@ -17,7 +17,7 @@ import { escolherAnimais, exigirDepoisDaChegada, idadeDoGrupo } from '../colonia
 import type { Escolhido } from '../colonia/escolha.ts'
 import { caixaLiberada, liberarSeVazia, partoPendente } from '../colonia/liberacao.ts'
 import { lancarOcorrencia } from '../colonia/ocorrencia.ts'
-import { ROTULO_DO_SEXO, SEXOS } from '../colonia/tipos.ts'
+import { SEXOS, quantosDoSexo } from '../colonia/tipos.ts'
 import type { Sexo } from '../colonia/tipos.ts'
 import { travarCaixas } from '../colonia/travas.ts'
 import { exigirOrdem } from '../reproducao/ordemDasDatas.ts'
@@ -103,7 +103,7 @@ async function caixaDeDestino(
   if ('idCaixa' in destino) {
     if (destino.idCaixa === origem.id) throw campoInvalido(campo, 'Os animais ja estao nesta caixa.')
 
-    const { codigo } = await exigirEstoqueQueRecebe(tx, destino.idCaixa, campo, quem, dtFato)
+    const { codigo } = await exigirEstoqueQueRecebe(tx, destino.idCaixa, campo, quem, { data: dtFato, campo: 'dtFato' })
     return { id: destino.idCaixa, codigo }
   }
 
@@ -333,7 +333,7 @@ export async function virarCaixaDeEstoque(idCaixa: number, idUsuario: number) {
       entidade: 'caixa',
       idEntidade: idCaixa,
       acao: 'virar_estoque',
-      descricao: `Caixa ${caixa.codigo} virou caixa de estoque com ${total} ${ROTULO_DO_SEXO[virada.sexo]}`,
+      descricao: `Caixa ${caixa.codigo} virou caixa de estoque com ${quantosDoSexo(total, virada.sexo)}`,
       dados: { sexo: virada.sexo, idLinhagem: virada.idLinhagem, total },
     })
 

@@ -1,14 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ACOES_QUE_FORAM_PARA_A_TRILHA, entidadeDaOcorrencia, listarHistorico, ondeNaTrilha } from './historico.service.ts'
+import { entidadeDaOcorrencia, linhasQueForamParaATrilha, listarHistorico, ondeNaTrilha } from './historico.service.ts'
 
 // A tela Historico le auditoria.historico e a trilha de ocorrencias juntos. O banco aqui so devolve
 // o que cada teste deixa e guarda a consulta
 
 const historicoFindMany = vi.hoisted(() => vi.fn())
 const ocorrenciaFindMany = vi.hoisted(() => vi.fn())
+const queryRaw = vi.hoisted(() => vi.fn())
 
 vi.mock('../../shared/prisma.ts', () => ({
-  prisma: { historico: { findMany: historicoFindMany }, ocorrencia: { findMany: ocorrenciaFindMany } },
+  prisma: { historico: { findMany: historicoFindMany }, ocorrencia: { findMany: ocorrenciaFindMany }, $queryRaw: queryRaw },
 }))
 
 const registro = (id: number, dtHora: string, campos: Record<string, unknown> = {}) => ({
@@ -42,7 +43,7 @@ const ocorrencia = (id: number, tipo: string, dtRegistro: string, campos: Record
   parto: null,
   caixaOrigem: null,
   caixaDestino: null,
-  anulacao: null,
+  anulacoes: [],
   animais: [],
   ...campos,
 })
@@ -52,6 +53,8 @@ beforeEach(() => {
   historicoFindMany.mockResolvedValue([])
   ocorrenciaFindMany.mockReset()
   ocorrenciaFindMany.mockResolvedValue([])
+  queryRaw.mockReset()
+  queryRaw.mockResolvedValue([{ id: 16 }, { id: 24 }])
 })
 
 describe('filtro do historico', () => {
@@ -63,7 +66,7 @@ describe('filtro do historico', () => {
         where: {
           entidade: 'caixa',
           idEntidade: 7,
-          NOT: { OR: ACOES_QUE_FORAM_PARA_A_TRILHA },
+          id: { notIn: [16, 24] },
           OR: [
             { descricao: { contains: 'Ana', mode: 'insensitive' } },
             { usuario: { nome: { contains: 'Ana', mode: 'insensitive' } } },
@@ -80,14 +83,31 @@ describe('filtro do historico', () => {
     expect(historicoFindMany.mock.calls[0]?.[0].where.OR).toContainEqual({ idUsuario: null })
   })
 
-  it('o nascimento, a selecao, a passagem para o estoque, a reserva e a entrega do modelo antigo aparecem pela trilha', () => {
-    expect(ACOES_QUE_FORAM_PARA_A_TRILHA).toEqual([
-      { entidade: 'parto', acao: 'nascimento' },
-      { entidade: 'parto', acao: 'selecao' },
-      { entidade: 'caixa', acao: 'estoque' },
-      { entidade: 'pedido', acao: 'alocacao' },
-      { entidade: 'pedido', acao: 'entrega' },
-    ])
+  it('sem linha antiga que foi para a trilha, nao filtra id nenhum', async () => {
+    queryRaw.mockResolvedValue([])
+
+    await listarHistorico({ limite: 300 })
+
+    expect(historicoFindMany.mock.calls[0]?.[0].where).not.toHaveProperty('id')
+  })
+
+  it('a linha antiga sai do historico pelos dados dela: so o fato que a conversao virou ocorrencia', async () => {
+    expect(await linhasQueForamParaATrilha()).toEqual([16, 24])
+
+    const sql = (queryRaw.mock.calls[0]?.[0] as TemplateStringsArray).join('?').replace(/\s+/g, ' ')
+    // o nascimento e a entrega viraram ocorrencia sempre
+    expect(sql).toContain(`h."entidade" = 'parto' AND h."acao" = 'nascimento'`)
+    expect(sql).toContain(`h."entidade" = 'pedido' AND h."acao" = 'entrega'`)
+    // a selecao, so com a baixa da selecao no parto
+    expect(sql).toContain(
+      `h."acao" = 'selecao' AND EXISTS ( SELECT 1 FROM "colonia"."ocorrencia" o WHERE o."tipo" = 'baixa' AND o."id_parto" = h."id_entidade"`,
+    )
+    // a passagem para o estoque tem o parto nos dados; o virar estoque antigo, nao
+    expect(sql).toContain(`h."acao" = 'estoque' AND h."dados" -> 'idParto' IS NOT NULL`)
+    // a reserva, so com a ocorrencia de reserva do pedido
+    expect(sql).toContain(
+      `h."acao" = 'alocacao' AND EXISTS ( SELECT 1 FROM "colonia"."ocorrencia" o WHERE o."tipo" = 'reserva' AND o."id_pedido" = h."id_entidade"`,
+    )
   })
 })
 
@@ -125,7 +145,7 @@ describe('a trilha no historico', () => {
 
     expect(historico.map((linha) => [linha.fonte, linha.id, linha.entidade, linha.idEntidade, linha.acao, linha.descricao])).toEqual([
       ['historico', 10, 'pedido', 4, 'recusa', 'Pedido #4 recusado'],
-      ['trilha', 3, 'pedido', 4, 'reserva', 'Em 2026-11-05: 2 M, 1 F reservados para o pedido #4.'],
+      ['trilha', 3, 'pedido', 4, 'reserva', 'Em 2026-11-05: Reserva para o pedido #4: 2 machos e 1 femea.'],
     ])
     expect(ocorrenciaFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: {}, take: 2 }))
   })
@@ -150,7 +170,7 @@ describe('a trilha no historico', () => {
 
     const { historico } = await listarHistorico({ busca: 'f2c', limite: 300 })
 
-    expect(historico.map((linha) => linha.descricao)).toEqual(['Em 2026-11-05: 3 M, 0 F mudaram da caixa F2A para a caixa F2C.'])
+    expect(historico.map((linha) => linha.descricao)).toEqual(['Em 2026-11-05: 3 machos mudaram da caixa F2A para a caixa F2C.'])
     expect((await listarHistorico({ busca: 'caio', limite: 300 })).historico).toHaveLength(2)
   })
 

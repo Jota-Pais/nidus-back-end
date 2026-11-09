@@ -55,11 +55,6 @@ const POR_CONSTRAINT: Record<string, Traducao> = {
     codigo: 'SEQUENCIA_INVALIDA',
     mensagem: 'Este parto ja foi aberto por outro registro de acasalamento. Atualize a ficha.',
   },
-  // uma baixa so se anula uma vez: o duplo clique em Anular cai aqui
-  ocorrencia_id_anulada_key: {
-    codigo: 'OCORRENCIA_JA_ANULADA',
-    mensagem: 'Esta baixa ja foi anulada. Atualize a ficha.',
-  },
   // CHECK
   parto_ordem_ciclo: {
     codigo: 'LIMITE_PARTOS_ATINGIDO',

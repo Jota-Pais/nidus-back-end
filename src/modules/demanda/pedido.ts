@@ -4,6 +4,7 @@
 import { erroDeRegra } from '../../shared/erros.ts'
 import { faltaDaReserva, passaDoPedido, temFalta } from '../colonia/reserva.ts'
 import type { FaltaDaReserva, Pedido } from '../colonia/reserva.ts'
+import { quantosDoSexo } from '../colonia/tipos.ts'
 import type { PorSexo } from '../colonia/tipos.ts'
 
 /**
@@ -27,8 +28,8 @@ export function statusDo(pedido: { status: string }): StatusDoPedido {
 /** "2 machos, 1 femea e 3 de qualquer sexo", so com o que nao e zero */
 export function descreverQuantidade({ m, f, qualquer }: FaltaDaReserva): string {
   const partes = [
-    m > 0 ? `${m} ${m === 1 ? 'macho' : 'machos'}` : '',
-    f > 0 ? `${f} ${f === 1 ? 'femea' : 'femeas'}` : '',
+    m > 0 ? quantosDoSexo(m, 'M') : '',
+    f > 0 ? quantosDoSexo(f, 'F') : '',
     qualquer > 0 ? `${qualquer} de qualquer sexo` : '',
   ].filter((parte) => parte !== '')
 

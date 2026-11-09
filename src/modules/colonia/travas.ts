@@ -3,7 +3,8 @@
 // confere antes de ler, e quem chega depois espera e le o que a primeira gravou.
 //
 // Sempre nesta ordem, para duas operacoes nunca esperarem uma pela outra (deadlock):
-// casal -> parto -> caixas (em ordem de id) -> pedidos (em ordem de id) -> animais (a escolha).
+// a baixa que se anula -> casal -> parto -> caixas (em ordem de id) -> pedidos (em ordem de id) ->
+// animais (a escolha).
 
 import { Prisma } from '@prisma/client'
 
@@ -11,6 +12,14 @@ type Transacao = Pick<Prisma.TransactionClient, '$queryRaw'>
 
 function unicosEmOrdem(ids: number[]): number[] {
   return [...new Set(ids)].sort((a, b) => a - b)
+}
+
+/**
+ * Trava a ocorrencia (a baixa que se anula): duas anulacoes da mesma baixa ficam em fila, e a
+ * segunda ve as ocorrencias de anulacao que a primeira gravou
+ */
+export async function travarOcorrencia(tx: Transacao, idOcorrencia: number): Promise<void> {
+  await tx.$queryRaw`SELECT "id" FROM "colonia"."ocorrencia" WHERE "id" = ${idOcorrencia} FOR UPDATE`
 }
 
 export async function travarCasal(tx: Transacao, idCasal: number): Promise<void> {

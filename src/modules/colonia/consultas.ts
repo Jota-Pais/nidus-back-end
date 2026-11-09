@@ -202,17 +202,16 @@ export function animaisDoParto(banco: Leitura, idParto: number): Promise<AnimalD
 export async function contagemDosPedidos(banco: Leitura, ids: number[]): Promise<Map<number, SituacaoDoPedido>> {
   if (ids.length === 0) return new Map()
 
-  const [pedidos, linhas] = await Promise.all([
-    banco.pedido.findMany({
-      where: { id: { in: ids } },
-      select: { id: true, status: true, qtdM: true, qtdF: true, qtdQualquer: true },
-    }),
-    banco.animal.groupBy({
-      by: ['idPedido', 'sexo'],
-      where: { idPedido: { in: ids }, situacao: { in: ['vivo', 'entregue'] } },
-      _count: { _all: true },
-    }),
-  ])
+  // uma consulta de cada vez: dentro da transacao da reserva ou da anulacao, a conexao e uma so
+  const pedidos = await banco.pedido.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, status: true, qtdM: true, qtdF: true, qtdQualquer: true },
+  })
+  const linhas = await banco.animal.groupBy({
+    by: ['idPedido', 'sexo'],
+    where: { idPedido: { in: ids }, situacao: { in: ['vivo', 'entregue'] } },
+    _count: { _all: true },
+  })
 
   return new Map(
     pedidos.map((pedido) => [

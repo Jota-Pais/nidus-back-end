@@ -145,6 +145,48 @@ describe('escolha dentro do grupo', () => {
     expect(consultas[0]?.text).not.toContain('"id_pedido" IS NULL')
   })
 
+  it('com o pedido indicado sem reservado no grupo, a recusa diz isso no campo do pedido, e nao a falta generica', async () => {
+    respostas = [[animal(1)], [{ idPedido: 7 }]]
+
+    await expect(
+      escolherAnimais(tx as never, { idCaixa: 3, sexo: 'M', dtNascimento: '2026-10-01' }, 2, {
+        idPedido: 9,
+        campoDoPedido: 'itens.0.idPedido',
+      }),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        codigo: 'SEM_ANIMAIS',
+        message: 'Os livres nao bastam, e o pedido #9 nao tem machos reservados nesta caixa e idade.',
+        extras: { campos: { 'itens.0.idPedido': expect.stringContaining('os que ha sao dos pedidos #7') } },
+      }),
+    )
+  })
+
+  it('a falta generica conta no numero certo', async () => {
+    respostas = [[animal(1)], []]
+
+    await expect(escolherAnimais(tx as never, { idCaixa: 3, sexo: 'F' }, 2)).rejects.toEqual(
+      expect.objectContaining({
+        codigo: 'SEM_ANIMAIS',
+        message: 'Pediu 2 femeas, mas so ha 1 nesta caixa e idade para esta operacao.',
+      }),
+    )
+
+    respostas = [[], []]
+    await expect(escolherAnimais(tx as never, { idParto: 4, sexo: 'M' }, 1)).rejects.toEqual(
+      expect.objectContaining({ message: 'Nao ha machos vivos deste parto para esta operacao.' }),
+    )
+  })
+
+  it('so do pedido sem dizer o pedido e erro no campo, e nao volta para os livres', async () => {
+    await expect(
+      escolherAnimais(tx as never, { idCaixa: 3, sexo: 'M' }, 2, { soDoPedido: true, campoDoPedido: 'machos.idPedido' }),
+    ).rejects.toEqual(
+      expect.objectContaining({ status: 400, extras: { campos: { 'machos.idPedido': expect.stringContaining('pedido') } } }),
+    )
+    expect(consultas).toHaveLength(0)
+  })
+
   it('so do pedido, sem reservados que bastem: SEM_ANIMAIS dizendo o pedido, mesmo com livres no grupo', async () => {
     respostas = [[animal(8, 9)]]
 
@@ -179,7 +221,7 @@ describe('a idade do grupo', () => {
         extras: {
           campos: {
             'femeas.dtNascimento':
-              'A caixa tem femeas de mais de uma idade: diga a data de nascimento (2026-09-01, 2026-10-01).',
+              'A caixa tem femeas de mais de uma idade: diga a data de nascimento (01/09/2026, 01/10/2026).',
           },
         },
       }),
@@ -204,9 +246,24 @@ describe('os reservados de um pedido', () => {
 })
 
 describe('de qual pedido saem os reservados', () => {
-  it('o indicado, se tem reservados no grupo; senao nenhum', () => {
+  it('o indicado, se tem reservados no grupo', () => {
     expect(pedidoDosReservados([7, 9], 9)).toBe(9)
-    expect(pedidoDosReservados([7], 9)).toBeNull()
+  })
+
+  it('o indicado sem reservado no grupo e recusado no campo, dizendo de que pedidos sao os que ha', () => {
+    expect(() => pedidoDosReservados([7], 9, 'machos.idPedido', 'machos reservados nesta caixa e idade')).toThrow(
+      expect.objectContaining({
+        status: 409,
+        codigo: 'SEM_ANIMAIS',
+        message: 'Os livres nao bastam, e o pedido #9 nao tem machos reservados nesta caixa e idade.',
+        extras: {
+          campos: { 'machos.idPedido': 'O pedido #9 nao tem machos reservados nesta caixa e idade; os que ha sao dos pedidos #7.' },
+        },
+      }),
+    )
+    expect(() => pedidoDosReservados([], 9)).toThrow(
+      expect.objectContaining({ extras: { campos: { idPedido: 'O pedido #9 nao tem reservados neste grupo.' } } }),
+    )
   })
 
   it('o unico, sem precisar indicar; nenhum quando nao ha reservado', () => {

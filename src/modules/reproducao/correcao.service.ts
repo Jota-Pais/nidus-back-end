@@ -17,7 +17,7 @@ import { escolherAnimais, pedidosTocados } from '../colonia/escolha.ts'
 import type { Escolhido } from '../colonia/escolha.ts'
 import { liberarSeVazia } from '../colonia/liberacao.ts'
 import { lancarOcorrencia } from '../colonia/ocorrencia.ts'
-import { MOTIVO_NAO_CHEGOU_AO_DESMAME, ROTULO_DO_SEXO, SEXOS, contarPorSexo, doSexo } from '../colonia/tipos.ts'
+import { MOTIVO_NAO_CHEGOU_AO_DESMAME, SEXOS, contarPorSexo, doSexo, quantosDoSexo } from '../colonia/tipos.ts'
 import type { PorSexo, Sexo } from '../colonia/tipos.ts'
 import { travarCaixas } from '../colonia/travas.ts'
 import { cicloFicha } from './cicloFicha.ts'
@@ -148,14 +148,35 @@ export function planoDaContagem(atual: PorSexo, nova: PorSexo): PlanoDaContagem 
 }
 
 /**
+ * Quando os animais do parto chegaram na caixa: a chegada mais antiga dos que estao nela, ou que
+ * sairam dela (morte, entrega), sem contar registro anulado. Null se nenhum animal do parto
+ * passou a ser dela. Lida depois de travar a caixa: e a de agora, e nao a de antes das travas
+ */
+async function chegadaDaNinhada(tx: Transacao, idParto: number, idCaixa: number): Promise<string | null> {
+  const { _min } = await tx.animal.aggregate({
+    where: { idParto, idCaixa, situacao: { not: 'anulado' } },
+    _min: { dtMovimento: true },
+  })
+
+  return _min.dtMovimento === null ? null : dataISO(_min.dtMovimento)
+}
+
+/**
  * Onde entram os animais a mais: onde a ninhada esta. Na caixa do casal se ela continua ativa e
  * sem vivos de outro parto (duas ninhadas nao dividem a caixa, a mesma regra do nascimento e da
- * anulacao), ou na caixa de estoque indicada, depois do desmame, chegando na data do desmame. A
- * caixa do casal que virou estoque recebe como estoque, e la os a mais estao onde nasceram. A
- * caixa de estoque guarda um sexo so: os a mais dos dois sexos, com a ninhada ja separada, entram
- * um sexo por vez
+ * anulacao), ou na caixa de estoque indicada, depois do desmame. A caixa do casal que virou
+ * estoque recebe como estoque, e la os a mais estao onde nasceram. A caixa de estoque guarda um
+ * sexo so: os a mais dos dois sexos, com a ninhada ja separada, entram um sexo por vez.
+ *
+ * Os a mais chegam na caixa de estoque com a ninhada: no dia em que os animais do parto chegaram
+ * nela (chegadaDaNinhada) ou, sem nenhum dela ali, no desmame. A caixa tem de ja existir nesse dia
  */
-async function destinoDosNovos(tx: Transacao, parto: PartoTravado, idCaixa: number | undefined, novos: PorSexo) {
+async function destinoDosNovos(
+  tx: Transacao,
+  parto: PartoTravado,
+  idCaixa: number | undefined,
+  novos: PorSexo,
+): Promise<{ idCaixa: number; dtMovimento: string | null }> {
   const caixaDoCasal = parto.casal.caixa
   const alvo = idCaixa ?? parto.casal.idCaixa
   const naDoCasal = alvo === parto.casal.idCaixa
@@ -194,9 +215,29 @@ async function destinoDosNovos(tx: Transacao, parto: PartoTravado, idCaixa: numb
     )
   }
 
-  await exigirEstoqueQueRecebe(tx, alvo, 'idCaixa', { sexo, idLinhagem: parto.casal.idLinhagem })
+  const quem = { sexo, idLinhagem: parto.casal.idLinhagem }
 
-  return { idCaixa: alvo, dtMovimento: naDoCasal ? null : dataISO(parto.dtDesmameReal) }
+  if (naDoCasal) {
+    // a caixa do casal que virou estoque: os a mais estao onde nasceram, sem chegada
+    await exigirEstoqueQueRecebe(tx, alvo, 'idCaixa', quem, {
+      data: dataISO(parto.dtPartoReal ?? parto.dtDesmameReal),
+      campo: 'idCaixa',
+      deQue: 'do nascimento',
+    })
+
+    return { idCaixa: alvo, dtMovimento: null }
+  }
+
+  const daNinhada = await chegadaDaNinhada(tx, parto.id, alvo)
+  const chegada = daNinhada ?? dataISO(parto.dtDesmameReal)
+
+  await exigirEstoqueQueRecebe(tx, alvo, 'idCaixa', quem, {
+    data: chegada,
+    campo: 'idCaixa',
+    deQue: daNinhada === null ? 'do desmame' : 'da chegada da ninhada nela',
+  })
+
+  return { idCaixa: alvo, dtMovimento: chegada }
 }
 
 export type CorrecaoDoNascimento = ComMotivo<Nascimento> & {
@@ -220,13 +261,12 @@ export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNasci
       throw erroDeRegra('SEQUENCIA_INVALIDA', 'Este parto ainda nao foi registrado: registre antes de corrigir.')
     }
 
-    const [seguinte, fato] = await Promise.all([
-      tx.parto.findFirst({
-        where: { idCasal: parto.idCasal, ordem: parto.ordem + 1 },
-        select: { dtAcasalamento: true },
-      }),
-      primeiroFato(tx, idParto, ['baixa', 'mudanca', 'entrega']),
-    ])
+    // uma consulta de cada vez: a transacao e uma conexao so
+    const seguinte = await tx.parto.findFirst({
+      where: { idCasal: parto.idCasal, ordem: parto.ordem + 1 },
+      select: { dtAcasalamento: true },
+    })
+    const fato = await primeiroFato(tx, idParto, ['baixa', 'mudanca', 'entrega'])
 
     exigirOrdem('dtPartoReal', dados.dtPartoReal, {
       depoisDe: [{ evento: 'do acasalamento', data: parto.dtAcasalamento }],
@@ -271,7 +311,7 @@ export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNasci
       if (trocaveis < troca.qtd) {
         throw erroDeRegra(
           'SEQUENCIA_INVALIDA',
-          `Para trocar o sexo de ${troca.qtd} ${ROTULO_DO_SEXO[troca.de]}, eles tem de estar vivos, livres e na caixa do casal (nunca numa caixa de estoque), e so ha ${trocaveis}. Desfaca a reserva ou corrija de outro jeito.`,
+          `So troca de sexo o animal vivo, livre e na caixa do casal (nunca numa caixa de estoque): a correcao troca ${quantosDoSexo(troca.qtd, troca.de)}, e so ha ${trocaveis} assim. Desfaca a reserva ou corrija de outro jeito.`,
         )
       }
     }

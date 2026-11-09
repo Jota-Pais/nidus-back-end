@@ -3,7 +3,7 @@ import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { abrirCaso, abrirTransacaoDoTeste, desfazerCaso } from '../../shared/testes/transacao.ts'
 import { hojeISO } from '../../shared/traducao.ts'
 import { registrarBaixa } from '../colonia/baixa.service.ts'
-import { listarHistorico } from '../historico/historico.service.ts'
+import { linhasQueForamParaATrilha, listarHistorico } from '../historico/historico.service.ts'
 import { buscarAtendimento } from '../motor/motor.service.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
 import { registrarEntrega } from './entrega.service.ts'
@@ -393,5 +393,52 @@ describe.skipIf(!URL_TESTE)('o pedido no banco de verdade', { timeout: 60_000 },
         pedido,
       ),
     ).toEqual([{ idUsuario: null }])
+  })
+
+  it('o historico de antes do modelo por rato sai da tela so quando a conversao virou o fato ocorrencia: pelos dados de cada linha', async () => {
+    const comReserva = await pedidoAprovado({ machos: 1, femeas: 0, qualquer: 0 })
+    await reservarAnimais(comReserva, [doLugar(m.estoqueM, 1, 0)], m.tecnico)
+    const semReserva = await pedidoAprovado({ machos: 1, femeas: 0, qualquer: 0 })
+    const [parto] = await linhas<{ id: number }>(`SELECT id_parto AS id FROM colonia.animal WHERE id_caixa = $1 LIMIT 1`, m.caixaCasal)
+    const idParto = parto?.id ?? 0
+    // a selecao convertida: a baixa da selecao do parto
+    await tx().$executeRawUnsafe(
+      `INSERT INTO colonia.ocorrencia (tipo, dt_fato, id_parto, id_caixa_origem, motivo) VALUES ('baixa', $1::date, $2, $3, 'eutanasia de selecao')`,
+      daqui(-59),
+      idParto,
+      m.caixaCasal,
+    )
+
+    const antiga = (entidade: string, idEntidade: number, acao: string, dados: unknown) =>
+      id(
+        `INSERT INTO auditoria.historico (entidade, id_entidade, acao, descricao, dados) VALUES ($1, $2, $3, 'linha antiga', $4::jsonb) RETURNING id`,
+        entidade,
+        idEntidade,
+        acao,
+        JSON.stringify(dados),
+      )
+    const foramParaATrilha = [
+      await antiga('parto', idParto, 'nascimento', { nascidoM: 5, nascidoF: 5 }),
+      await antiga('parto', idParto, 'selecao', { eutanasiadoM: 1, eutanasiadoF: 0 }),
+      await antiga('caixa', m.estoqueM, 'estoque', { idParto, idCaixaDoCasal: m.caixaCasal, sexo: 'M', qtd: 2 }),
+      await antiga('pedido', comReserva, 'alocacao', { itens: [{ idParto, machos: 1, femeas: 0 }] }),
+      await antiga('pedido', comReserva, 'entrega', { dtEntrega: hoje }),
+    ]
+    // o virar estoque antigo, a reserva do compromisso cancelado e a selecao sem baixa nao viraram nada
+    const virada = await antiga('caixa', m.estoqueM, 'estoque', { sexo: 'M', total: 2 })
+    const ficam = [
+      virada,
+      await antiga('pedido', semReserva, 'alocacao', { itens: [{ idParto, machos: 1, femeas: 0 }] }),
+      await antiga('parto', m.caixaCasal + 1_000_000, 'selecao', { eutanasiadoM: 0, eutanasiadoF: 0 }),
+    ]
+
+    const naTrilha = await linhasQueForamParaATrilha()
+
+    expect(foramParaATrilha.filter((linha) => !naTrilha.includes(linha))).toEqual([])
+    expect(ficam.filter((linha) => naTrilha.includes(linha))).toEqual([])
+
+    // na tela, da caixa de estoque sobra o virar estoque antigo
+    const { historico } = await listarHistorico({ entidade: 'caixa', idEntidade: m.estoqueM, limite: 50 })
+    expect(historico.filter((linha) => linha.fonte === 'historico').map((linha) => linha.id)).toEqual([virada])
   })
 })

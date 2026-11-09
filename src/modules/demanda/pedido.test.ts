@@ -117,27 +117,40 @@ describe('a idade na data real da entrega', () => {
     expect(() => exigirQueServemNaEntrega([reservado(1)], faixa, '2026-11-20')).not.toThrow()
   })
 
-  it('fora da faixa e IDADE_FORA_DA_FAIXA, dizendo de quem, quantos e a idade no dia', () => {
+  it('fora da faixa e IDADE_FORA_DA_FAIXA, dizendo de quem, quantos e a idade no dia, com a data legivel', () => {
     expect(() => exigirQueServemNaEntrega([reservado(1), reservado(2)], faixa, '2026-11-21')).toThrow(
-      recusa('IDADE_FORA_DA_FAIXA', 'Os 2 machos da caixa F2A, nascidos em 2026-09-01, tem 81 dias em 2026-11-21'),
+      recusa(
+        'IDADE_FORA_DA_FAIXA',
+        'A idade de 2 machos da caixa F2A (nascimento em 01/09/2026) em 21/11/2026 e de 81 dias, fora da idade aceita no pedido (53 a 80 dias).',
+      ),
     )
-    expect(() => exigirQueServemNaEntrega([reservado(1)], faixa, '2026-10-23')).toThrow(recusa('IDADE_FORA_DA_FAIXA', '52 dias'))
+    expect(() => exigirQueServemNaEntrega([reservado(1)], faixa, '2026-10-23')).toThrow(
+      recusa('IDADE_FORA_DA_FAIXA', 'A idade de 1 macho da caixa F2A (nascimento em 01/09/2026) em 23/10/2026 e de 52 dias'),
+    )
   })
 
   it('basta um grupo fora da faixa para a entrega inteira parar', () => {
     const novos = reservado(3, { idParto: 2, dtNascimento: d('2026-10-01'), dtDesmameReal: d('2026-10-23'), sexo: 'F' })
 
     expect(() => exigirQueServemNaEntrega([reservado(1), novos], faixa, '2026-11-08')).toThrow(
-      recusa('IDADE_FORA_DA_FAIXA', '1 femeas da caixa F2A, nascidos em 2026-10-01, tem 38 dias'),
+      recusa('IDADE_FORA_DA_FAIXA', 'A idade de 1 femea da caixa F2A (nascimento em 01/10/2026) em 08/11/2026 e de 38 dias'),
     )
   })
 
   it('sem o desmame registrado, ou desmamado depois da entrega, e NAO_DESMAMADO', () => {
     expect(() => exigirQueServemNaEntrega([reservado(1, { dtDesmameReal: null })], faixa, '2026-11-08')).toThrow(
-      recusa('NAO_DESMAMADO', 'ainda nao foi registrado'),
+      recusa(
+        'NAO_DESMAMADO',
+        'O desmame de 1 macho da caixa F2A (nascimento em 01/09/2026) ainda nao foi registrado: registre o desmame antes da entrega.',
+      ),
     )
     expect(() =>
-      exigirQueServemNaEntrega([reservado(1, { dtDesmameReal: d('2026-11-09') })], faixa, '2026-11-08'),
-    ).toThrow(recusa('NAO_DESMAMADO', 'desmamaram em 2026-11-09'))
+      exigirQueServemNaEntrega([reservado(1, { dtDesmameReal: d('2026-11-09') }), reservado(2, { dtDesmameReal: d('2026-11-09') })], faixa, '2026-11-08'),
+    ).toThrow(
+      recusa(
+        'NAO_DESMAMADO',
+        'O desmame de 2 machos da caixa F2A (nascimento em 01/09/2026) foi em 09/11/2026, depois da data da entrega.',
+      ),
+    )
   })
 })

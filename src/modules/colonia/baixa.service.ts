@@ -12,9 +12,9 @@ import type { Escolhido } from './escolha.ts'
 import { caixaLiberada, liberarSeVazia } from './liberacao.ts'
 import { lancarOcorrencia } from './ocorrencia.ts'
 import { soltosNaAnulacao } from './reserva.ts'
-import { ROTULO_DO_SEXO, contarPorSexo, sexoDe } from './tipos.ts'
+import { ROTULO_DO_SEXO, SEXOS, contarPorSexo, noNumero, quantosDoSexo, sexoDe } from './tipos.ts'
 import type { PorSexo, Sexo } from './tipos.ts'
-import { travarCaixas, travarPedidos } from './travas.ts'
+import { travarCaixas, travarOcorrencia, travarPedidos } from './travas.ts'
 
 // ------------------------------------------------------------ baixa
 
@@ -82,9 +82,14 @@ export async function registrarBaixa(idCaixa: number, dados: Baixa, idUsuario: n
 
 export type AnulacaoDeBaixa = {
   motivo: string
-  /** Para onde os animais voltam quando a caixa da baixa nao serve mais (caixaDaVolta) */
-  idCaixa?: number | undefined
+  /** Para onde voltam os machos, quando a caixa da baixa nao serve mais para eles */
+  idCaixaMachos?: number | undefined
+  /** Para onde voltam as femeas, quando a caixa da baixa nao serve mais para elas */
+  idCaixaFemeas?: number | undefined
 }
+
+/** O campo do formulario com a caixa de cada sexo */
+const CAMPO_DO_DESTINO: Record<Sexo, 'idCaixaMachos' | 'idCaixaFemeas'> = { M: 'idCaixaMachos', F: 'idCaixaFemeas' }
 
 /** Um animal da baixa a anular, com o que decide para onde ele volta */
 type AnimalDaBaixa = {
@@ -106,11 +111,14 @@ type CaixaDaBaixa = {
   idLinhagem: number | null
 }
 
+/** Para onde voltou cada sexo da baixa */
+export type Volta = { sexo: Sexo; qtd: number; idCaixa: number; codigo: string }
+
 /**
- * Por que a caixa da baixa nao recebe a volta dos animais, ou null se recebe. A liberada nao volta.
- * A de casal nao recebe quando ja tem vivos de outro parto: duas ninhadas nao dividem a caixa (a
- * mesma regra do nascimento). A de estoque, tambem a de casal que virou estoque depois da baixa,
- * so recebe desmamados do sexo e da linhagem dela
+ * Por que a caixa da baixa nao recebe a volta destes animais (os de um sexo), ou null se recebe. A
+ * liberada nao volta. A de casal nao recebe quando ja tem vivos de outro parto: duas ninhadas nao
+ * dividem a caixa (a mesma regra do nascimento). A de estoque, tambem a de casal que virou estoque
+ * depois da baixa, so recebe desmamados do sexo e da linhagem dela
  */
 async function porQueNaoVolta(
   tx: Prisma.TransactionClient,
@@ -132,69 +140,88 @@ async function porQueNaoVolta(
 }
 
 /**
- * A caixa para onde os animais da baixa voltam: a deles, se continua ativa e cabe neles
- * (porQueNaoVolta); senao, a indicada, de estoque. Sair da caixa do casal, so depois do desmame
+ * Para onde voltam os animais de um sexo da baixa: a caixa onde estavam, se continua servindo para
+ * eles (porQueNaoVolta), e entao nenhuma outra pode ser indicada; senao, a caixa de estoque
+ * indicada no campo do sexo, que tem de aceitar o sexo e a linhagem deles e ja existir hoje, o dia
+ * da volta. Filhote que mama nao sai da caixa da mae
  */
 async function caixaDaVolta(
   tx: Prisma.TransactionClient,
   origem: CaixaDaBaixa,
-  indicada: number | undefined,
+  sexo: Sexo,
   animais: AnimalDaBaixa[],
-): Promise<number> {
+  indicada: number | undefined,
+  dtVolta: string,
+): Promise<{ idCaixa: number; codigo: string }> {
+  const campo = CAMPO_DO_DESTINO[sexo]
+  const quantos = quantosDoSexo(animais.length, sexo)
+  const [primeiro] = animais
   const estado = await porQueNaoVolta(tx, origem, animais)
 
-  if (estado === null) {
-    if (indicada !== undefined && indicada !== origem.id) {
-      throw campoInvalido('idCaixa', `A caixa ${origem.codigo} continua ativa: os animais voltam para ela.`)
+  if (estado === null || primeiro === undefined) {
+    if (indicada !== undefined) {
+      throw campoInvalido(
+        campo,
+        `A caixa ${origem.codigo} continua servindo: ${quantos} da baixa ${noNumero(animais.length, 'volta', 'voltam')} para ela.`,
+      )
     }
 
-    return origem.id
+    return { idCaixa: origem.id, codigo: origem.codigo }
   }
 
   if (!animais.every((animal) => animal.desmamado)) {
     throw erroDeRegra(
       'SEQUENCIA_INVALIDA',
-      `Os animais ainda nao desmamaram, e a caixa ${origem.codigo} ${estado}: filhote que mama so fica com a mae.`,
-    )
-  }
-
-  const sexos = [...new Set(animais.map((animal) => animal.sexo))]
-  const [sexo] = sexos
-  const [primeiro] = animais
-
-  if (sexo === undefined || primeiro === undefined || sexos.length > 1) {
-    throw campoInvalido(
-      'idCaixa',
-      `A caixa ${origem.codigo} ${estado}, e a baixa tem machos e femeas: cada caixa de estoque guarda um sexo so, e a anulacao devolve os animais para uma caixa so.`,
+      `${quantos} da baixa ainda ${noNumero(animais.length, 'mama', 'mamam')}, e a caixa ${origem.codigo} ${estado}: filhote que mama so fica com a mae.`,
     )
   }
 
   if (indicada === undefined || indicada === origem.id) {
-    throw campoInvalido('idCaixa', `A caixa ${origem.codigo} ${estado}: diga para qual caixa de estoque os animais voltam.`)
+    throw campoInvalido(
+      campo,
+      `A caixa ${origem.codigo} ${estado}: diga para qual caixa de estoque ${noNumero(animais.length, 'volta', 'voltam')} ${quantos}.`,
+    )
   }
 
-  await exigirEstoqueQueRecebe(tx, indicada, 'idCaixa', { sexo, idLinhagem: primeiro.idLinhagem })
+  // os vivos de uma caixa sao de uma linhagem so, e os mortos dela tambem; se nao fossem, o
+  // trigger dos animais recusaria a caixa indicada
+  const { codigo } = await exigirEstoqueQueRecebe(
+    tx,
+    indicada,
+    campo,
+    { sexo, idLinhagem: primeiro.idLinhagem },
+    { data: dtVolta, campo, deQue: 'de hoje' },
+  )
 
-  return indicada
+  return { idCaixa: indicada, codigo }
 }
 
 /**
  * POST /api/ocorrencias/:id/anulacao - desfaz uma baixa lancada por engano: os animais voltam a
- * viver na caixa onde estavam, ou na indicada quando ela nao serve mais (caixaDaVolta). A reserva
- * volta junto quando o pedido continua reservado e comporta o animal; senao, ele volta livre. Grava a
- * anulacao apontando a baixa, que so se anula uma vez. E tambem como se corrige a contagem do
- * desmame e da selecao
+ * viver, cada sexo na caixa onde estava ou, quando ela nao serve mais para ele, na caixa de
+ * estoque indicada para o sexo (caixaDaVolta). A reserva volta junto quando o pedido continua
+ * reservado e comporta o animal; senao, ele volta livre. Grava uma ocorrencia de anulacao por caixa
+ * para onde os animais voltaram, todas apontando a baixa, como a mudanca (uma origem, um destino).
+ * A baixa se anula uma vez so: ela fica travada, e a segunda anulacao ve a primeira. E tambem como
+ * se corrige a contagem do desmame e da selecao
  */
-export async function anularBaixa(idOcorrencia: number, dados: AnulacaoDeBaixa, idUsuario: number) {
+export async function anularBaixa(
+  idOcorrencia: number,
+  dados: AnulacaoDeBaixa,
+  idUsuario: number,
+): Promise<{ voltaram: Volta[]; soltos: PorSexo }> {
   return prisma.$transaction(async (tx) => {
+    await travarOcorrencia(tx, idOcorrencia)
+
     const baixa = await tx.ocorrencia.findUnique({
       where: { id: idOcorrencia },
       select: {
         tipo: true,
         idParto: true,
         idCaixaOrigem: true,
-        anulacao: { select: { id: true } },
+        anulacoes: { select: { id: true }, take: 1 },
         animais: {
+          orderBy: { idAnimal: 'asc' },
           select: {
             animal: {
               select: {
@@ -216,7 +243,7 @@ export async function anularBaixa(idOcorrencia: number, dados: AnulacaoDeBaixa, 
       throw erroDeRegra('SEQUENCIA_INVALIDA', 'So a baixa se anula. As outras ocorrencias se corrigem na ficha.')
     }
 
-    if (baixa.anulacao !== null) {
+    if (baixa.anulacoes.length > 0) {
       throw erroDeRegra('OCORRENCIA_JA_ANULADA', 'Esta baixa ja foi anulada. Atualize a ficha.')
     }
 
@@ -231,7 +258,15 @@ export async function anularBaixa(idOcorrencia: number, dados: AnulacaoDeBaixa, 
       }),
     )
 
-    await travarCaixas(tx, [baixa.idCaixaOrigem, ...(dados.idCaixa === undefined ? [] : [dados.idCaixa])])
+    const indicadas: Record<Sexo, number | undefined> = { M: dados.idCaixaMachos, F: dados.idCaixaFemeas }
+
+    for (const sexo of SEXOS) {
+      if (indicadas[sexo] !== undefined && !animais.some((animal) => animal.sexo === sexo)) {
+        throw campoInvalido(CAMPO_DO_DESTINO[sexo], `Esta baixa nao tem ${ROTULO_DO_SEXO[sexo]}.`)
+      }
+    }
+
+    await travarCaixas(tx, [baixa.idCaixaOrigem, ...SEXOS.flatMap((sexo) => indicadas[sexo] ?? [])])
 
     const origem = await tx.caixa.findUnique({
       where: { id: baixa.idCaixaOrigem },
@@ -240,25 +275,43 @@ export async function anularBaixa(idOcorrencia: number, dados: AnulacaoDeBaixa, 
 
     if (origem === null) throw naoEncontrado('Caixa')
 
-    const idCaixa = await caixaDaVolta(tx, origem, dados.idCaixa, animais)
+    const dtVolta = hojeISO()
+    const voltas: (Volta & { animais: AnimalDaBaixa[] })[] = []
+
+    for (const sexo of SEXOS) {
+      const doSexo = animais.filter((animal) => animal.sexo === sexo)
+      if (doSexo.length === 0) continue
+
+      const destino = await caixaDaVolta(tx, origem, sexo, doSexo, indicadas[sexo], dtVolta)
+      voltas.push({ sexo, qtd: doSexo.length, ...destino, animais: doSexo })
+    }
 
     const pedidos = pedidosTocados(animais)
     await travarPedidos(tx, pedidos)
     const soltos = soltosNaAnulacao(animais, await contagemDosPedidos(tx, pedidos))
 
-    await lancarOcorrencia(tx, {
-      tipo: 'anulacao',
-      dtFato: hojeISO(),
-      idUsuario,
-      idAnulada: idOcorrencia,
-      motivo: dados.motivo,
-      idParto: baixa.idParto ?? undefined,
-      idCaixaOrigem: origem.id,
-      idCaixaDestino: idCaixa === origem.id ? undefined : idCaixa,
-      ids: animais.map((animal) => animal.id),
-      soltos,
-    })
+    // uma ocorrencia por caixa de destino: os dois sexos que voltam para a caixa da baixa ficam
+    // numa so
+    for (const idCaixa of [...new Set(voltas.map((volta) => volta.idCaixa))]) {
+      const ids = voltas.filter((volta) => volta.idCaixa === idCaixa).flatMap((volta) => volta.animais.map((a) => a.id))
 
-    return { idCaixa, voltaram: contarPorSexo(animais), soltos: soltos.length }
+      await lancarOcorrencia(tx, {
+        tipo: 'anulacao',
+        dtFato: dtVolta,
+        idUsuario,
+        idAnulada: idOcorrencia,
+        motivo: dados.motivo,
+        idParto: baixa.idParto ?? undefined,
+        idCaixaOrigem: origem.id,
+        idCaixaDestino: idCaixa === origem.id ? undefined : idCaixa,
+        ids,
+        soltos: soltos.filter((id) => ids.includes(id)),
+      })
+    }
+
+    return {
+      voltaram: voltas.map(({ animais: _animais, ...volta }) => volta),
+      soltos: contarPorSexo(animais.filter((animal) => soltos.includes(animal.id))),
+    }
   })
 }

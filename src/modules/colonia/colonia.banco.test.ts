@@ -1,13 +1,17 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { abrirCaso, abrirTransacaoDoTeste, desfazerCaso } from '../../shared/testes/transacao.ts'
 import { dataLegivel, hojeISO } from '../../shared/traducao.ts'
-import { montarQuadro } from '../infra/caixa.service.ts'
+import { listarHistorico } from '../historico/historico.service.ts'
+import { montarQuadro, mudarDePosicao } from '../infra/caixa.service.ts'
 import { montarFicha } from '../infra/ficha.service.ts'
 import { montarGrade } from '../infra/infra.service.ts'
 import { registrarMudanca, virarCaixaDeEstoque } from '../infra/mudanca.service.ts'
 import { consultarEstoque } from '../motor/estoque.service.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
-import { corrigirAcasalamento, corrigirNascimento } from '../reproducao/correcao.service.ts'
+import { registrarEntrega } from '../demanda/entrega.service.ts'
+import { aprovarPedido, criarPedido } from '../demanda/pedido.service.ts'
+import { reservarAnimais } from '../demanda/reserva.service.ts'
+import { corrigirAcasalamento, corrigirDesmame, corrigirNascimento } from '../reproducao/correcao.service.ts'
 import {
   encerrarCasal,
   fecharSemNinhada,
@@ -53,6 +57,7 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
   let idLinhagem: number
   let idEstante: number
   let tecnico: number
+  let pesquisador: number
 
   const tx = () => teste.tx
 
@@ -69,6 +74,9 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
     )
     tecnico = await id(
       `INSERT INTO login.usuario (nome, email, perfil) VALUES ('tecnico', 'tecnico@colonia-no-banco.invalid', 'T') RETURNING id`,
+    )
+    pesquisador = await id(
+      `INSERT INTO login.usuario (nome, email, perfil) VALUES ('pesquisador', 'pesquisador@colonia-no-banco.invalid', 'P') RETURNING id`,
     )
     const sala = await id(`INSERT INTO infra.sala (nome) VALUES ('Sala do teste da colonia') RETURNING id`)
     idEstante = await id(
@@ -263,13 +271,190 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
       expect.objectContaining({ status: 400 }),
     )
 
-    const volta = await anularBaixa(ocorrencia?.id ?? 0, { motivo: 'engano', idCaixa: outra?.idCaixa ?? 0 }, tecnico)
-    expect(volta).toMatchObject({ idCaixa: outra?.idCaixa, voltaram: { m: 0, f: 2 } })
+    const volta = await anularBaixa(ocorrencia?.id ?? 0, { motivo: 'engano', idCaixaFemeas: outra?.idCaixa ?? 0 }, tecnico)
+    expect(volta).toEqual({ voltaram: [{ sexo: 'F', qtd: 2, idCaixa: outra?.idCaixa, codigo: 'F1C' }], soltos: { m: 0, f: 0 } })
     expect(await vivosPorCaixa()).toEqual({ F1C: { m: 0, f: 3 } })
     // a mesma baixa nao se anula duas vezes
-    await expect(anularBaixa(ocorrencia?.id ?? 0, { motivo: 'de novo', idCaixa: outra?.idCaixa ?? 0 }, tecnico)).rejects.toEqual(
-      expect.objectContaining({ status: 409 }),
+    await expect(anularBaixa(ocorrencia?.id ?? 0, { motivo: 'de novo', idCaixaFemeas: outra?.idCaixa ?? 0 }, tecnico)).rejects.toEqual(
+      expect.objectContaining({ status: 409, codigo: 'OCORRENCIA_JA_ANULADA' }),
     )
+  })
+
+  it('a baixa do desmame com machos e femeas, depois do parto seguinte, se anula com cada sexo na sua caixa de estoque', async () => {
+    const { idCaixa, idCasal, idParto } = await casalComNinhada({ linha: 1, coluna: 1 }, { m: 3, f: 3 }, false)
+    // o desmame com 2 e 2: 1 macho e 1 femea nao chegaram ao desmame, numa baixa so
+    await registrarDesmame(idParto, { dtDesmameReal: DESMAME, desmamadoM: 2, desmamadoF: 2 }, tecnico)
+    const { caixas } = await registrarMudanca(
+      idCaixa,
+      { dtFato: daqui(-25), machos: { qtd: 2, destino: { posicao: posicao(1, 2) } }, femeas: { qtd: 2, destino: { posicao: posicao(1, 3) } } },
+      tecnico,
+    )
+    const [machos, femeas] = caixas.map((c) => c.idCaixa)
+    const parto2 = await registrarAcasalamento(idCasal, { dtAcasalamento: daqui(-24) }, tecnico)
+    await registrarNascimento(parto2.id, { dtPartoReal: daqui(-2), nascidoM: 2, nascidoF: 2 }, tecnico)
+    const [baixa] = await tx().$queryRawUnsafe<{ id: number }[]>(
+      `SELECT id FROM colonia.ocorrencia WHERE tipo = 'baixa' AND id_parto = $1`,
+      idParto,
+    )
+    const idBaixa = baixa?.id ?? 0
+
+    // a caixa do casal tem agora a ninhada do 2o parto: cada sexo pede a sua caixa de estoque
+    await expect(anularBaixa(idBaixa, { motivo: 'contei errado', idCaixaMachos: machos ?? 0 }, tecnico)).rejects.toEqual(
+      expect.objectContaining({ status: 400, extras: { campos: { idCaixaFemeas: expect.stringContaining('ninhada do 2o parto') } } }),
+    )
+
+    const volta = await anularBaixa(
+      idBaixa,
+      { motivo: 'contei errado', idCaixaMachos: machos ?? 0, idCaixaFemeas: femeas ?? 0 },
+      tecnico,
+    )
+    expect(volta.voltaram).toEqual([
+      { sexo: 'M', qtd: 1, idCaixa: machos, codigo: 'F1B' },
+      { sexo: 'F', qtd: 1, idCaixa: femeas, codigo: 'F1C' },
+    ])
+    expect(await vivosPorCaixa()).toEqual({ F1A: { m: 2, f: 2 }, F1B: { m: 3, f: 0 }, F1C: { m: 0, f: 3 } })
+
+    // uma ocorrencia de anulacao por destino, as duas apontando a mesma baixa
+    const anulacoes = await tx().$queryRawUnsafe<{ destino: number; n: number }[]>(
+      `SELECT o.id_caixa_destino AS destino, count(oa.id_animal)::int AS n
+         FROM colonia.ocorrencia o JOIN colonia.ocorrencia_animal oa ON oa.id_ocorrencia = o.id
+        WHERE o.id_anulada = $1 GROUP BY o.id ORDER BY o.id`,
+      idBaixa,
+    )
+    expect(anulacoes).toEqual([
+      { destino: machos, n: 1 },
+      { destino: femeas, n: 1 },
+    ])
+
+    // a ficha de cada caixa e o historico dizem para onde voltou cada sexo
+    const eventosDa = async (id: number) => (await montarFicha(id)).eventos.map((evento) => evento.descricao)
+    expect(await eventosDa(idCaixa)).toEqual(
+      expect.arrayContaining([
+        '1 macho e 1 femea do 1o parto do casal AB nao chegaram ao desmame. (anulada)',
+        'Baixa anulada: 1 macho voltou para a caixa F1B. Motivo: contei errado',
+        'Baixa anulada: 1 femea voltou para a caixa F1C. Motivo: contei errado',
+      ]),
+    )
+    expect(await eventosDa(machos ?? 0)).toContain('Baixa da caixa F1A anulada: 1 macho voltou para esta caixa. Motivo: contei errado')
+    const { historico } = await listarHistorico({ entidade: 'caixa', idEntidade: idCaixa, limite: 50 })
+    expect(historico.map((linha) => linha.descricao)).toEqual(
+      expect.arrayContaining([expect.stringContaining('Baixa da caixa F1A anulada: 1 femea voltou para a caixa F1C.')]),
+    )
+
+    // anulada, a baixa nao se anula de novo, nem para outra caixa
+    await expect(anularBaixa(idBaixa, { motivo: 'de novo' }, tecnico)).rejects.toEqual(
+      expect.objectContaining({ status: 409, codigo: 'OCORRENCIA_JA_ANULADA' }),
+    )
+  })
+
+  it('a correcao do nascimento nao passa da primeira baixa da trilha, e a baixa anulada deixa de contar', async () => {
+    const { idParto } = await casalComNinhada({ linha: 1, coluna: 1 }, { m: 3, f: 3 }, false)
+    await registrarSelecao(idParto, { dtSelecao: daqui(-49), eutanasiadoM: 1, eutanasiadoF: 0 }, tecnico)
+
+    await expect(
+      corrigirNascimento(idParto, { dtPartoReal: daqui(-48), nascidoM: 3, nascidoF: 3, motivo: 'data errada' }, tecnico),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        status: 400,
+        extras: { campos: { dtPartoReal: `Nao pode ser depois da primeira baixa dos animais deste parto (${dataLegivel(daqui(-49))}).` } },
+      }),
+    )
+
+    const [selecao] = await tx().$queryRawUnsafe<{ id: number }[]>(
+      `SELECT id FROM colonia.ocorrencia WHERE tipo = 'baixa' AND id_parto = $1`,
+      idParto,
+    )
+    await anularBaixa(selecao?.id ?? 0, { motivo: 'nao era para eutanasiar' }, tecnico)
+
+    const { parto } = await corrigirNascimento(
+      idParto,
+      { dtPartoReal: daqui(-48), nascidoM: 3, nascidoF: 3, motivo: 'data errada' },
+      tecnico,
+    )
+    expect(parto).toMatchObject({ dtPartoReal: daqui(-48), vivos: { m: 3, f: 3 } })
+  })
+
+  it('a correcao do desmame nao passa da primeira mudanca de caixa da trilha', async () => {
+    const { idCaixa, idParto } = await casalComNinhada({ linha: 1, coluna: 1 }, { m: 2, f: 0 })
+    await registrarMudanca(idCaixa, { dtFato: daqui(-25), machos: { qtd: 1, destino: { posicao: posicao(1, 2) } } }, tecnico)
+
+    await expect(corrigirDesmame(idParto, { dtDesmameReal: daqui(-24), motivo: 'data errada' }, tecnico)).rejects.toEqual(
+      expect.objectContaining({
+        status: 400,
+        extras: {
+          campos: { dtDesmameReal: `Nao pode ser depois da primeira mudanca de caixa dos animais deste parto (${dataLegivel(daqui(-25))}).` },
+        },
+      }),
+    )
+    // ate o dia da mudanca, vale
+    expect((await corrigirDesmame(idParto, { dtDesmameReal: daqui(-25), motivo: 'data errada' }, tecnico)).parto).toMatchObject({
+      dtDesmameReal: daqui(-25),
+    })
+  })
+
+  it('a correcao do desmame nao passa da primeira entrega da trilha', async () => {
+    const { idCaixa, idParto } = await casalComNinhada({ linha: 1, coluna: 1 }, { m: 2, f: 0 })
+    const usuarioPesquisador = { id: pesquisador, nome: 'pesquisador', email: 'pesquisador@colonia-no-banco.invalid', perfil: 'pesquisador' as const }
+    const usuarioTecnico = { id: tecnico, nome: 'tecnico', email: 'tecnico@colonia-no-banco.invalid', perfil: 'tecnico' as const }
+
+    const { id: idPedido } = await criarPedido(
+      {
+        nomePesquisador: 'Pesquisadora do teste',
+        protocoloCeua: '2026000000',
+        idLinhagem,
+        machos: 1,
+        femeas: 0,
+        qualquer: 0,
+        idadeMin: 30,
+        idadeMax: 60,
+        dataEntrega: daqui(5),
+        observacoes: null,
+      },
+      usuarioPesquisador,
+    )
+    await aprovarPedido(idPedido, usuarioTecnico)
+    await reservarAnimais(idPedido, [{ idCaixa, dtNascimento: NASCIMENTO, machos: 1, femeas: 0 }], usuarioTecnico)
+    // o pedido feito ha 20 dias, para a entrega poder ser antes de hoje
+    await tx().$executeRawUnsafe(`UPDATE demanda.pedido SET dt_criacao = now() - interval '20 days' WHERE id = $1`, idPedido)
+    await registrarEntrega(idPedido, daqui(-10), tecnico)
+
+    await expect(corrigirDesmame(idParto, { dtDesmameReal: daqui(-9), motivo: 'data errada' }, tecnico)).rejects.toEqual(
+      expect.objectContaining({
+        status: 400,
+        extras: { campos: { dtDesmameReal: `Nao pode ser depois da primeira entrega dos animais deste parto (${dataLegivel(daqui(-10))}).` } },
+      }),
+    )
+  })
+
+  it('a caixa de estoque com animais nao muda de sexo nem de linhagem, por nenhuma rota', async () => {
+    const { idCaixa } = await casalComNinhada({ linha: 1, coluna: 1 }, { m: 2, f: 2 })
+    const { caixas } = await registrarMudanca(
+      idCaixa,
+      { dtFato: daqui(-25), machos: { qtd: 2, destino: { posicao: posicao(1, 2) } }, femeas: { qtd: 2, destino: { posicao: posicao(1, 3) } } },
+      tecnico,
+    )
+    const [machos, femeas] = caixas.map((c) => c.idCaixa ?? 0)
+    const caixaInteira = (id: number) =>
+      tx().$queryRawUnsafe<{ tipo: string; sexo: string; id_linhagem: number; id_especie: number; ativa: boolean }[]>(
+        `SELECT tipo, sexo, id_linhagem, id_especie, ativa FROM infra.caixa WHERE id = $1`,
+        id,
+      )
+    const antes = await caixaInteira(machos ?? 0)
+
+    // virar estoque de novo e recusado: o sexo e a linhagem ficam os de quando ela nasceu
+    await expect(virarCaixaDeEstoque(machos ?? 0, tecnico)).rejects.toEqual(expect.objectContaining({ codigo: 'CAIXA_DE_ESTOQUE' }))
+    // mudar de posicao leva so o lugar
+    await mudarDePosicao(machos ?? 0, posicao(3, 3), tecnico)
+    expect(await caixaInteira(machos ?? 0)).toEqual(antes)
+    // a femea nao entra na caixa de machos
+    await expect(
+      registrarMudanca(femeas ?? 0, { dtFato: daqui(-20), femeas: { qtd: 1, destino: { idCaixa: machos ?? 0 } } }, tecnico),
+    ).rejects.toEqual(expect.objectContaining({ status: 400, extras: { campos: { 'femeas.destino': expect.stringContaining('outro sexo') } } }))
+    // nem a baixa do ultimo animal da caixa de femeas a libera com vivo dentro: libera so quando esvazia
+    await registrarBaixa(femeas ?? 0, { dtFato: daqui(-5), itens: [{ sexo: 'F', qtd: 1 }] }, tecnico)
+    expect(await caixa(femeas ?? 0)).toMatchObject({ ativa: true })
+    await registrarBaixa(femeas ?? 0, { dtFato: daqui(-5), itens: [{ sexo: 'F', qtd: 1 }] }, tecnico)
+    expect(await caixa(femeas ?? 0)).toMatchObject({ ativa: false, motivo: 'baixa' })
   })
 
   it('o casal encerrado com parto pendente segura a caixa; o parto sem ninhada a libera', async () => {

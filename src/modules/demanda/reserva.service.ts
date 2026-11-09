@@ -13,14 +13,14 @@ import { avisarAnimaisReservados } from '../../shared/email.ts'
 import { erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { prisma } from '../../shared/prisma.ts'
-import { dataISO, hojeISO, paraData } from '../../shared/traducao.ts'
+import { dataISO, dataLegivel, hojeISO, paraData } from '../../shared/traducao.ts'
 import { contagemDosPedidos } from '../colonia/consultas.ts'
 import { escolherAnimais, travarReservados } from '../colonia/escolha.ts'
 import type { Escolhido } from '../colonia/escolha.ts'
 import { caixaLiberada } from '../colonia/liberacao.ts'
 import { lancarOcorrencia } from '../colonia/ocorrencia.ts'
 import { faltaDaReserva, temFalta } from '../colonia/reserva.ts'
-import { ROTULO_DO_SEXO, SEXOS, contarPorSexo, doSexo } from '../colonia/tipos.ts'
+import { SEXOS, contarPorSexo, doSexo, noNumero, quantosDoSexo } from '../colonia/tipos.ts'
 import type { PorSexo } from '../colonia/tipos.ts'
 import { travarPedidos } from '../colonia/travas.ts'
 import { dataDoDesmame, faixaDoPedido, porQueNaoServe } from '../motor/motor.ts'
@@ -106,10 +106,11 @@ type PedidoDaReserva = { idLinhagem: number; idadeMinDias: number; idadeMaxDias:
  * na data desejada (a regra da busca, motor.porQueNaoServe) e bastam para o item
  */
 function exigirQueServe(lugar: Lugar, item: ItemDaReserva, pedido: PedidoDaReserva): void {
-  const deQuem = `Os animais da caixa ${lugar.codigo} nascidos em ${item.dtNascimento}`
+  const nascimento = `do nascimento de ${dataLegivel(item.dtNascimento)}`
+  const deQuem = `Os animais da caixa ${lugar.codigo} ${nascimento}`
 
   if (lugar.livres.m + lugar.livres.f === 0) {
-    throw erroDeRegra('SEM_ANIMAIS', `A caixa ${lugar.codigo} nao tem animais livres nascidos em ${item.dtNascimento}.`)
+    throw erroDeRegra('SEM_ANIMAIS', `A caixa ${lugar.codigo} nao tem animais livres ${nascimento}.`)
   }
 
   if (lugar.linhagens.some((idLinhagem) => idLinhagem !== pedido.idLinhagem)) {
@@ -124,16 +125,18 @@ function exigirQueServe(lugar: Lugar, item: ItemDaReserva, pedido: PedidoDaReser
   )
 
   if (naoServe?.motivo === 'idade') {
+    const dias = `${naoServe.idade} ${noNumero(naoServe.idade, 'dia', 'dias')}`
+
     throw erroDeRegra(
       'IDADE_FORA_DA_FAIXA',
-      `${deQuem} terao ${naoServe.idade} dias em ${dtDesejada}, fora da idade aceita no pedido (${naoServe.faixa.min} a ${naoServe.faixa.max} dias).`,
+      `${deQuem} terao ${dias} em ${dataLegivel(dtDesejada)}, fora da idade aceita no pedido (${naoServe.faixa.min} a ${naoServe.faixa.max} dias).`,
     )
   }
 
   if (naoServe?.motivo === 'desmame') {
     throw erroDeRegra(
       'NAO_DESMAMADO',
-      `${deQuem} so estarao desmamados em ${naoServe.dtDesmame}, depois da entrega de ${dtDesejada}.`,
+      `${deQuem} so estarao desmamados em ${dataLegivel(naoServe.dtDesmame)}, depois da entrega de ${dataLegivel(dtDesejada)}.`,
     )
   }
 
@@ -144,7 +147,7 @@ function exigirQueServe(lugar: Lugar, item: ItemDaReserva, pedido: PedidoDaReser
     if (pedidos > livres) {
       throw erroDeRegra(
         'SEM_ANIMAIS',
-        `A caixa ${lugar.codigo} tem ${livres} ${ROTULO_DO_SEXO[sexo]} livres nascidos em ${item.dtNascimento}, e a reserva pediu ${pedidos}.`,
+        `A caixa ${lugar.codigo} tem ${quantosDoSexo(livres, sexo)} ${noNumero(livres, 'livre', 'livres')} ${nascimento}, e a reserva pediu ${pedidos}.`,
       )
     }
   }

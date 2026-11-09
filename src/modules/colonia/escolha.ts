@@ -9,9 +9,10 @@
 
 import { Prisma } from '@prisma/client'
 import { campoInvalido, erroDeRegra } from '../../shared/erros.ts'
+import { dataLegivel } from '../../shared/traducao.ts'
 import { exigirOrdem } from '../reproducao/ordemDasDatas.ts'
 import { idadesNaCaixa } from './consultas.ts'
-import { ROTULO_DO_SEXO } from './tipos.ts'
+import { ROTULO_DO_SEXO, quantosDoSexo } from './tipos.ts'
 import type { Sexo } from './tipos.ts'
 
 type Transacao = Pick<Prisma.TransactionClient, '$queryRaw'>
@@ -96,22 +97,38 @@ async function pedidosNoGrupo(tx: Transacao, grupo: Grupo, excluir: number[]): P
   return linhas.map((linha) => linha.idPedido)
 }
 
+/** Onde estao os animais do grupo, como as mensagens dizem */
+function ondeDoGrupo(grupo: Grupo): string {
+  return grupo.idParto === undefined ? 'nesta caixa e idade' : 'deste parto'
+}
+
 /**
- * De qual pedido saem os reservados: o indicado, ou o unico que tem reservados no grupo. Null
- * quando nao ha reservado nenhum. Com mais de um e nenhum indicado, recusa pedindo qual
+ * De qual pedido saem os reservados quando os livres nao bastam: o indicado, ou o unico que tem
+ * reservados no grupo. Null quando nao ha reservado nenhum. Com mais de um e nenhum indicado,
+ * recusa pedindo qual; o indicado que nao tem reservados no grupo tambem e recusado, dizendo que
+ * pedidos tem. 'reservados' e quem falta, como a mensagem diz: 'machos reservados nesta caixa e idade'
  */
 export function pedidoDosReservados(
   pedidos: number[],
   indicado: number | undefined,
   campo: string = 'idPedido',
+  reservados: string = 'reservados neste grupo',
 ): number | null {
-  if (indicado !== undefined) return pedidos.includes(indicado) ? indicado : null
+  const lista = pedidos.map((id) => `#${id}`).join(', ')
+
+  if (indicado !== undefined) {
+    if (pedidos.includes(indicado)) return indicado
+
+    const quais = pedidos.length === 0 ? '' : `; os que ha sao dos pedidos ${lista}`
+
+    throw erroDeRegra('SEM_ANIMAIS', `Os livres nao bastam, e o pedido #${indicado} nao tem ${reservados}.`, {
+      campos: { [campo]: `O pedido #${indicado} nao tem ${reservados}${quais}.` },
+    })
+  }
 
   const [unico, ...outros] = pedidos
   if (unico === undefined) return null
   if (outros.length === 0) return unico
-
-  const lista = pedidos.map((id) => `#${id}`).join(', ')
 
   throw erroDeRegra(
     'PEDIDO_NAO_INDICADO',
@@ -121,14 +138,14 @@ export function pedidoDosReservados(
 }
 
 function semAnimais(grupo: Grupo, qtd: number, achados: number, idPedido?: number) {
-  const rotulo = idPedido === undefined ? ROTULO_DO_SEXO[grupo.sexo] : `${ROTULO_DO_SEXO[grupo.sexo]} do pedido #${idPedido}`
-  const onde = grupo.idParto === undefined ? 'neste grupo' : 'deste parto'
+  const doPedido = idPedido === undefined ? '' : ` do pedido #${idPedido}`
+  const onde = ondeDoGrupo(grupo)
 
   return erroDeRegra(
     'SEM_ANIMAIS',
     achados === 0
-      ? `Nao ha ${rotulo} vivos ${onde} para esta operacao.`
-      : `Pediu ${qtd} ${rotulo}, mas so ha ${achados} vivos ${onde} para esta operacao.`,
+      ? `Nao ha ${ROTULO_DO_SEXO[grupo.sexo]} vivos${doPedido} ${onde} para esta operacao.`
+      : `Pediu ${quantosDoSexo(qtd, grupo.sexo)}${doPedido}, mas so ha ${achados} ${onde} para esta operacao.`,
   )
 }
 
@@ -150,7 +167,7 @@ export async function idadeDoGrupo(
   if (idades.length > 1) {
     throw campoInvalido(
       campo,
-      `A caixa tem ${ROTULO_DO_SEXO[sexo]} de mais de uma idade: diga a data de nascimento (${idades.join(', ')}).`,
+      `A caixa tem ${ROTULO_DO_SEXO[sexo]} de mais de uma idade: diga a data de nascimento (${idades.map(dataLegivel).join(', ')}).`,
     )
   }
 
@@ -171,7 +188,11 @@ export async function escolherAnimais(
 
   const excluir = escolha.excluir ?? []
 
-  if (escolha.soDoPedido === true && escolha.idPedido !== undefined) {
+  if (escolha.soDoPedido === true) {
+    if (escolha.idPedido === undefined) {
+      throw campoInvalido(escolha.campoDoPedido ?? 'idPedido', 'Diga de qual pedido sao os reservados que mudam.')
+    }
+
     const doPedido = await travarVivos(tx, grupo, excluir, escolha.idPedido, qtd)
     if (doPedido.length < qtd) throw semAnimais(grupo, qtd, doPedido.length, escolha.idPedido)
     return doPedido
@@ -185,7 +206,12 @@ export async function escolherAnimais(
   const idPedido =
     escolha.soLivres === true
       ? null
-      : pedidoDosReservados(await pedidosNoGrupo(tx, grupo, excluir), escolha.idPedido, escolha.campoDoPedido)
+      : pedidoDosReservados(
+          await pedidosNoGrupo(tx, grupo, excluir),
+          escolha.idPedido,
+          escolha.campoDoPedido,
+          `${ROTULO_DO_SEXO[grupo.sexo]} reservados ${ondeDoGrupo(grupo)}`,
+        )
 
   const reservados = idPedido === null ? [] : await travarVivos(tx, grupo, excluir, idPedido, faltam)
   const escolhidos = [...livres, ...reservados]

@@ -44,16 +44,15 @@ export function dataDaLiberacao(dtFato: string, fatosNaCaixa: (Date | null)[]): 
  * nascimento, a baixa, a mudanca, a anulacao). O registro anulado nao e fato
  */
 async function fatosNaCaixa(tx: Transacao, idCaixa: number): Promise<(Date | null)[]> {
-  const [animais, ocorrencias] = await Promise.all([
-    tx.animal.aggregate({
-      where: { idCaixa, situacao: { not: 'anulado' } },
-      _max: { dtSaida: true, dtMovimento: true },
-    }),
-    tx.ocorrencia.aggregate({
-      where: { OR: [{ idCaixaOrigem: idCaixa }, { idCaixaDestino: idCaixa }] },
-      _max: { dtFato: true },
-    }),
-  ])
+  // uma consulta de cada vez: a transacao e uma conexao so
+  const animais = await tx.animal.aggregate({
+    where: { idCaixa, situacao: { not: 'anulado' } },
+    _max: { dtSaida: true, dtMovimento: true },
+  })
+  const ocorrencias = await tx.ocorrencia.aggregate({
+    where: { OR: [{ idCaixaOrigem: idCaixa }, { idCaixaDestino: idCaixa }] },
+    _max: { dtFato: true },
+  })
 
   return [animais._max.dtSaida, animais._max.dtMovimento, ocorrencias._max.dtFato]
 }

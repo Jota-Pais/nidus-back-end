@@ -301,8 +301,12 @@ model Ocorrencia {
   idCaixaOrigem  Int?     @map("id_caixa_origem")
   idCaixaDestino Int?     @map("id_caixa_destino")
   idPedido       Int?     @map("id_pedido")
-  /// So na anulacao: a ocorrencia anulada. Cada uma e anulada uma vez so
-  idAnulada      Int?     @unique @map("id_anulada")
+  /// So na anulacao: a baixa anulada. A baixa se anula uma vez so, mas os
+  /// animais dela podem voltar para mais de uma caixa (machos numa caixa de
+  /// estoque, femeas noutra), e cada destino e uma ocorrencia de anulacao
+  /// apontando a mesma baixa. Quem cobra o "uma vez so" e o codigo, com a baixa
+  /// travada (colonia/baixa.service.ts)
+  idAnulada      Int?     @map("id_anulada")
   motivo         String?  @db.VarChar(200)
 
   usuario      Usuario?           @relation(fields: [idUsuario], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -311,9 +315,10 @@ model Ocorrencia {
   caixaDestino Caixa?             @relation("DestinoDaOcorrencia", fields: [idCaixaDestino], references: [id], onDelete: NoAction, onUpdate: NoAction)
   pedido       Pedido?            @relation(fields: [idPedido], references: [id], onDelete: NoAction, onUpdate: NoAction)
   anulada      Ocorrencia?        @relation("Anulacao", fields: [idAnulada], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  anulacao     Ocorrencia?        @relation("Anulacao")
+  anulacoes    Ocorrencia[]       @relation("Anulacao")
   animais      OcorrenciaAnimal[]
 
+  @@index([idAnulada])
   @@index([idParto])
   @@index([idCaixaOrigem])
   @@index([idCaixaDestino])

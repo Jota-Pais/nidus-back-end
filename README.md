@@ -38,7 +38,9 @@ O que mora aqui:
   entregue ou anulado). Toda contagem da ficha é contada nos animais. Morte e
   eutanásia são uma ação só, a baixa (`POST /api/caixas/:id/baixa`), em qualquer
   caixa; a seleção e a diferença do desmame são baixas do parto. Baixa lançada
-  por engano se anula (`POST /api/ocorrencias/:id/anulacao`). Cada ação grava uma
+  por engano se anula, uma vez só (`POST /api/ocorrencias/:id/anulacao`): cada
+  sexo volta para a caixa onde estava ou, se ela não serve mais para ele, para a
+  caixa de estoque indicada (`idCaixaMachos`, `idCaixaFemeas`). Cada ação grava uma
   ocorrência com os animais que tocou, e só `lancarOcorrencia`
   (`src/modules/colonia/ocorrencia.ts`) escreve nos animais
 - **Caixas** - a caixa é só o lugar. Desmamados mudam de caixa por

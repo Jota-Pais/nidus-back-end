@@ -73,6 +73,8 @@ const banco = vi.hoisted(() => ({
   historicos: [] as Historico[],
   liberadas: [] as { idCaixa: number; dtFato: string; motivo: string }[],
   avisos: [] as { aviso: string; email: string; motivo?: string | undefined }[],
+  /** o servico de e-mail fora do ar: o envio registra a tentativa e falha */
+  emailFalha: false,
   proximoId: 1000,
 }))
 
@@ -254,9 +256,11 @@ vi.mock('../../shared/prisma.ts', () => ({
 vi.mock('../../shared/email.ts', () => ({
   avisarPedidoDecidido: async (email: string, _resumo: unknown, motivo?: string) => {
     banco.avisos.push({ aviso: motivo === undefined ? 'aprovado' : 'recusado', email, motivo })
+    if (banco.emailFalha) throw new Error('Brevo fora do ar')
   },
   avisarAnimaisReservados: async (email: string) => {
     banco.avisos.push({ aviso: 'reservados', email })
+    if (banco.emailFalha) throw new Error('Brevo fora do ar')
   },
 }))
 
@@ -419,6 +423,7 @@ function cenario() {
   banco.historicos = []
   banco.liberadas = []
   banco.avisos = []
+  banco.emailFalha = false
   banco.proximoId = 1000
 
   nascer(1, 2, 5, 0, '2026-09-25')
@@ -599,11 +604,11 @@ describe('reservar o pedido aprovado', () => {
     pedido(11, { qtdM: 1, qtdF: 0, qtdQualquer: 0, idadeMinDias: 21, idadeMaxDias: 21 })
     const doParto2 = [{ idCaixa: 1, dtNascimento: '2026-10-20', machos: 1, femeas: 0 }]
 
-    await expect(reservarAnimais(11, doParto2, tecnica)).rejects.toEqual(mensagem('NAO_DESMAMADO', 'desmamados em 2026-11-11'))
+    await expect(reservarAnimais(11, doParto2, tecnica)).rejects.toEqual(mensagem('NAO_DESMAMADO', 'desmamados em 11/11/2026, depois da entrega de 10/11/2026'))
 
     // no pedido de 60 a 70 dias, os 21 dias ficam fora da faixa aceita (53 a 80)
     pedido(12, { qtdM: 1, qtdF: 0, qtdQualquer: 0 })
-    await expect(reservarAnimais(12, doParto2, tecnica)).rejects.toEqual(mensagem('IDADE_FORA_DA_FAIXA', '21 dias em 2026-11-10'))
+    await expect(reservarAnimais(12, doParto2, tecnica)).rejects.toEqual(mensagem('IDADE_FORA_DA_FAIXA', 'terao 21 dias em 10/11/2026'))
 
     // com entrega em 11/11, 22 dias e desmamado pelo previsto: passa
     pedido(13, { qtdM: 1, qtdF: 0, qtdQualquer: 0, idadeMinDias: 22, idadeMaxDias: 22, dtDesejada: d('2026-11-11') })
@@ -619,7 +624,7 @@ describe('reservar o pedido aprovado', () => {
       mensagem('SEM_ANIMAIS', 'A caixa F2A tem 5 machos livres'),
     )
     await expect(reservarAnimais(11, [{ idCaixa: 2, dtNascimento: '2026-09-02', machos: 1, femeas: 0 }], tecnica)).rejects.toEqual(
-      mensagem('SEM_ANIMAIS', 'nao tem animais livres nascidos em 2026-09-02'),
+      mensagem('SEM_ANIMAIS', 'nao tem animais livres do nascimento de 02/09/2026'),
     )
     // a caixa F1B guarda Kyoto
     await expect(reservarAnimais(11, [{ idCaixa: 4, dtNascimento: '2026-09-01', machos: 1, femeas: 0 }], tecnica)).rejects.toEqual(
@@ -633,7 +638,7 @@ describe('reservar o pedido aprovado', () => {
     await reservarAnimais(10, [{ idCaixa: 2, dtNascimento: '2026-09-01', machos: 4, femeas: 0 }], tecnica)
 
     await expect(reservarAnimais(11, [{ idCaixa: 2, dtNascimento: '2026-09-01', machos: 2, femeas: 0 }], tecnica)).rejects.toEqual(
-      mensagem('SEM_ANIMAIS', 'tem 1 machos livres'),
+      mensagem('SEM_ANIMAIS', 'tem 1 macho livre do nascimento de 01/09/2026, e a reserva pediu 2'),
     )
     expect(contar(doPedido(10))).toEqual({ m: 4, f: 0 })
   })
@@ -883,7 +888,7 @@ describe('entrega', () => {
     await reservado()
 
     // em 30/11 o parto 1 tem 90 dias, fora dos 53 a 80 aceitos
-    await expect(registrarEntrega(10, '2026-11-30', 2)).rejects.toEqual(mensagem('IDADE_FORA_DA_FAIXA', '90 dias em 2026-11-30'))
+    await expect(registrarEntrega(10, '2026-11-30', 2)).rejects.toEqual(mensagem('IDADE_FORA_DA_FAIXA', 'em 30/11/2026 e de 90 dias'))
     expect(doPedido(10)).toHaveLength(5)
     expect(banco.pedidos.get(10)).toMatchObject({ status: 'reservado', dtEntrega: null })
 
@@ -917,5 +922,43 @@ describe('entrega', () => {
     await expect(registrarEntrega(10, '2026-11-08', 2)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'ja foi registrada'))
     await expect(registrarEntrega(11, '2026-11-08', 2)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'ainda nao tem animais reservados'))
     await expect(registrarEntrega(12, '2026-11-08', 2)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'foi recusado'))
+  })
+})
+
+// ------------------------------------------------------------------ o aviso que falha
+
+describe('o e-mail que falha nao desfaz a decisao', () => {
+  /** O aviso vai depois da resposta: espera o envio falhar e o log registrar */
+  const depoisDoEnvio = () => new Promise((pronto) => setTimeout(pronto, 0))
+
+  it('a aprovacao, a reserva e a recusa ficam gravadas, e a falha do envio vai so para o log', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    banco.emailFalha = true
+
+    try {
+      pedido(10, { status: 'enviado' })
+      expect(await aprovarPedido(10, tecnica)).toEqual({ idPedido: 10, status: 'aprovado' })
+      expect(banco.pedidos.get(10)?.status).toBe('aprovado')
+
+      expect(await reservarAnimais(10, doParto1(), tecnica)).toMatchObject({ idPedido: 10, status: 'reservado' })
+      expect(banco.pedidos.get(10)?.status).toBe('reservado')
+      expect(contar(doPedido(10))).toEqual({ m: 3, f: 2 })
+
+      expect(await recusarPedido(10, 'Pesquisa cancelada', 2)).toMatchObject({ idPedido: 10, status: 'recusado' })
+      expect(banco.pedidos.get(10)?.status).toBe('recusado')
+      expect(doPedido(10)).toEqual([])
+
+      await depoisDoEnvio()
+
+      // os tres envios foram tentados, e cada falha ficou no log com o pedido
+      expect(banco.avisos.map((aviso) => aviso.aviso)).toEqual(['aprovado', 'reservados', 'recusado'])
+      expect(log).toHaveBeenCalledTimes(3)
+      for (const [mensagem, erro] of log.mock.calls) {
+        expect(mensagem).toContain('pedido #10')
+        expect(erro).toEqual(new Error('Brevo fora do ar'))
+      }
+    } finally {
+      log.mockRestore()
+    }
   })
 })

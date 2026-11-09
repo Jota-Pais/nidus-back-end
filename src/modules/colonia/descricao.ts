@@ -1,9 +1,9 @@
 // O texto de uma ocorrencia da trilha, num lugar so: a ficha da caixa o mostra visto da caixa
-// ("chegaram da caixa F1A"), e a tela Historico, sem ponto de vista ("mudaram da caixa F1A para a
-// caixa F2C")
+// ("2 machos chegaram da caixa F1A"), e a tela Historico, sem ponto de vista ("2 machos mudaram da
+// caixa F1A para a caixa F2C"). A quantidade sai de quantosAnimais e o verbo concorda com ela
 
 import type { Prisma } from '@prisma/client'
-import { MOTIVO_NAO_CHEGOU_AO_DESMAME, MOTIVO_SELECAO, contarPorSexo } from './tipos.ts'
+import { MOTIVO_NAO_CHEGOU_AO_DESMAME, MOTIVO_SELECAO, contarPorSexo, noNumero, quantosAnimais } from './tipos.ts'
 import type { PorSexo } from './tipos.ts'
 
 /** O que o texto le da ocorrencia */
@@ -17,13 +17,22 @@ export const selecaoDaDescricao = {
   parto: { select: { ordem: true, casal: { select: { identificacao: true } } } },
   caixaOrigem: { select: { codigo: true } },
   caixaDestino: { select: { codigo: true } },
-  anulacao: { select: { id: true } },
+  // basta saber se a baixa tem anulacao: a primeira diz
+  anulacoes: { select: { id: true }, take: 1 },
   animais: { select: { animal: { select: { sexo: true, idCaixa: true } } } },
 } satisfies Prisma.OcorrenciaSelect
 
 export type OcorrenciaDescrita = Prisma.OcorrenciaGetPayload<{ select: typeof selecaoDaDescricao }>
 
-const animais = ({ m, f }: PorSexo) => `${m} M, ${f} F`
+/** O verbo concorda com os animais; 'nenhum animal' tambem pede o singular */
+function concordar(qtd: PorSexo, singular: string, plural: string): string {
+  return noNumero(Math.max(qtd.m + qtd.f, 1), singular, plural)
+}
+
+/** Os animais e o verbo: '2 machos e 1 femea mudaram', '1 femea mudou', 'nenhum animal mudou' */
+function comVerbo(qtd: PorSexo, singular: string, plural: string): string {
+  return `${quantosAnimais(qtd)} ${concordar(qtd, singular, plural)}`
+}
 
 function doParto(ocorrencia: OcorrenciaDescrita): string {
   const { parto } = ocorrencia
@@ -31,14 +40,40 @@ function doParto(ocorrencia: OcorrenciaDescrita): string {
 }
 
 function descricaoDaBaixa(ocorrencia: OcorrenciaDescrita, qtd: PorSexo, naCaixa: string): string {
-  const anulada = ocorrencia.anulacao === null ? '' : ' (anulada)'
+  const anulada = ocorrencia.anulacoes.length === 0 ? '' : ' (anulada)'
 
-  if (ocorrencia.motivo === MOTIVO_SELECAO) return `Eutanasia de selecao${doParto(ocorrencia)}: ${animais(qtd)}.${anulada}`
-  if (ocorrencia.motivo === MOTIVO_NAO_CHEGOU_AO_DESMAME) {
-    return `${animais(qtd)}${doParto(ocorrencia)} nao chegaram ao desmame.${anulada}`
+  if (ocorrencia.motivo === MOTIVO_SELECAO) {
+    return `Eutanasia de selecao${doParto(ocorrencia)}: ${quantosAnimais(qtd)}.${anulada}`
   }
 
-  return `Baixa de ${animais(qtd)}${naCaixa}${ocorrencia.motivo === null ? '' : `: ${ocorrencia.motivo}`}.${anulada}`
+  if (ocorrencia.motivo === MOTIVO_NAO_CHEGOU_AO_DESMAME) {
+    const quem = `${quantosAnimais(qtd)}${doParto(ocorrencia)}`
+    return `${quem} ${concordar(qtd, 'nao chegou', 'nao chegaram')} ao desmame.${anulada}`
+  }
+
+  return `Baixa de ${quantosAnimais(qtd)}${naCaixa}${ocorrencia.motivo === null ? '' : `: ${ocorrencia.motivo}`}.${anulada}`
+}
+
+/**
+ * A anulacao de uma baixa: cada ocorrencia leva os animais que voltaram para uma caixa, a da baixa
+ * (sem destino) ou a de estoque indicada para o sexo. Vista da caixa da baixa, da caixa para onde
+ * voltaram, ou sem ponto de vista
+ */
+function descricaoDaAnulacao(ocorrencia: OcorrenciaDescrita, qtd: PorSexo, daCaixa: number | undefined): string {
+  const origem = ocorrencia.caixaOrigem?.codigo ?? ''
+  const motivo = ` Motivo: ${ocorrencia.motivo ?? ''}`
+  const voltaram = comVerbo(qtd, 'voltou', 'voltaram')
+
+  if (ocorrencia.idCaixaDestino === null) {
+    return `Baixa anulada: ${voltaram} a viver${daCaixa === undefined ? ` na caixa ${origem}` : ''}.${motivo}`
+  }
+
+  const destino = ocorrencia.caixaDestino?.codigo ?? ''
+
+  if (daCaixa === ocorrencia.idCaixaOrigem) return `Baixa anulada: ${voltaram} para a caixa ${destino}.${motivo}`
+  if (daCaixa === ocorrencia.idCaixaDestino) return `Baixa da caixa ${origem} anulada: ${voltaram} para esta caixa.${motivo}`
+
+  return `Baixa da caixa ${origem} anulada: ${voltaram} para a caixa ${destino}.${motivo}`
 }
 
 /**
@@ -55,33 +90,28 @@ export function descreverOcorrencia(ocorrencia: OcorrenciaDescrita, daCaixa?: nu
 
   switch (ocorrencia.tipo) {
     case 'nascimento':
-      return `Nascimento${doParto(ocorrencia)}: ${animais(qtd)}${daCaixa === undefined ? ` na caixa ${destino}` : ''}.`
+      return `Nascimento${doParto(ocorrencia)}: ${quantosAnimais(qtd)}${daCaixa === undefined ? ` na caixa ${destino}` : ''}.`
     case 'baixa':
       return descricaoDaBaixa(ocorrencia, qtd, daCaixa === undefined ? ` na caixa ${origem}` : '')
     case 'mudanca':
-      if (daCaixa === undefined) return `${animais(qtd)} mudaram da caixa ${origem} para a caixa ${destino}.`
+      if (daCaixa === undefined) return `${comVerbo(qtd, 'mudou', 'mudaram')} da caixa ${origem} para a caixa ${destino}.`
       return ocorrencia.idCaixaOrigem === daCaixa
-        ? `${animais(qtd)} mudaram para a caixa ${destino}.`
-        : `${animais(qtd)} chegaram da caixa ${origem}.`
-    case 'anulacao': {
-      const motivo = ` Motivo: ${ocorrencia.motivo ?? ''}`
-      if (ocorrencia.idCaixaDestino === null) {
-        return `Baixa anulada: ${animais(qtd)} voltaram a viver${daCaixa === undefined ? ` na caixa ${origem}` : ''}.${motivo}`
-      }
-      if (daCaixa === undefined || ocorrencia.idCaixaOrigem === daCaixa) {
-        return `Baixa anulada: ${animais(qtd)} voltaram a viver na caixa ${destino}.${motivo}`
-      }
-      return `Baixa anulada: ${animais(qtd)} voltaram a viver, vindos da caixa ${origem}.${motivo}`
-    }
+        ? `${comVerbo(qtd, 'mudou', 'mudaram')} para a caixa ${destino}.`
+        : `${comVerbo(qtd, 'chegou', 'chegaram')} da caixa ${origem}.`
+    case 'anulacao':
+      return descricaoDaAnulacao(ocorrencia, qtd, daCaixa)
     case 'entrega':
-      return `${animais(qtd)} entregues ao ${pedido}.`
+      return `${comVerbo(qtd, 'entregue', 'entregues')} ao ${pedido}.`
     case 'reserva':
-      return `${animais(qtd)} reservados para o ${pedido}.`
-    case 'reserva_desfeita':
-      return `Reserva do ${pedido} desfeita: ${animais(qtd)} voltaram a ficar livres${ocorrencia.motivo === null ? '' : ` (${ocorrencia.motivo})`}.`
+      return `Reserva para o ${pedido}: ${quantosAnimais(qtd)}.`
+    case 'reserva_desfeita': {
+      const motivo = ocorrencia.motivo === null ? '' : ` (${ocorrencia.motivo})`
+      const livres = concordar(qtd, 'livre', 'livres')
+      return `Reserva do ${pedido} desfeita: ${comVerbo(qtd, 'voltou', 'voltaram')} a ficar ${livres}${motivo}.`
+    }
     case 'correcao':
-      return `Correcao${doParto(ocorrencia)} que mudou ${animais(qtd)}${ocorrencia.motivo === null ? '' : `: ${ocorrencia.motivo}`}.`
+      return `Correcao${doParto(ocorrencia)} que mudou ${quantosAnimais(qtd)}${ocorrencia.motivo === null ? '' : `: ${ocorrencia.motivo}`}.`
     default:
-      return `${ocorrencia.tipo}: ${animais(qtd)}.`
+      return `${ocorrencia.tipo}: ${quantosAnimais(qtd)}.`
   }
 }

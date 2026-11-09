@@ -7,6 +7,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '../../shared/prisma.ts'
 import { dataISO } from '../../shared/traducao.ts'
 import { descreverOcorrencia, selecaoDaDescricao } from '../colonia/descricao.ts'
+import { MOTIVO_SELECAO } from '../colonia/tipos.ts'
 
 type BancoComHistorico = Pick<Prisma.TransactionClient, 'historico'>
 
@@ -60,17 +61,36 @@ export type LinhaDoHistorico = {
 }
 
 /**
- * Os fatos dos animais que o historico guardou antes do modelo por rato e que a conversao para ele
- * virou ocorrencia da trilha. Aparecem pela trilha, para nao repetir; o codigo de hoje nao grava
- * mais estas acoes no historico
+ * As linhas do historico de antes do modelo por rato cujo fato a conversao para ele virou
+ * ocorrencia da trilha: aparecem pela trilha, para nao repetir. Quem decide sao os dados de cada
+ * linha, porque a mesma acao guardava fatos diferentes:
+ * - o nascimento e a entrega: todo parto nascido ganhou a ocorrencia de nascimento, e todo pedido
+ *   entregue, a de entrega;
+ * - a selecao, quando o parto tem a baixa da selecao (a selecao sem animal nao virou baixa);
+ * - a passagem para o estoque (caixa/estoque com o idParto nos dados), que virou mudanca. O antigo
+ *   "virar caixa de estoque" gravava a mesma acao, com o total nos dados, e nao virou ocorrencia:
+ *   fica no historico;
+ * - a reserva (pedido/alocacao), quando o pedido tem a ocorrencia de reserva. A do compromisso
+ *   cancelado nao virou nada e fica, ao lado da devolucao dela.
+ * O codigo de hoje nao grava mais estas acoes no historico: as linhas sao so as antigas
  */
-export const ACOES_QUE_FORAM_PARA_A_TRILHA: { entidade: string; acao: string }[] = [
-  { entidade: 'parto', acao: 'nascimento' },
-  { entidade: 'parto', acao: 'selecao' },
-  { entidade: 'caixa', acao: 'estoque' },
-  { entidade: 'pedido', acao: 'alocacao' },
-  { entidade: 'pedido', acao: 'entrega' },
-]
+export async function linhasQueForamParaATrilha(): Promise<number[]> {
+  const linhas = await prisma.$queryRaw<{ id: number }[]>`
+    SELECT h."id"
+      FROM "auditoria"."historico" h
+     WHERE (h."entidade" = 'parto' AND h."acao" = 'nascimento')
+        OR (h."entidade" = 'pedido' AND h."acao" = 'entrega')
+        OR (h."entidade" = 'parto' AND h."acao" = 'selecao' AND EXISTS (
+              SELECT 1 FROM "colonia"."ocorrencia" o
+               WHERE o."tipo" = 'baixa' AND o."id_parto" = h."id_entidade" AND o."motivo" = ${MOTIVO_SELECAO}))
+        OR (h."entidade" = 'caixa' AND h."acao" = 'estoque' AND h."dados" -> 'idParto' IS NOT NULL)
+        OR (h."entidade" = 'pedido' AND h."acao" = 'alocacao' AND EXISTS (
+              SELECT 1 FROM "colonia"."ocorrencia" o
+               WHERE o."tipo" = 'reserva' AND o."id_pedido" = h."id_entidade"))
+     ORDER BY h."id"`
+
+  return linhas.map((linha) => linha.id)
+}
 
 /** Quem busca por "Sistema" acha o que o sistema fez, como na coluna Quem */
 const buscaOSistema = (busca: string) => NOME_DO_SISTEMA.toLowerCase().includes(busca.toLowerCase())
@@ -78,11 +98,13 @@ const buscaOSistema = (busca: string) => NOME_DO_SISTEMA.toLowerCase().includes(
 // ------------------------------------------------------------ auditoria.historico
 
 async function doHistorico(filtro: FiltroDoHistorico): Promise<LinhaDoHistorico[]> {
+  const naTrilha = await linhasQueForamParaATrilha()
+
   const registros = await prisma.historico.findMany({
     where: {
       ...(filtro.entidade === undefined ? {} : { entidade: filtro.entidade }),
       ...(filtro.idEntidade === undefined ? {} : { idEntidade: filtro.idEntidade }),
-      NOT: { OR: ACOES_QUE_FORAM_PARA_A_TRILHA },
+      ...(naTrilha.length === 0 ? {} : { id: { notIn: naTrilha } }),
       ...(filtro.busca === undefined
         ? {}
         : {
