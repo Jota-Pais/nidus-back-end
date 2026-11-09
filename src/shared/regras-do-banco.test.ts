@@ -290,8 +290,13 @@ describe.skipIf(!URL_TESTE)('regras do banco', { timeout: 30_000 }, () => {
     it('entregue e final', async () => {
       await recusaDoTrigger('ANIMAL_SITUACAO',
         reservar(m.pedido, coberturaExata()),
+        statusDo(m.pedido, 'reservado'),
         entregarReservados(m.pedido),
         `UPDATE colonia.animal SET situacao = 'vivo', dt_saida = NULL WHERE id = ${m.femeas[0]}`)
+    })
+
+    it('o animal nao se apaga, nem o que ainda nao tem nada na trilha', async () => {
+      await recusaDoTrigger('ANIMAL_SITUACAO', `DELETE FROM colonia.animal WHERE id = ${m.machosNoCasal[0]}`)
     })
 
     it('anulado e final', async () => {
@@ -423,6 +428,10 @@ describe.skipIf(!URL_TESTE)('regras do banco', { timeout: 30_000 }, () => {
         `UPDATE colonia.animal SET id_pedido = NULL WHERE id = ${m.femeas[0]}`,
         `SELECT count(*)::int FROM colonia.animal WHERE id_pedido = ${m.pedido}`)).toBe(3)
     })
+
+    it('a entrega so sai de pedido reservado: o aprovado, mesmo com a reserva inteira, passa a reservado antes', async () => {
+      await recusaDoTrigger('PEDIDO_RESERVA', reservar(m.pedido, coberturaExata()), entregarReservados(m.pedido))
+    })
   })
 
   describe('o pedido coerente com os seus animais (demanda.pedido_coerente)', () => {
@@ -474,6 +483,19 @@ describe.skipIf(!URL_TESTE)('regras do banco', { timeout: 30_000 }, () => {
       await recusaDoTrigger('PEDIDO_ENTREGUE',
         reservar(m.pedido, coberturaExata()), statusDo(m.pedido, 'reservado'), entregarReservados(m.pedido),
         statusDo(m.pedido, 'entregue'), statusDo(m.pedido, 'enviado'))
+    })
+
+    it('a linhagem do pedido nao muda depois da reserva, nem com o reservado morto', async () => {
+      const outraLinhagem = `UPDATE demanda.pedido SET id_linhagem = ${m.linhagemK} WHERE id = ${m.pedido}`
+
+      await recusaDoTrigger('PEDIDO_RESERVA', reservar(m.pedido, [m.femeas[0]!]), outraLinhagem)
+      await banco.query('ROLLBACK TO SAVEPOINT caso')
+      await recusaDoTrigger('PEDIDO_RESERVA', reservar(m.pedido, [m.femeas[0]!]), morrer([m.femeas[0]!]), outraLinhagem)
+    })
+
+    it('a linhagem do pedido sem animais muda', async () => {
+      expect(await valor(
+        `UPDATE demanda.pedido SET id_linhagem = ${m.linhagemK} WHERE id = ${m.pedidoEnviado} RETURNING id_linhagem`)).toBe(m.linhagemK)
     })
 
     it('a quantidade nao baixa para menos do que ja foi reservado', async () => {

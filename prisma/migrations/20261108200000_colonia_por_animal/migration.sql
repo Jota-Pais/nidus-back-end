@@ -440,8 +440,13 @@ $fn$;
 -- ou nulo quando o lugar serve. Usada pelo trigger colonia.animal_coerente e pela conferencia da
 -- conversao.
 --
--- Le a caixa com FOR SHARE: quem libera a caixa ou a vira de estoque trava a linha com FOR UPDATE e
--- conta os vivos, entao um espera o outro, e quem chega depois de uma liberacao ve a caixa inativa.
+-- O trigger confere o lugar quando o animal se mexe. O lado da caixa e do codigo, como as outras
+-- regras de caixa: liberar so sem vivo dentro, e a especie, o sexo e a linhagem da caixa, que nao
+-- mudam depois de gravados. Por isso le a caixa com FOR SHARE: quem libera a caixa ou a vira de
+-- estoque trava a linha com FOR UPDATE e conta os vivos, entao um espera o outro, e quem chega
+-- depois de uma liberacao ve a caixa inativa.
+-- Quem mexe em mais de uma caixa na mesma transacao trava todas antes, em ordem de id: duas mudancas
+-- em sentidos opostos (A para B e B para A) ficam em fila, em vez de uma esperar a outra (deadlock).
 CREATE FUNCTION "colonia"."lugar_recusado"(p_id_parto integer, p_sexo char(1), p_id_caixa integer)
 RETURNS text
 LANGUAGE plpgsql
@@ -495,8 +500,10 @@ BEGIN
 END;
 $fn$;
 
--- O pedido coerente com os seus animais. Com este status e estas quantidades, o pedido tem de
--- ficar assim:
+-- O pedido coerente com os seus animais. Com este status, esta linhagem e estas quantidades, o
+-- pedido tem de ficar assim:
+--   - todo animal do pedido, vivo, morto ou entregue, e da linhagem dele: a linhagem (e com ela a
+--     especie, pela FK composta) nao muda depois da primeira reserva;
 --   - os vivos mais os entregues nao passam do que ele pede (o mesmo teto do trigger do animal,
 --     visto do pedido);
 --   - o pedido que ja entregou animais fica entregue: entregue e final, como no animal;
@@ -509,24 +516,33 @@ $fn$;
 -- API ('PEDIDO_INCOMPLETO: ...'), ou nulo quando o pedido fica coerente. Usada pelo trigger
 -- demanda.pedido_coerente e pela conferencia da conversao.
 CREATE FUNCTION "demanda"."pedido_recusado"(
-  p_id integer, p_status text, p_qtd_m integer, p_qtd_f integer, p_qtd_qualquer integer)
+  p_id integer, p_status text, p_id_linhagem integer, p_qtd_m integer, p_qtd_f integer, p_qtd_qualquer integer)
 RETURNS text
 LANGUAGE plpgsql
 AS $fn$
 DECLARE
-  v_total       integer := p_qtd_m + p_qtd_f + p_qtd_qualquer;
-  v_vivos_m     integer;
-  v_vivos_f     integer;
-  v_entregues_m integer;
-  v_entregues_f integer;
+  v_total          integer := p_qtd_m + p_qtd_f + p_qtd_qualquer;
+  v_vivos_m        integer;
+  v_vivos_f        integer;
+  v_entregues_m    integer;
+  v_entregues_f    integer;
+  v_outra_linhagem integer;
 BEGIN
   SELECT count(*) FILTER (WHERE a.situacao = 'vivo' AND a.sexo = 'M'),
          count(*) FILTER (WHERE a.situacao = 'vivo' AND a.sexo = 'F'),
          count(*) FILTER (WHERE a.situacao = 'entregue' AND a.sexo = 'M'),
-         count(*) FILTER (WHERE a.situacao = 'entregue' AND a.sexo = 'F')
-    INTO v_vivos_m, v_vivos_f, v_entregues_m, v_entregues_f
+         count(*) FILTER (WHERE a.situacao = 'entregue' AND a.sexo = 'F'),
+         count(*) FILTER (WHERE cs.id_linhagem <> p_id_linhagem)
+    INTO v_vivos_m, v_vivos_f, v_entregues_m, v_entregues_f, v_outra_linhagem
     FROM "colonia"."animal" a
+    JOIN "reproducao"."parto" p ON p.id = a.id_parto
+    JOIN "reproducao"."casal" cs ON cs.id = p.id_casal
    WHERE a.id_pedido = p_id;
+
+  IF v_outra_linhagem > 0 THEN
+    RETURN format('PEDIDO_RESERVA: o pedido %s tem %s animais de outra linhagem: a linhagem do pedido nao muda depois da reserva',
+                  p_id, v_outra_linhagem);
+  END IF;
 
   IF v_vivos_m + v_entregues_m > p_qtd_m + p_qtd_qualquer
      OR v_vivos_f + v_entregues_f > p_qtd_f + p_qtd_qualquer
@@ -913,7 +929,7 @@ SELECT pe.id, pe.status, r.recusa,
        COALESCE(pe.status = 'reservado' AND r.recusa LIKE 'PEDIDO_INCOMPLETO:%', false) AS falta
   FROM "demanda"."pedido" pe
  CROSS JOIN LATERAL (
-   SELECT "demanda"."pedido_recusado"(pe.id, pe.status, pe.qtd_m, pe.qtd_f, pe.qtd_qualquer) AS recusa
+   SELECT "demanda"."pedido_recusado"(pe.id, pe.status, pe.id_linhagem, pe.qtd_m, pe.qtd_f, pe.qtd_qualquer) AS recusa
  ) r;
 
 DO $confere$
@@ -1040,8 +1056,8 @@ BEGIN
        WHERE COALESCE(c.reservados, 0) > COALESCE(e.pendentes, 0)
 
       -- todo pedido coerente com os seus animais, pela regra que o trigger do pedido passa a cobrar
-      -- (o teto, o entregue exato, so o reservado segurando animal). So a falta do pedido
-      -- reservado passa, como aviso
+      -- (a linhagem, o teto, o entregue exato, so o reservado segurando animal). So a falta do
+      -- pedido reservado passa, como aviso
       UNION ALL
       SELECT format('pedido %s (%s): %s', pe.id, pe.status, pe.recusa)
         FROM pedido_conferido pe
@@ -1293,7 +1309,8 @@ CREATE TRIGGER "caixa_dentro_da_topologia"
 -- 7.2 O animal coerente.
 --   - A vida do animal: entra vivo, de parto que ja nasceu, e o parto de origem nunca muda.
 --     Entregue e anulado sao finais. Morto so volta a vivo (a anulacao da baixa). So quem fica
---     vivo muda de caixa ou de sexo, e o sexo de animal reservado nao muda.
+--     vivo muda de caixa ou de sexo, e o sexo de animal reservado nao muda. O animal nao se apaga:
+--     a vida dele termina em morto, entregue ou anulado, com o porque na trilha.
 --   - O lugar do vivo: a regra de colonia.lugar_recusado.
 --   - A reserva: so de vivo, para pedido aprovado ou reservado da linhagem do parto; nao troca de
 --     pedido sem desfazer antes; desfazer so deixa o animal vivo e livre (o morto guarda o pedido
@@ -1302,6 +1319,9 @@ CREATE TRIGGER "caixa_dentro_da_topologia"
 --     contar no pedido, os vivos mais os entregues do pedido nao passam de M <= qtd_m + qualquer,
 --     F <= qtd_f + qualquer e M + F <= total. As linhas que o mesmo comando ja atualizou sao vistas
 --     pela contagem.
+--   - A entrega: so do reservado, com o pedido dele em reservado, travado como na reserva. O pedido
+--     so passa a entregue depois que os animais saem (7.3), entao nao ha entrega que pule a reserva
+--     inteira do pedido.
 CREATE FUNCTION "colonia"."animal_coerente"()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -1311,9 +1331,15 @@ DECLARE
   v_id_linhagem   integer;
   v_motivo        text;
   v_pedido        record;
+  v_status_pedido text;
   v_m             integer;
   v_f             integer;
 BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'ANIMAL_SITUACAO: o animal % nao se apaga: a baixa, a entrega ou a anulacao encerram a vida dele', OLD.id
+      USING ERRCODE = 'check_violation';
+  END IF;
+
   SELECT p.dt_parto_real, cs.id_linhagem
     INTO v_dt_parto_real, v_id_linhagem
     FROM "reproducao"."parto" p
@@ -1402,6 +1428,22 @@ BEGIN
     END IF;
   END IF;
 
+  -- A entrega (so no UPDATE: o INSERT ja entrou vivo). Sem pedido, quem recusa e o CHECK
+  -- animal_entregue_tem_pedido
+  IF NEW.situacao = 'entregue' AND OLD.situacao IS DISTINCT FROM 'entregue' THEN
+    SELECT pe.status
+      INTO v_status_pedido
+      FROM "demanda"."pedido" pe
+     WHERE pe.id = NEW.id_pedido
+       FOR UPDATE;
+
+    IF FOUND AND v_status_pedido <> 'reservado' THEN
+      RAISE EXCEPTION 'PEDIDO_RESERVA: o pedido % esta %, e so pedido reservado recebe a entrega dos animais',
+        NEW.id_pedido, v_status_pedido
+        USING ERRCODE = 'check_violation';
+    END IF;
+  END IF;
+
   -- O animal que passa a contar no pedido: reserva nova, ou reservado que volta a viver
   IF NEW.situacao = 'vivo'
      AND NEW.id_pedido IS NOT NULL
@@ -1452,15 +1494,15 @@ END;
 $fn$;
 
 CREATE TRIGGER "animal_coerente"
-  BEFORE INSERT OR UPDATE
+  BEFORE INSERT OR UPDATE OR DELETE
   ON "colonia"."animal"
   FOR EACH ROW
   EXECUTE FUNCTION "colonia"."animal_coerente"();
 
 -- 7.3 O pedido coerente com os seus animais: a regra de demanda.pedido_recusado, conferida quando o
--- pedido nasce e quando o status ou as quantidades mudam. O pedido novo nao tem animal, entao so
--- nasce num status que nao segura nenhum. O UPDATE trava a linha do pedido e toda reserva que entra
--- ou sai trava o pedido (7.2), entao contar aqui nao corre com quem reserva ou desfaz.
+-- pedido nasce e quando o status, a linhagem ou as quantidades mudam. O pedido novo nao tem animal,
+-- entao so nasce num status que nao segura nenhum. O UPDATE trava a linha do pedido e toda reserva
+-- ou entrega trava o pedido (7.2), entao contar aqui nao corre com quem reserva, desfaz ou entrega.
 CREATE FUNCTION "demanda"."pedido_coerente"()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -1469,12 +1511,12 @@ DECLARE
   v_recusa text;
 BEGIN
   IF TG_OP = 'UPDATE'
-     AND (NEW.status, NEW.qtd_m, NEW.qtd_f, NEW.qtd_qualquer)
-         IS NOT DISTINCT FROM (OLD.status, OLD.qtd_m, OLD.qtd_f, OLD.qtd_qualquer) THEN
+     AND (NEW.status, NEW.id_linhagem, NEW.qtd_m, NEW.qtd_f, NEW.qtd_qualquer)
+         IS NOT DISTINCT FROM (OLD.status, OLD.id_linhagem, OLD.qtd_m, OLD.qtd_f, OLD.qtd_qualquer) THEN
     RETURN NEW;
   END IF;
 
-  v_recusa := "demanda"."pedido_recusado"(NEW.id, NEW.status, NEW.qtd_m, NEW.qtd_f, NEW.qtd_qualquer);
+  v_recusa := "demanda"."pedido_recusado"(NEW.id, NEW.status, NEW.id_linhagem, NEW.qtd_m, NEW.qtd_f, NEW.qtd_qualquer);
 
   IF v_recusa IS NOT NULL THEN
     RAISE EXCEPTION '%', v_recusa
@@ -1486,7 +1528,7 @@ END;
 $fn$;
 
 CREATE TRIGGER "pedido_coerente"
-  BEFORE INSERT OR UPDATE OF "status", "qtd_m", "qtd_f", "qtd_qualquer"
+  BEFORE INSERT OR UPDATE OF "status", "id_linhagem", "qtd_m", "qtd_f", "qtd_qualquer"
   ON "demanda"."pedido"
   FOR EACH ROW
   EXECUTE FUNCTION "demanda"."pedido_coerente"();
