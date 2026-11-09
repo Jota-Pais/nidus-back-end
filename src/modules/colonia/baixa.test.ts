@@ -265,6 +265,7 @@ describe('anulacao de baixa', () => {
   })
 
   it('os animais voltam vivos para a caixa onde estavam', async () => {
+    banco.caixas.set(6, caixaDeCasal(6, 'F1A'))
     banco.baixa = baixaDe([{ id: 1, sexo: 'M', idPedido: null }, { id: 2, sexo: 'F', idPedido: null }])
 
     const resultado = await anularBaixa(30, { motivo: 'baixa por engano' }, 4)
@@ -366,6 +367,31 @@ describe('anulacao de baixa', () => {
       recusa(409, 'SEQUENCIA_INVALIDA'),
     )
     expect(banco.lancados).toEqual([])
+  })
+
+  it('a caixa de casal que virou estoque depois da baixa recebe a volta so do sexo dela', async () => {
+    banco.caixas.set(6, estoque(6, 'F1A', 'M'))
+    banco.baixa = baixaDe([{ id: 1, sexo: 'F', idPedido: null }])
+
+    await expect(anularBaixa(30, { motivo: 'engano' }, 4)).rejects.toEqual(
+      noCampo('idCaixa', 'agora e caixa de estoque de machos'),
+    )
+    expect(banco.lancados).toEqual([])
+
+    banco.caixas.set(9, estoque(9, 'F5C', 'F'))
+    expect((await anularBaixa(30, { motivo: 'engano', idCaixa: 9 }, 4)).idCaixa).toBe(9)
+
+    banco.lancados = []
+    banco.baixa = baixaDe([{ id: 1, sexo: 'M', idPedido: null }])
+    expect((await anularBaixa(30, { motivo: 'engano' }, 4)).idCaixa).toBe(6)
+    expect(banco.lancados[0]).toMatchObject({ idCaixaOrigem: 6, idCaixaDestino: undefined })
+  })
+
+  it('filhote que mama nao volta para a caixa de casal que virou estoque', async () => {
+    banco.caixas.set(6, estoque(6, 'F1A', 'M'))
+    banco.baixa = baixaDe([{ id: 1, sexo: 'M', idPedido: null, desmame: null }])
+
+    await expect(anularBaixa(30, { motivo: 'engano' }, 4)).rejects.toEqual(recusa(409, 'SEQUENCIA_INVALIDA'))
   })
 
   it('a caixa indicada e de estoque, do sexo e da linhagem dos animais', async () => {

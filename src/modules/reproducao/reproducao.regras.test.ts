@@ -888,6 +888,41 @@ describe('correcao do nascimento', () => {
     expect(doParto(1).every((a) => a.idCaixa === 1)).toBe(true)
   })
 
+  it('com a ninhada de outro parto na caixa do casal, os a mais pedem a caixa de estoque: duas ninhadas nao dividem a caixa', async () => {
+    const ids = nascido(2, 0)
+    for (const a of animaisCom(ids)) Object.assign(a, { idCaixa: 6, dtMovimento: d('2026-10-16') })
+    Object.assign(banco.partos.get(1) as Parto, { dtDesmameReal: d('2026-10-16') })
+    parto({ id: 2, ordem: 2, dtAcasalamento: d('2026-10-01'), dtPartoReal: d('2026-10-22') })
+    criarAnimais(2, 1, 3, 3)
+
+    await expect(corrigirNascimento(1, correcao({ nascidoM: 3, nascidoF: 0 }), 4)).rejects.toEqual(
+      noCampo('idCaixa', 'ninhada do 2o parto'),
+    )
+    expect(banco.animais.filter((a) => a.idParto === 1)).toHaveLength(2)
+
+    await corrigirNascimento(1, correcao({ nascidoM: 3, nascidoF: 0, idCaixa: 6 }), 4)
+
+    expect(banco.animais.at(-1)).toMatchObject({ idParto: 1, idCaixa: 6, dtMovimento: d('2026-10-16'), sexo: 'M' })
+  })
+
+  it('na caixa do casal que virou estoque, os a mais do sexo dela ficam onde nasceram, e o sexo nao se troca', async () => {
+    nascido(2, 0)
+    Object.assign(banco.partos.get(1) as Parto, { dtDesmameReal: d('2026-10-16') })
+    Object.assign(banco.casais.get(1) as Casal, { ativo: false, dtEncerramento: d('2026-10-20') })
+    Object.assign(banco.caixas.get(1) as Caixa, { tipo: 'estoque', sexo: 'M', idLinhagem: 3 })
+
+    await expect(corrigirNascimento(1, correcao({ nascidoM: 2, nascidoF: 1 }), 4)).rejects.toEqual(
+      noCampo('idCaixa', 'outro sexo'),
+    )
+    await expect(corrigirNascimento(1, correcao({ nascidoM: 1, nascidoF: 1 }), 4)).rejects.toEqual(
+      expect.objectContaining({ codigo: 'SEQUENCIA_INVALIDA', message: expect.stringContaining('caixa de estoque') }),
+    )
+
+    await corrigirNascimento(1, correcao({ nascidoM: 3, nascidoF: 0 }), 4)
+
+    expect(banco.animais.at(-1)).toMatchObject({ idCaixa: 1, dtMovimento: null, sexo: 'M' })
+  })
+
   it('com a caixa do casal liberada, os a mais pedem a caixa; na de estoque chegam no desmame', async () => {
     const ids = nascido(2, 0)
     for (const a of animaisCom(ids)) Object.assign(a, { idCaixa: 6, dtMovimento: d('2026-10-16') })

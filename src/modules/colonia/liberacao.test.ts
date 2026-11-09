@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { liberarSeVazia } from './liberacao.ts'
+import { dataDaLiberacao, liberarSeVazia } from './liberacao.ts'
 
 const banco = vi.hoisted(() => ({
   caixa: null as Record<string, unknown> | null,
   vivos: 0,
+  /** As ultimas datas dos animais e da trilha na caixa */
+  ultimos: { dtSaida: null, dtMovimento: null, dtFato: null } as Record<string, Date | null>,
   travas: [] as string[],
   atualizada: null as Record<string, unknown> | null,
   historicos: [] as Record<string, unknown>[],
@@ -20,7 +22,11 @@ const tx = {
       banco.atualizada = data
     },
   },
-  animal: { count: async () => banco.vivos },
+  animal: {
+    count: async () => banco.vivos,
+    aggregate: async () => ({ _max: { dtSaida: banco.ultimos.dtSaida, dtMovimento: banco.ultimos.dtMovimento } }),
+  },
+  ocorrencia: { aggregate: async () => ({ _max: { dtFato: banco.ultimos.dtFato } }) },
   historico: {
     create: async ({ data }: { data: Record<string, unknown> }) => {
       banco.historicos.push(data)
@@ -36,6 +42,7 @@ const casal = (casais: Record<string, unknown>[]) => ({ id: 1, codigo: 'F1A', at
 beforeEach(() => {
   banco.caixa = estoque
   banco.vivos = 0
+  banco.ultimos = { dtSaida: null, dtMovimento: null, dtFato: null }
   banco.travas = []
   banco.atualizada = null
   banco.historicos = []
@@ -79,10 +86,30 @@ describe('liberarSeVazia', () => {
     expect(banco.atualizada).toMatchObject({ motivoLiberacao: 'casal_encerrado' })
   })
 
+  it('a baixa retroativa do ultimo vivo nao libera antes da morte ja registrada de outro animal', async () => {
+    banco.ultimos = { dtSaida: d('2026-11-05'), dtMovimento: d('2026-10-01'), dtFato: d('2026-11-05') }
+
+    await liberarSeVazia(tx as never, 6, '2026-11-02', 'baixa', 4)
+
+    expect(banco.atualizada).toMatchObject({ dtLiberacao: d('2026-11-05') })
+    expect(banco.historicos[0]).toMatchObject({ dados: { dtLiberacao: '2026-11-05', motivo: 'baixa' } })
+  })
+
   it('caixa ja liberada fica como esta', async () => {
     banco.caixa = { ...estoque, ativa: false }
 
     expect(await liberarSeVazia(tx as never, 6, '2026-11-02', 'baixa', 4)).toBe(false)
     expect(banco.atualizada).toBeNull()
+  })
+})
+
+describe('dataDaLiberacao', () => {
+  it('e a data do fato que esvaziou a caixa quando nada nela e mais novo', () => {
+    expect(dataDaLiberacao('2026-11-02', [d('2026-10-01'), null, d('2026-11-02')])).toBe('2026-11-02')
+  })
+
+  it('nunca vem antes do ultimo fato na caixa: chegada, saida ou ocorrencia', () => {
+    expect(dataDaLiberacao('2026-11-02', [d('2026-11-04'), null, d('2026-11-03')])).toBe('2026-11-04')
+    expect(dataDaLiberacao('2026-11-02', [null, d('2026-11-06'), null])).toBe('2026-11-06')
   })
 })

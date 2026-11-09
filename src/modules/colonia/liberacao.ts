@@ -2,12 +2,12 @@
 
 import type { Prisma } from '@prisma/client'
 import { erroDeRegra } from '../../shared/erros.ts'
-import { paraData } from '../../shared/traducao.ts'
+import { dataISO, paraData } from '../../shared/traducao.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
 import { travarCaixas } from './travas.ts'
 import type { MotivoDaLiberacao } from './tipos.ts'
 
-type Transacao = Pick<Prisma.TransactionClient, '$queryRaw' | 'caixa' | 'animal' | 'historico'>
+type Transacao = Pick<Prisma.TransactionClient, '$queryRaw' | 'caixa' | 'animal' | 'ocorrencia' | 'historico'>
 
 const POR_QUE: Record<MotivoDaLiberacao, string> = {
   entrega: 'a entrega levou os ultimos animais',
@@ -25,10 +25,44 @@ export function caixaLiberada(codigo: string) {
 export const partoPendente = { dtPartoReal: null, dtSemNinhada: null } satisfies Prisma.PartoWhereInput
 
 /**
- * Libera a caixa que ficou sem vivo, com a data do fato que a esvaziou e o motivo, e devolve se
- * liberou. A de estoque libera na hora. A de casal so com o casal encerrado e sem parto pendente:
- * a femea ainda pode parir a ninhada que carrega. A posicao fica livre e recebe caixa nova;
- * liberada nao volta.
+ * A data da liberacao: a do fato que esvaziou a caixa, mas nunca antes de outro fato nela. O
+ * registro pode ser retroativo (a baixa do ultimo vivo com data anterior a uma morte ja
+ * registrada, o encerramento antes da ultima morte na caixa), e a caixa so ficou vazia quando o
+ * ultimo animal saiu
+ */
+export function dataDaLiberacao(dtFato: string, fatosNaCaixa: (Date | null)[]): string {
+  return fatosNaCaixa.reduce<string>((maior, data) => {
+    if (data === null) return maior
+    const iso = dataISO(data)
+    return iso > maior ? iso : maior
+  }, dtFato)
+}
+
+/**
+ * As datas dos ultimos fatos dos animais na caixa: a ultima saida (morte ou entrega) e a ultima
+ * chegada dos que estao nela, e a ultima ocorrencia que a teve como origem ou destino (o
+ * nascimento, a baixa, a mudanca, a anulacao). O registro anulado nao e fato
+ */
+async function fatosNaCaixa(tx: Transacao, idCaixa: number): Promise<(Date | null)[]> {
+  const [animais, ocorrencias] = await Promise.all([
+    tx.animal.aggregate({
+      where: { idCaixa, situacao: { not: 'anulado' } },
+      _max: { dtSaida: true, dtMovimento: true },
+    }),
+    tx.ocorrencia.aggregate({
+      where: { OR: [{ idCaixaOrigem: idCaixa }, { idCaixaDestino: idCaixa }] },
+      _max: { dtFato: true },
+    }),
+  ])
+
+  return [animais._max.dtSaida, animais._max.dtMovimento, ocorrencias._max.dtFato]
+}
+
+/**
+ * Libera a caixa que ficou sem vivo, com a data do fato que a esvaziou (dataDaLiberacao) e o
+ * motivo, e devolve se liberou. A de estoque libera na hora. A de casal so com o casal encerrado
+ * e sem parto pendente: a femea ainda pode parir a ninhada que carrega. A posicao fica livre e
+ * recebe caixa nova; liberada nao volta.
  *
  * Trava a caixa antes de contar: quem poe animal nela le a caixa com FOR SHARE (trigger do
  * animal), entao ninguem entra depois da contagem
@@ -63,9 +97,11 @@ export async function liberarSeVazia(
   const vivos = await tx.animal.count({ where: { idCaixa, situacao: 'vivo' } })
   if (vivos > 0) return false
 
+  const dtLiberacao = dataDaLiberacao(dtFato, await fatosNaCaixa(tx, idCaixa))
+
   await tx.caixa.update({
     where: { id: idCaixa },
-    data: { ativa: false, dtLiberacao: paraData(dtFato), motivoLiberacao: motivo, dtManutencao: new Date() },
+    data: { ativa: false, dtLiberacao: paraData(dtLiberacao), motivoLiberacao: motivo, dtManutencao: new Date() },
   })
 
   await registrarHistorico(tx, {
@@ -73,8 +109,8 @@ export async function liberarSeVazia(
     entidade: 'caixa',
     idEntidade: idCaixa,
     acao: 'liberacao',
-    descricao: `Caixa ${caixa.codigo} liberada em ${dtFato}: ${POR_QUE[motivo]}`,
-    dados: { dtLiberacao: dtFato, motivo },
+    descricao: `Caixa ${caixa.codigo} liberada em ${dtLiberacao}: ${POR_QUE[motivo]}`,
+    dados: { dtLiberacao, motivo },
   })
 
   return true

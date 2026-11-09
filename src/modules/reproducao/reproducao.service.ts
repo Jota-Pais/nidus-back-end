@@ -145,7 +145,7 @@ export async function travarELerParto(tx: Transacao, idParto: number) {
           identificacao: true,
           dtFormacao: true,
           dtEncerramento: true,
-          caixa: { select: { codigo: true, ativa: true } },
+          caixa: { select: { codigo: true, ativa: true, tipo: true } },
         },
       },
     },
