@@ -248,12 +248,18 @@ describe('forma da solicitacao', () => {
 })
 
 describe('forma da busca', () => {
-  const busca = { especie: 'rato', machos: '10', femeas: '5', qualquer: '3', idadeMin: '20', idadeMax: '40' }
+  const busca = { especie: 'rato', idLinhagem: '3', machos: '10', femeas: '5', qualquer: '3', idadeMin: '20', idadeMax: '40' }
 
-  it('converte a query string e separa as caixas excluidas', () => {
-    const filtro = filtroDaBusca.parse({ ...busca, excluir: '3,7' })
+  it('converte a query string', () => {
+    const filtro = filtroDaBusca.parse(busca)
 
-    expect(filtro).toMatchObject({ machos: 10, femeas: 5, qualquer: 3, idadeMin: 20, idadeMax: 40, excluir: [3, 7] })
+    expect(filtro).toEqual({ especie: 'rato', idLinhagem: 3, machos: 10, femeas: 5, qualquer: 3, idadeMin: 20, idadeMax: 40 })
+  })
+
+  it('a linhagem e obrigatoria: a busca le os vivos de uma linhagem', () => {
+    const { idLinhagem: _idLinhagem, ...semLinhagem } = busca
+
+    expect(filtroDaBusca.safeParse(semLinhagem).success).toBe(false)
   })
 
   it('busca sem especie e VALIDACAO', async () => {

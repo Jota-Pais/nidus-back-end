@@ -7,13 +7,12 @@ import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
-import { baixarEstoqueNaEntrega } from '../infra/estoque.service.ts'
-import { liberarCaixaVazia } from '../infra/liberacaoDaCaixa.ts'
+import { liberarSeVazia } from '../colonia/liberacao.ts'
 import { faixaDoPedido } from '../motor/motor.ts'
-import { dataDoDesmame, diasEntre } from '../motor/motor.service.ts'
+import { dataDoDesmame } from '../motor/motor.service.ts'
 import { ACAO_DEVOLUCAO, devolvidosDesde, faltaDosPedidos } from './devolucao.service.ts'
 import { SITUACAO_DO_PROJETO } from './projeto.service.ts'
-import { somarDias } from '../reproducao/cadeiaTemporal.ts'
+import { diasEntre, somarDias } from '../reproducao/cadeiaTemporal.ts'
 import {
   codigoDaEspecie,
   dataISO,
@@ -659,9 +658,6 @@ export async function registrarEntrega(
       )
     }
 
-    // antes de marcar a remessa: a conta de qual caixa sai cada animal le a reserva a entregar
-    await baixarEstoqueNaEntrega(tx, idSolicitacao, idUsuario)
-
     await tx.remessa.updateMany({
       where: { idSolicitacao, dtRealizada: null },
       data: { dtRealizada: paraData(dtEntrega), status: 'E' },
@@ -676,40 +672,31 @@ export async function registrarEntrega(
       dados: { dtEntrega },
     })
 
-    await liberarCaixasDaEntrega(tx, idSolicitacao, idUsuario)
+    await liberarCaixasDaEntrega(tx, idSolicitacao, dtEntrega, idUsuario)
   })
 
   return { idSolicitacao, status: statusSolicitacao.paraApi('CO'), dtEntrega }
 }
 
 /**
- * Depois da entrega, a caixa do casal sem casal ativo e sem animal dentro libera a posicao. Le as
- * caixas ja com a remessa entregue, dentro da mesma transacao. A caixa de estoque que esvaziou ja
- * foi para Enviado
+ * Depois da entrega, as caixas de onde sairam os animais entregues e que ficaram sem vivo sao
+ * liberadas com a data da entrega: a de estoque fica 7 dias em Enviado, contados dessa data; a de
+ * casal, so com o casal encerrado e sem parto pendente
  */
 async function liberarCaixasDaEntrega(
   tx: Prisma.TransactionClient,
-  idSolicitacao: number,
+  idPedido: number,
+  dtEntrega: string,
   idUsuario: number,
 ) {
-  const caixas = await tx.caixa.findMany({
-    where: {
-      ativa: true,
-      tipo: 'C',
-      casais: {
-        some: {
-          partos: {
-            some: { compromissos: { some: { dtCancelamento: null, remessa: { idSolicitacao } } } },
-          },
-        },
-      },
-    },
-    select: { id: true, casais: { select: { ativo: true } } },
+  const caixas = await tx.animal.findMany({
+    where: { idPedido, situacao: 'entregue' },
+    distinct: ['idCaixa'],
+    orderBy: { idCaixa: 'asc' },
+    select: { idCaixa: true },
   })
 
-  for (const caixa of caixas) {
-    if (!caixa.casais.some((casal) => casal.ativo)) await liberarCaixaVazia(tx, caixa.id, idUsuario)
-  }
+  for (const { idCaixa } of caixas) await liberarSeVazia(tx, idCaixa, dtEntrega, 'entrega', idUsuario)
 }
 
 /**

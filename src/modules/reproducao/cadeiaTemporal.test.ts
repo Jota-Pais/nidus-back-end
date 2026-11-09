@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calcularCicloInicial, calcularProximoCiclo } from './cadeiaTemporal.ts'
+import { calcularCicloInicial, calcularProximoCiclo, diasEntre } from './cadeiaTemporal.ts'
 
 // gestacao 23d, aleitamento 22d, intervalo 6d (shared/parametros.ts)
 
@@ -42,5 +42,14 @@ describe('proximo ciclo, a partir do parto REAL do anterior', () => {
     // Sem atraso: parto real == previsto, entao encadear reproduz a mesma conta
     // que fazer a mao a partir do primeiro acasalamento
     expect(ciclo2.dtAcasalamento).toBe('2026-05-31')
+  })
+})
+
+describe('dias entre duas datas', () => {
+  it('e a idade em dias: o mesmo dia e zero, e atravessa mes e ano', () => {
+    expect(diasEntre('2026-11-08', '2026-11-08')).toBe(0)
+    expect(diasEntre('2026-10-30', '2026-11-08')).toBe(9)
+    expect(diasEntre('2026-12-31', '2027-01-01')).toBe(1)
+    expect(diasEntre('2026-11-08', '2026-11-01')).toBe(-7)
   })
 })

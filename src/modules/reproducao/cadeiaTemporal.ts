@@ -14,6 +14,11 @@ export function somarDias(data: string, dias: number): string {
   return calendario.toISOString().slice(0, 10)
 }
 
+/** Quantos dias vao de uma data 'aaaa-mm-dd' a outra: a idade de quem nasceu em 'de' no dia 'ate' */
+export function diasEntre(de: string, ate: string): number {
+  return Math.round((Date.parse(`${ate}T00:00:00Z`) - Date.parse(`${de}T00:00:00Z`)) / 86_400_000)
+}
+
 export type CicloCalculado = {
   dtAcasalamento: string
   dtPartoPrevisto: string

@@ -1,18 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { montarEstoque } from './estoque.service.ts'
-import type { PartoDoEstoque } from './estoque.service.ts'
+import type { LivresNoEstoque } from './estoque.service.ts'
 
-const parto = (dados: Partial<PartoDoEstoque>): PartoDoEstoque => ({
-  dtPartoReal: null,
-  nascidoM: null,
-  nascidoF: null,
-  eutanasiadoM: null,
-  eutanasiadoF: null,
-  desmamadoM: null,
-  desmamadoF: null,
-  compromissos: [],
-  casal: { idLinhagem: 1 },
-  ...dados,
+const livres = (idLinhagem: number, desmamado: boolean, sexo: string, qtd: number): LivresNoEstoque => ({
+  idLinhagem,
+  desmamado,
+  sexo,
+  qtd,
 })
 
 const linhagens = [
@@ -21,32 +15,27 @@ const linhagens = [
 ]
 
 describe('estoque por linhagem', () => {
-  it('separa desmamado e nascido, ja sem os compromissos; parto que nao nasceu nao conta', () => {
+  it('soma os vivos livres: confirmado quem ja desmamou, previsto quem ainda mama', () => {
     const [wistar] = montarEstoque(linhagens, [
-      parto({ nascidoM: 5, nascidoF: 5, desmamadoM: 4, desmamadoF: 3, compromissos: [{ qtdM: 1, qtdF: 0 }] }),
-      parto({ nascidoM: 6, nascidoF: 2, eutanasiadoM: 1, eutanasiadoF: 0 }),
-      parto({}),
+      livres(1, true, 'M', 3),
+      livres(1, true, 'F', 3),
+      livres(1, false, 'M', 5),
+      livres(1, false, 'F', 2),
+      livres(1, true, 'M', 1),
     ])
 
-    expect(wistar).toMatchObject({
-      confirmado: { m: 3, f: 3 },
+    expect(wistar).toEqual({
+      idLinhagem: 1,
+      linhagem: 'Wistar',
+      confirmado: { m: 4, f: 3 },
       previsto: { m: 5, f: 2 },
-      total: { m: 8, f: 5 },
+      total: { m: 9, f: 5 },
     })
   })
 
-  it('linhagem sem caixa aparece zerada', () => {
-    const swiss = montarEstoque(linhagens, [parto({})])[1]
+  it('linhagem sem vivo livre aparece zerada', () => {
+    const swiss = montarEstoque(linhagens, [livres(1, true, 'M', 3)])[1]
 
-    expect(swiss).toMatchObject({ total: { m: 0, f: 0 } })
-  })
-
-  it('a ninhada fica no estoque com o que nasceu, mesmo depois do proximo parto ser previsto', () => {
-    const [wistar] = montarEstoque(linhagens, [
-      parto({ nascidoM: 3, nascidoF: 3 }),
-      parto({}),
-    ])
-
-    expect(wistar?.previsto).toEqual({ m: 3, f: 3 })
+    expect(swiss).toMatchObject({ confirmado: { m: 0, f: 0 }, previsto: { m: 0, f: 0 }, total: { m: 0, f: 0 } })
   })
 })

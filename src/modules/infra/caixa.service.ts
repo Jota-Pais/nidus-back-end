@@ -1,135 +1,87 @@
 // Kanban (um por especie, so de leitura) e a mudanca de posicao de uma caixa
 
-import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
+import { erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
-import { estadoCaixa } from '../../shared/traducao.ts'
+import { hojeISO, paraData } from '../../shared/traducao.ts'
+import { COLUNAS, inicioDoEnviado } from '../colonia/coluna.ts'
+import { caixaLiberada } from '../colonia/liberacao.ts'
+import { travarCaixas } from '../colonia/travas.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
-import { casalNoCard, selecaoDoCasalNoCard } from './casalNoCard.ts'
-import { codigoDaPosicao } from './endereco.ts'
-import { lerCaixasDeEstoque } from './estoque.service.ts'
+import { lerCards } from './card.ts'
+import type { CardDaCaixa } from './card.ts'
 import { idDaEspecie } from './infra.service.ts'
+import { lerPosicao } from './posicao.ts'
+import type { PosicaoNaEstante } from './posicao.ts'
 
-/** Quanto tempo a caixa de estoque enviada ainda aparece na coluna Enviado */
-const DIAS_EM_ENVIADO = 7
+/** O card como o Kanban o mostra */
+function cardDoKanban(caixa: CardDaCaixa) {
+  return {
+    idCaixa: caixa.id,
+    codigo: caixa.codigo,
+    numeroVisivel: caixa.numeroVisivel,
+    linhagem: caixa.linhagem,
+    casal: caixa.casal,
+    estoque: caixa.estoque,
+  }
+}
 
 /**
- * 'GET /api/quadro?especie=' - o kanban de uma especie, com as quatro colunas sempre presentes. A
- * caixa de casal fica em Livres, com quantos reservados ainda tem; a de estoque em Estoque ou
- * Reserva, pelo que tem reservado, e em Enviado por uma semana depois que a entrega a esvazia
+ * GET /api/quadro?especie= - o Kanban de uma especie, com as quatro colunas sempre presentes e
+ * nada gravado: a coluna de cada caixa sai do que ela tem (colunaDaCaixa). Entram as caixas
+ * ativas e as de estoque que a entrega esvaziou ha menos de uma semana (Enviado)
  */
-export async function montarQuadro(codigoEspecie: string) {
+export async function montarQuadro(codigoEspecie: string, hoje: string = hojeISO()) {
   const idEspecie = await idDaEspecie(codigoEspecie)
-  const desde = new Date(Date.now() - DIAS_EM_ENVIADO * 86_400_000)
 
-  const [caixas, estoque] = await Promise.all([
-    prisma.caixa.findMany({
-    // so caixa que ja teve casal - caixa vazia nao aparece no kanban
-    where: { idEspecie, ativa: true, tipo: 'C', casais: { some: {} } },
-    orderBy: [{ idEstante: 'asc' }, { face: 'asc' }, { linha: 'asc' }, { coluna: 'asc' }],
-    select: {
-      id: true,
-      face: true,
-      linha: true,
-      coluna: true,
-      estado: true,
-      estante: { select: { numeroVisivel: true, colunas: true } },
-      casais: selecaoDoCasalNoCard,
-    },
-  }),
-    lerCaixasDeEstoque(prisma, {
+  const caixas = await lerCards(
+    prisma,
+    {
       idEspecie,
-      OR: [{ ativa: true }, { estado: 'X', dtManutencao: { gte: desde } }],
-    }),
-  ])
+      OR: [{ ativa: true }, { motivoLiberacao: 'entrega', dtLiberacao: { gte: paraData(inicioDoEnviado(hoje)) } }],
+    },
+    hoje,
+  )
 
-  const colunas = estadoCaixa.termos.map((estado) => ({
-    estado,
-    cards: [] as unknown[],
-  }))
-
-  for (const caixa of caixas) {
-    const coluna = colunas.find((c) => c.estado === estadoCaixa.paraApi(caixa.estado))
-    const casal = caixa.casais[0]
-
-    coluna?.cards.push({
-      idCaixa: caixa.id,
-      codigo: codigoDaPosicao(caixa.face, caixa.linha, caixa.coluna, caixa.estante.colunas),
-      numeroVisivel: caixa.estante.numeroVisivel,
-      linhagem: casal?.linhagem.nome ?? null,
-      casal: casalNoCard(caixa.casais, caixa.estado),
-      estoque: null,
-    })
+  return {
+    colunas: COLUNAS.map((estado) => ({
+      estado,
+      cards: caixas.filter((caixa) => caixa.estado === estado).map(cardDoKanban),
+    })),
   }
-
-  for (const caixa of estoque) {
-    colunas
-      .find((c) => c.estado === estadoCaixa.paraApi(caixa.estado))
-      ?.cards.push({
-        idCaixa: caixa.id,
-        codigo: caixa.codigo,
-        numeroVisivel: caixa.numeroVisivel,
-        linhagem: caixa.linhagem,
-        casal: null,
-        estoque: {
-          sexo: caixa.sexo,
-          total: caixa.total,
-          reservado: caixa.reservado,
-          nascimentoDe: caixa.nascimentoDe,
-          nascimentoAte: caixa.nascimentoAte,
-        },
-      })
-  }
-
-  return { colunas }
 }
 
-export type NovaPosicao = {
-  idEstante: number
-  face: 'frontal' | 'traseira'
-  linha: number
-  coluna: number
-}
+/**
+ * PATCH /api/caixas/:id/posicao - a caixa muda de lugar na estante, com tudo o que tem: os animais
+ * apontam para a caixa, nao para o endereco. O codigo novo quem escreve e o trigger da posicao
+ */
+export async function mudarDePosicao(idCaixa: number, destino: PosicaoNaEstante, idUsuario: number) {
+  return prisma.$transaction(async (tx) => {
+    await travarCaixas(tx, [idCaixa])
 
-export async function mudarDePosicao(idCaixa: number, destino: NovaPosicao, idUsuario: number) {
-  const caixa = await prisma.caixa.findUnique({
-    where: { id: idCaixa },
-    select: { id: true, ativa: true, codigo: true, idEstante: true },
-  })
-
-  if (caixa === null || !caixa.ativa) {
-    throw naoEncontrado('Caixa')
-  }
-
-  const estante = await prisma.estante.findFirst({ where: { id: destino.idEstante, ativa: true } })
-
-  if (estante === null) {
-    throw naoEncontrado('Estante')
-  }
-
-  const face = destino.face === 'frontal' ? 1 : 2
-  const { linha, coluna } = destino
-
-  if (face > estante.faces || linha > estante.linhas || coluna > estante.colunas) {
-    throw new ErroDeAplicacao(400, 'VALIDACAO', 'Confira os campos destacados.', {
-      campos: { posicao: 'Esta posicao nao existe na estante.' },
-    })
-  }
-
-  const ocupante = await prisma.caixa.findFirst({
-    where: { idEstante: estante.id, face, linha, coluna, ativa: true },
-    select: { id: true },
-  })
-
-  if (ocupante !== null && ocupante.id !== idCaixa) {
-    throw erroDeRegra('POSICAO_OCUPADA', 'Esta posicao da estante ja tem uma caixa ativa.')
-  }
-
-  const codigo = codigoDaPosicao(face, linha, coluna, estante.colunas)
-
-  await prisma.$transaction(async (tx) => {
-    await tx.caixa.update({
+    const caixa = await tx.caixa.findUnique({
       where: { id: idCaixa },
-      data: { idEstante: estante.id, face, linha, coluna, codigo },
+      select: { id: true, ativa: true, codigo: true, idEstante: true },
+    })
+
+    if (caixa === null) throw naoEncontrado('Caixa')
+    if (!caixa.ativa) throw caixaLiberada(caixa.codigo)
+
+    const posicao = await lerPosicao(tx, destino, 'posicao')
+
+    if (posicao.ocupante !== null && posicao.ocupante.id !== idCaixa) {
+      throw erroDeRegra('POSICAO_OCUPADA', 'Esta posicao da estante ja tem uma caixa ativa.')
+    }
+
+    const movida = await tx.caixa.update({
+      where: { id: idCaixa },
+      data: {
+        idEstante: posicao.estante.id,
+        face: posicao.face,
+        linha: posicao.linha,
+        coluna: posicao.coluna,
+        dtManutencao: new Date(),
+      },
+      select: { codigo: true },
     })
 
     await registrarHistorico(tx, {
@@ -137,13 +89,13 @@ export async function mudarDePosicao(idCaixa: number, destino: NovaPosicao, idUs
       entidade: 'caixa',
       idEntidade: idCaixa,
       acao: 'mudanca_de_posicao',
-      descricao: `Caixa movida de ${caixa.codigo} para ${codigo} (estante ${estante.numeroVisivel})`,
+      descricao: `Caixa movida de ${caixa.codigo} para ${movida.codigo} (estante ${posicao.estante.numeroVisivel})`,
       dados: {
         antes: { idEstante: caixa.idEstante, codigo: caixa.codigo },
-        depois: { idEstante: estante.id, codigo },
+        depois: { idEstante: posicao.estante.id, codigo: movida.codigo },
       },
     })
-  })
 
-  return { idCaixa, idEstante: estante.id, codigo }
+    return { idCaixa, idEstante: posicao.estante.id, codigo: movida.codigo }
+  })
 }

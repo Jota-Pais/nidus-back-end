@@ -6,13 +6,10 @@ const banco = vi.hoisted(() => ({
   concluidas: 1,
   remessas: null as Record<string, unknown> | null,
   historicos: [] as Record<string, unknown>[],
-  /** a caixa do casal com reserva do pedido: se o casal esta ativo */
-  caixa: null as { ativo: boolean } | null,
-  /** os partos da caixa do casal, com as reservas e os lotes nas caixas de estoque */
-  partos: [] as Parto[],
-  movidas: [] as { id: number; estado?: string; ativa?: boolean }[],
-  liberadas: [] as number[],
-  /** se a caixa do casal sem casal ativo libera (a regra fica em liberacaoDaCaixa.test.ts) */
+  /** as caixas de onde sairam os animais entregues do pedido */
+  caixasDosEntregues: [] as number[],
+  liberadas: [] as { idCaixa: number; dtFato: string; motivo: string }[],
+  /** se a caixa ficou sem vivo (a regra fica em colonia/liberacao.test.ts) */
   libera: true,
   falta: null as { m: number; f: number } | null,
 }))
@@ -22,22 +19,11 @@ vi.mock('./devolucao.service.ts', async (original) => ({
   faltaDosPedidos: async () => new Map(banco.falta ? [[7, banco.falta]] : []),
 }))
 
-type Parto = {
-  id: number
-  nascidoM: number
-  nascidoF: number
-  eutanasiadoM: null
-  eutanasiadoF: null
-  desmamadoM: number
-  desmamadoF: number
-  compromissos: { id: number; qtdM: number; qtdF: number; remessa: { idSolicitacao: number; dtRealizada: Date | null } }[]
-  lotes: { id: number; idCaixa: number; qtd: number; caixa: { sexo: string } }[]
-}
-
-vi.mock('../infra/liberacaoDaCaixa.ts', () => ({
-  liberarCaixaVazia: async (_tx: unknown, idCaixa: number) => {
+vi.mock('../colonia/liberacao.ts', async (original) => ({
+  ...(await original<typeof import('../colonia/liberacao.ts')>()),
+  liberarSeVazia: async (_tx: unknown, idCaixa: number, dtFato: string, motivo: string) => {
     if (!banco.libera) return false
-    banco.liberadas.push(idCaixa)
+    banco.liberadas.push({ idCaixa, dtFato, motivo })
     return true
   },
 }))
@@ -49,40 +35,12 @@ vi.mock('../../shared/prisma.ts', () => ({
       fn({
         solicitacao: { updateMany: async () => ({ count: banco.concluidas }) },
         remessa: {
-          updateMany: async (consulta: { data: { dtRealizada: Date } }) => {
+          updateMany: async (consulta: Record<string, unknown>) => {
             banco.remessas = consulta
-            for (const parto of banco.partos) {
-              for (const c of parto.compromissos) {
-                if (c.remessa.idSolicitacao === 7) c.remessa.dtRealizada = consulta.data.dtRealizada
-              }
-            }
             return { count: 1 }
           },
         },
-        parto: { findMany: async () => banco.partos },
-        lote: {
-          update: async ({ where, data }: { where: { idCaixa_idParto: { idCaixa: number; idParto: number } }; data: { qtd: { decrement: number } } }) => {
-            const { idCaixa, idParto } = where.idCaixa_idParto
-            const lote = banco.partos.find((p) => p.id === idParto)?.lotes.find((l) => l.idCaixa === idCaixa)
-            if (lote) lote.qtd -= data.qtd.decrement
-          },
-          aggregate: async ({ where }: { where: { idCaixa: number } }) => ({
-            _sum: {
-              qtd: banco.partos
-                .flatMap((p) => p.lotes)
-                .filter((l) => l.idCaixa === where.idCaixa)
-                .reduce((soma, l) => soma + l.qtd, 0),
-            },
-          }),
-        },
-        caixa: {
-          findMany: async () =>
-            banco.caixa === null ? [] : [{ id: 3, casais: [{ ativo: banco.caixa.ativo }] }],
-          update: async ({ where, data }: { where: { id: number }; data: { estado?: string; ativa?: boolean } }) => {
-            banco.movidas.push({ id: where.id, ...data })
-            return { codigo: `caixa ${where.id}` }
-          },
-        },
+        animal: { findMany: async () => banco.caixasDosEntregues.map((idCaixa) => ({ idCaixa })) },
         historico: {
           create: async ({ data }: { data: Record<string, unknown> }) => {
             banco.historicos.push(data)
@@ -102,9 +60,7 @@ beforeEach(() => {
   banco.concluidas = 1
   banco.remessas = null
   banco.historicos = []
-  banco.caixa = null
-  banco.partos = []
-  banco.movidas = []
+  banco.caixasDosEntregues = []
   banco.libera = true
 })
 
@@ -168,98 +124,25 @@ describe('registro de entrega', () => {
   })
 })
 
-// Os partos da caixa do casal F1A (id 3), com reservas do pedido 7 (o entregue agora) ou do 8
-const doPedido = (id: number, qtdM: number, qtdF: number) => ({
-  id,
-  qtdM,
-  qtdF,
-  remessa: { idSolicitacao: 7, dtRealizada: null as Date | null },
-})
-const deOutroPedido = (id: number, qtdM: number, qtdF: number) => ({
-  id,
-  qtdM,
-  qtdF,
-  remessa: { idSolicitacao: 8, dtRealizada: null as Date | null },
-})
-const desmamado = (m: number, f: number, compromissos: Parto['compromissos'], lotes: Parto['lotes'] = []): Parto => ({
-  id: 10,
-  nascidoM: m,
-  nascidoF: f,
-  eutanasiadoM: null,
-  eutanasiadoF: null,
-  desmamadoM: m,
-  desmamadoF: f,
-  compromissos,
-  lotes,
-})
-/** machos do parto na caixa de estoque 9 */
-const naCaixaDeEstoque9 = (qtd: number) => ({ id: 1, idCaixa: 9, qtd, caixa: { sexo: 'M' } })
-
-describe('a caixa do casal depois da entrega', () => {
-  it('casal encerrado: a entrega que esvazia a caixa a libera, e ela sai do kanban', async () => {
-    banco.caixa = { ativo: false }
-    banco.partos = [desmamado(2, 1, [doPedido(1, 2, 1)])]
+describe('as caixas depois da entrega', () => {
+  it('cada caixa de onde sairam os entregues passa pela liberacao, com a data e o motivo da entrega', async () => {
+    banco.caixasDosEntregues = [3, 9]
 
     await registrarEntrega(7, '2026-10-30', 1, agora)
 
-    expect(banco.liberadas).toEqual([3])
-    expect(banco.movidas).toEqual([])
+    // a de estoque fica 7 dias em Enviado contados dessa data
+    expect(banco.liberadas).toEqual([
+      { idCaixa: 3, dtFato: '2026-10-30', motivo: 'entrega' },
+      { idCaixa: 9, dtFato: '2026-10-30', motivo: 'entrega' },
+    ])
   })
 
-  it('casal ativo: a entrega nao mexe na caixa do casal, que continua em Livres', async () => {
-    banco.caixa = { ativo: true }
-    banco.partos = [desmamado(3, 3, [doPedido(1, 2, 1), deOutroPedido(2, 1, 1)])]
-
-    await registrarEntrega(7, '2026-10-30', 1, agora)
-
-    expect(banco.liberadas).toEqual([])
-    expect(banco.movidas).toEqual([])
-  })
-
-  it('casal encerrado com animal sobrando na caixa: ela nao libera e fica em Livres', async () => {
+  it('a caixa que ainda tem vivo, ou o casal ativo, nao libera', async () => {
+    banco.caixasDosEntregues = [3]
     banco.libera = false
-    banco.caixa = { ativo: false }
-    banco.partos = [desmamado(3, 3, [doPedido(1, 2, 1)])]
 
     await registrarEntrega(7, '2026-10-30', 1, agora)
 
     expect(banco.liberadas).toEqual([])
-    expect(banco.movidas).toEqual([])
-  })
-
-})
-
-describe('a caixa de estoque na entrega', () => {
-  it('os animais do pedido que estao na caixa de estoque saem dela', async () => {
-    banco.caixa = { ativo: true }
-    banco.partos = [desmamado(3, 0, [doPedido(1, 2, 0)], [naCaixaDeEstoque9(3)])]
-
-    await registrarEntrega(7, '2026-10-30', 1, agora)
-
-    expect(banco.partos[0]?.lotes[0]?.qtd).toBe(1)
-    expect(banco.movidas).toEqual([])
-  })
-
-  it('primeiro sai o que sobrou na caixa do casal, depois a caixa de estoque', async () => {
-    banco.caixa = { ativo: true }
-    // 3 machos: 1 ainda na caixa do casal, 2 na caixa de estoque 9
-    banco.partos = [desmamado(3, 0, [doPedido(1, 2, 0)], [naCaixaDeEstoque9(2)])]
-
-    await registrarEntrega(7, '2026-10-30', 1, agora)
-
-    expect(banco.partos[0]?.lotes[0]?.qtd).toBe(1)
-  })
-
-  it('a caixa de estoque que esvazia vai para Enviado e libera a posicao', async () => {
-    banco.caixa = { ativo: true }
-    banco.partos = [desmamado(2, 0, [doPedido(1, 2, 0)], [naCaixaDeEstoque9(2)])]
-
-    await registrarEntrega(7, '2026-10-30', 1, agora)
-
-    expect(banco.partos[0]?.lotes[0]?.qtd).toBe(0)
-    expect(banco.movidas).toContainEqual(expect.objectContaining({ id: 9, estado: 'X', ativa: false }))
-    expect(banco.historicos).toContainEqual(
-      expect.objectContaining({ entidade: 'caixa', idEntidade: 9, acao: 'mudanca_de_coluna' }),
-    )
   })
 })

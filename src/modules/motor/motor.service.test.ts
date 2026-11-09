@@ -1,8 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buscarAtendimento, janelaDeFormarCasais } from './motor.service.ts'
 
-// O banco aqui e de mentira: 'caixa.findMany' devolve as caixas que cada teste deixou em
-// 'banco', cada uma com um casal e um parto ja desmamado. Nada e gravado
+// O banco aqui e de mentira: os vivos livres que cada teste deixa em 'banco', cada parto numa
+// caixa. Nada e gravado
 
 const ENTREGA = '2026-12-31'
 const agora = new Date('2026-10-30T12:00:00.000Z')
@@ -10,65 +10,74 @@ const agora = new Date('2026-10-30T12:00:00.000Z')
 /** a data de nascimento de quem chega com 'idade' dias na entrega */
 const nascidoHa = (idade: number) => new Date(Date.parse(`${ENTREGA}T00:00:00.000Z`) - idade * 86_400_000)
 
-const NAO_NASCEU = {
-  dtPartoReal: null,
-  dtDesmameReal: null,
-  nascidoM: null,
-  nascidoF: null,
-  eutanasiadoM: null,
-  eutanasiadoF: null,
-  desmamadoM: null,
-  desmamadoF: null,
-}
+type Parto = { id: number; ordem: number; dtPartoReal: Date; dtDesmameReal: Date | null; casal: { identificacao: string } }
 
-/** caixa 'id' com um parto que chega a entrega com 'idade' dias e 4 machos e 4 femeas livres */
-const caixa = (id: number, idade: number, { ativo = true, nasceu = true } = {}) => ({
-  id,
-  face: 1,
-  linha: 1,
-  coluna: id,
-  estado: 'R',
-  estante: { numeroVisivel: '1', colunas: 12 },
-  casais: [
-    {
-      identificacao: 'AB',
-      ativo,
-      partos: [
-        {
-          id,
-          ordem: 1,
-          dtPartoPrevisto: nascidoHa(idade),
-          dtPartoReal: nascidoHa(idade),
-          dtDesmameReal: new Date(`${ENTREGA}T00:00:00.000Z`),
-          nascidoM: 5,
-          nascidoF: 5,
-          eutanasiadoM: 1,
-          eutanasiadoF: 1,
-          desmamadoM: 4,
-          desmamadoF: 4,
-          compromissos: [] as unknown[],
-          lotes: [] as unknown[],
-          ...(nasceu ? {} : NAO_NASCEU),
-        },
-      ],
-    },
-  ],
-})
-
-const banco = vi.hoisted(() => ({ caixas: [] as unknown[] }))
+const banco = vi.hoisted(() => ({
+  linhas: [] as unknown[],
+  partos: [] as unknown[],
+  onde: null as unknown,
+}))
 
 vi.mock('../../shared/prisma.ts', () => ({
   prisma: {
     especie: { findMany: async () => [{ id: 1, nome: 'Rato' }] },
-    caixa: { findMany: async () => banco.caixas },
+    animal: {
+      groupBy: async ({ where }: { where: unknown }) => {
+        banco.onde = where
+        return banco.linhas
+      },
+    },
+    caixa: {
+      findMany: async ({ where }: { where: { id: { in: number[] } } }) =>
+        where.id.in.map((id) => ({
+          id,
+          codigo: `F1${'ABCDEFGHIJ'[id - 1]}`,
+          tipo: id > 5 ? 'estoque' : 'casal',
+          estante: { numeroVisivel: '1' },
+        })),
+    },
+    parto: { findMany: async () => banco.partos },
   },
 }))
 
-const pedido = { especie: 'rato', machos: 0, femeas: 0, qualquer: 1, dataEntrega: ENTREGA }
+/** um parto que chega a entrega com 'idade' dias, com 'm' machos e 'f' femeas livres na caixa */
+function livres(idCaixa: number, idParto: number, idade: number, m: number, f: number, { desmamado = true } = {}) {
+  const parto: Parto = {
+    id: idParto,
+    ordem: 1,
+    dtPartoReal: nascidoHa(idade),
+    dtDesmameReal: desmamado ? new Date('2026-10-01T00:00:00.000Z') : null,
+    casal: { identificacao: idParto % 2 === 0 ? 'CD' : 'AB' },
+  }
+  banco.partos.push(parto)
+  if (m > 0) banco.linhas.push({ idCaixa, idParto, sexo: 'M', _count: { _all: m } })
+  if (f > 0) banco.linhas.push({ idCaixa, idParto, sexo: 'F', _count: { _all: f } })
+}
+
+const pedido = { especie: 'rato', idLinhagem: 3, machos: 0, femeas: 0, qualquer: 1, dataEntrega: ENTREGA }
+
+beforeEach(() => {
+  banco.linhas = []
+  banco.partos = []
+  banco.onde = null
+})
+
+describe('o que a busca le', () => {
+  it('so os vivos livres da linhagem, nas caixas da especie', async () => {
+    await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
+
+    expect(banco.onde).toEqual({
+      situacao: 'vivo',
+      idPedido: null,
+      caixa: { idEspecie: 1 },
+      parto: { casal: { idLinhagem: 3 } },
+    })
+  })
+})
 
 describe('faixa de idade na busca', () => {
   it('a faixa 21 a 40 aceita de faixaAceita(21).min a faixaAceita(40).max, a pedida antes da tolerancia', async () => {
-    banco.caixas = [caixa(1, 19), caixa(2, 20), caixa(3, 21), caixa(4, 30), caixa(5, 40), caixa(6, 44), caixa(7, 45)]
+    ;[19, 20, 21, 30, 40, 44, 45].forEach((idade, i) => livres(i + 1, i + 1, idade, 4, 4))
 
     const busca = await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
 
@@ -78,7 +87,7 @@ describe('faixa de idade na busca', () => {
   })
 
   it('a idade exata aceita o mesmo de antes, pela proximidade', async () => {
-    banco.caixas = [caixa(1, 24), caixa(2, 31), caixa(3, 28), caixa(4, 32)]
+    ;[24, 31, 28, 32].forEach((idade, i) => livres(i + 1, i + 1, idade, 4, 4))
 
     const busca = await buscarAtendimento({ ...pedido, idadeMin: 28, idadeMax: 28 }, agora)
 
@@ -87,67 +96,58 @@ describe('faixa de idade na busca', () => {
   })
 })
 
-describe('so o que ja nasceu entra na busca', () => {
-  it('oferece a ninhada que ja nasceu, mas nao o parto previsto', async () => {
-    banco.caixas = [caixa(1, 30, { ativo: false }), caixa(2, 30, { ativo: false, nasceu: false })]
+describe('a candidata e um lugar: a caixa e a data de nascimento', () => {
+  it('partos do mesmo dia na mesma caixa viram um lugar so, com os livres somados e os partos de origem', async () => {
+    livres(6, 1, 30, 3, 0)
+    livres(6, 2, 30, 2, 0)
 
     const busca = await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
 
-    expect(busca.candidatas.map((c) => c.idCaixa)).toEqual([1])
-  })
-
-  it('o parto previsto de casal ativo tambem nao entra: ainda nao tem animal', async () => {
-    banco.caixas = [caixa(1, 30, { nasceu: false })]
-
-    const busca = await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
-
-    expect(busca.candidatas).toEqual([])
-  })
-})
-
-describe('onde estao os livres', () => {
-  it('na caixa do casal, enquanto nao passaram para o estoque', async () => {
-    banco.caixas = [caixa(1, 30)]
-
-    const busca = await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
-
-    expect(busca.candidatas[0]?.onde).toEqual([
-      { codigo: 'F1A', numeroVisivel: '1', tipo: 'casal', m: 4, f: 4 },
+    expect(busca.candidatas).toEqual([
+      expect.objectContaining({
+        idCaixa: 6,
+        codigo: 'F1F',
+        numeroVisivel: '1',
+        tipo: 'estoque',
+        dtNascimento: '2026-12-01',
+        idadeNaEntrega: 30,
+        origem: 'de_fato',
+        livres: { m: 5, f: 0 },
+        partos: [
+          { ordem: 1, casal: 'AB' },
+          { ordem: 1, casal: 'CD' },
+        ],
+      }),
     ])
   })
 
-  it('nas caixas de estoque, sem a reserva de outro pedido, e o que sobrou na do casal', async () => {
-    const estoque = (idCaixa: number, coluna: number, sexo: string, qtd: number) => ({
-      id: idCaixa,
-      idCaixa,
-      qtd,
-      caixa: { sexo, face: 1, linha: 2, coluna, estante: { numeroVisivel: '1', colunas: 12 } },
-    })
-    const comEstoque = caixa(1, 30)
-    const parto = comEstoque.casais[0]?.partos[0]
-    if (parto === undefined) throw new Error('sem parto')
-    // os 4 machos foram para a F2A e 3 das femeas para a F2B; 1 femea ficou na caixa do casal
-    parto.lotes = [estoque(20, 1, 'M', 4), estoque(21, 2, 'F', 3)]
-    // e outro pedido ja reservou 1 macho, que sai da F2A
-    parto.compromissos = [
-      { id: 9, qtdM: 1, qtdF: 0, remessa: { idSolicitacao: 7, dtRealizada: null } },
-    ]
-    banco.caixas = [comEstoque]
+  it('o mesmo parto em duas caixas sao dois lugares', async () => {
+    livres(1, 1, 30, 0, 2)
+    banco.linhas.push({ idCaixa: 6, idParto: 1, sexo: 'M', _count: { _all: 4 } })
 
     const busca = await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
 
-    expect(busca.candidatas[0]?.disponivel).toEqual({ m: 3, f: 4 })
-    expect(busca.candidatas[0]?.onde).toEqual([
-      { codigo: 'F1A', numeroVisivel: '1', tipo: 'casal', m: 0, f: 1 },
-      { codigo: 'F2A', numeroVisivel: '1', tipo: 'estoque', m: 3, f: 0 },
-      { codigo: 'F2B', numeroVisivel: '1', tipo: 'estoque', m: 0, f: 3 },
-    ])
+    expect(busca.candidatas.map((c) => [c.idCaixa, c.livres])).toEqual(
+      expect.arrayContaining([
+        [1, { m: 0, f: 2 }],
+        [6, { m: 4, f: 0 }],
+      ]),
+    )
+  })
+
+  it('a ninhada que ainda mama entra como previsao, se desmamar ate a entrega; senao fica de fora', async () => {
+    livres(1, 1, 30, 4, 4, { desmamado: false })
+    livres(2, 3, 10, 4, 4, { desmamado: false })
+
+    const busca = await buscarAtendimento({ ...pedido, idadeMin: 5, idadeMax: 40 }, agora)
+
+    expect(busca.candidatas.map((c) => [c.idCaixa, c.origem])).toEqual([[1, 'previsao']])
   })
 })
 
 describe('deficit e acasalamento novo', () => {
   it('o deficit traz o qualquer que nem a sobra cobriu, e os casais contam com ele', async () => {
-    banco.caixas = [caixa(1, 30)]
+    livres(1, 1, 30, 4, 4)
 
     const busca = await buscarAtendimento(
       { ...pedido, machos: 4, femeas: 2, qualquer: 10, idadeMin: 21, idadeMax: 40 },
@@ -162,8 +162,6 @@ describe('deficit e acasalamento novo', () => {
   })
 
   it('a data minima do acasalamento novo e hoje + gestacao + idade minima', async () => {
-    banco.caixas = []
-
     const busca = await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
 
     // 30/10 + 23 + 21 dias. Com a idade maxima seria 01/01/2027, depois da entrega
@@ -171,8 +169,6 @@ describe('deficit e acasalamento novo', () => {
   })
 
   it('os casais novos se formam numa janela: nem os filhotes passam da faixa, nem chegam sem desmamar', async () => {
-    banco.caixas = []
-
     const busca = await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
 
     // faixa 20 a 44 dias na entrega (31/12), mas desmamados so a partir de 22: formados de
@@ -181,8 +177,6 @@ describe('deficit e acasalamento novo', () => {
   })
 
   it('na idade exata, a janela e o cio antes do unico dia da gestacao exata', async () => {
-    banco.caixas = []
-
     const busca = await buscarAtendimento(
       { ...pedido, idadeMin: 21, idadeMax: 21, dataEntrega: '2026-12-01' },
       agora,

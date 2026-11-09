@@ -2,7 +2,10 @@ import type { RequestHandler } from 'express'
 import request from 'supertest'
 import { describe, expect, it } from 'vitest'
 import { criarApp } from '../../app.ts'
+import { hojeISO } from '../../shared/traducao.ts'
 import type { Perfil } from '../../shared/traducao.ts'
+import { somarDias } from '../reproducao/cadeiaTemporal.ts'
+import { mudanca } from './caixa.routes.ts'
 
 // Autorizacao e validacao de forma. Nenhum teste aqui chega ao banco
 
@@ -84,5 +87,51 @@ describe('validacao de entrada', () => {
       .send({ estado: 'livres', confirmar: false })
 
     expect(resposta.status).toBe(404)
+  })
+})
+
+describe('mudanca de animais', () => {
+  const ontem = somarDias(hojeISO(), -1)
+  const machos = { qtd: 3, destino: { idCaixa: 2 } }
+
+  it('pesquisador nao muda animais de caixa', async () => {
+    const resposta = await request(app('pesquisador')).post('/api/caixas/1/mudanca').send({ dtFato: ontem, machos })
+
+    expect(resposta.status).toBe(403)
+  })
+
+  it('o corpo valido passa', () => {
+    expect(mudanca.safeParse({ dtFato: ontem, machos }).success).toBe(true)
+    expect(
+      mudanca.safeParse({
+        dtFato: ontem,
+        femeas: { qtd: 2, dtNascimento: '2026-09-01', idPedido: 9, destino: { posicao: { idEstante: 1, face: 'traseira', linha: 2, coluna: 3 } } },
+      }).success,
+    ).toBe(true)
+  })
+
+  it('sem machos nem femeas, recusa no campo', async () => {
+    const resposta = await request(app('tecnico')).post('/api/caixas/1/mudanca').send({ dtFato: ontem })
+
+    expect(resposta.status).toBe(400)
+    expect(resposta.body.erro.campos).toHaveProperty('machos')
+  })
+
+  it('a data no futuro e recusada antes de tocar o banco', async () => {
+    const resposta = await request(app('tecnico'))
+      .post('/api/caixas/1/mudanca')
+      .send({ dtFato: somarDias(hojeISO(), 1), machos })
+
+    expect(resposta.status).toBe(400)
+    expect(resposta.body.erro.campos).toHaveProperty('dtFato')
+  })
+
+  it('sem destino, ou com quantidade zero, e VALIDACAO', () => {
+    expect(mudanca.safeParse({ dtFato: ontem, machos: { qtd: 3 } }).success).toBe(false)
+    expect(mudanca.safeParse({ dtFato: ontem, machos: { qtd: 0, destino: { idCaixa: 2 } } }).success).toBe(false)
+    expect(
+      mudanca.safeParse({ dtFato: ontem, machos: { qtd: 1, destino: { posicao: { idEstante: 1, face: 'lateral', linha: 1, coluna: 1 } } } })
+        .success,
+    ).toBe(false)
   })
 })

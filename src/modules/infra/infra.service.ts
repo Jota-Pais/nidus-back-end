@@ -2,11 +2,10 @@
 
 import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
-import { codigoDaEspecie, estadoCaixa, face as faceDic } from '../../shared/traducao.ts'
+import { codigoDaEspecie, face as faceDic } from '../../shared/traducao.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
-import { casalNoCard, selecaoDoCasalNoCard } from './casalNoCard.ts'
+import { lerCards } from './card.ts'
 import { codigoDaPosicao } from './endereco.ts'
-import { lerCaixasDeEstoque } from './estoque.service.ts'
 
 type LinhaDeEstante = {
   id: number
@@ -61,36 +60,19 @@ export async function listarEstantes() {
 }
 
 /**
- * GET /api/estantes/:id/grade - as duas faces, com posicao vazia como 'caixa: null'. A caixa de
- * estoque vem com o sexo e quantos animais tem, na coluna que o reservado da
+ * GET /api/estantes/:id/grade - as duas faces, com posicao vazia como 'caixa: null'. Cada caixa
+ * vem com a coluna do Kanban e o card: o casal, ou o sexo, a linhagem e os vivos da caixa de
+ * estoque (a MiniGrade filtra os destinos da mudanca pelo sexo e pela linhagem)
  */
 export async function montarGrade(id: number) {
-  const [estante, caixas, estoque] = await Promise.all([
-    prisma.estante.findFirst({ where: { id, ativa: true } }),
-    prisma.caixa.findMany({
-      where: { idEstante: id, ativa: true },
-      select: {
-        id: true,
-        face: true,
-        linha: true,
-        coluna: true,
-        estado: true,
-        tipo: true,
-        casais: selecaoDoCasalNoCard,
-      },
-    }),
-    lerCaixasDeEstoque(prisma, { idEstante: id, ativa: true }),
-  ])
-
-  const estoquePorId = new Map(estoque.map((caixa) => [caixa.id, caixa]))
+  const estante = await prisma.estante.findFirst({ where: { id, ativa: true } })
 
   if (estante === null) {
     throw naoEncontrado('Estante')
   }
 
-  const caixaPorEndereco = new Map(
-    caixas.map((caixa) => [`${caixa.face}:${caixa.linha}:${caixa.coluna}`, caixa]),
-  )
+  const caixas = await lerCards(prisma, { idEstante: id, ativa: true })
+  const caixaPorEndereco = new Map(caixas.map((caixa) => [`${caixa.face}:${caixa.linha}:${caixa.coluna}`, caixa]))
 
   const faces = Array.from({ length: estante.faces }, (_, indice) => {
     const numeroDaFace = indice + 1
@@ -99,8 +81,6 @@ export async function montarGrade(id: number) {
     for (let linha = 1; linha <= estante.linhas; linha += 1) {
       for (let coluna = 1; coluna <= estante.colunas; coluna += 1) {
         const caixa = caixaPorEndereco.get(`${numeroDaFace}:${linha}:${coluna}`)
-        const casal = caixa?.casais[0]
-        const deEstoque = caixa === undefined ? undefined : estoquePorId.get(caixa.id)
 
         posicoes.push({
           linha,
@@ -109,21 +89,13 @@ export async function montarGrade(id: number) {
           caixa:
             caixa === undefined
               ? null
-              : deEstoque !== undefined
-                ? {
-                    id: caixa.id,
-                    estado: estadoCaixa.paraApi(deEstoque.estado),
-                    linhagem: deEstoque.linhagem,
-                    casal: null,
-                    estoque: { sexo: deEstoque.sexo, total: deEstoque.total, reservado: deEstoque.reservado },
-                  }
-                : {
-                    id: caixa.id,
-                    estado: estadoCaixa.paraApi(caixa.estado),
-                    linhagem: casal?.linhagem.nome ?? null,
-                    casal: casalNoCard(caixa.casais, caixa.estado),
-                    estoque: null,
-                  },
+              : {
+                  id: caixa.id,
+                  estado: caixa.estado,
+                  linhagem: caixa.linhagem,
+                  casal: caixa.casal,
+                  estoque: caixa.estoque,
+                },
         })
       }
     }

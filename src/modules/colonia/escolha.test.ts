@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { escolherAnimais, exigirDepoisDaChegada, pedidoDosReservados, pedidosTocados } from './escolha.ts'
+import { escolherAnimais, exigirDepoisDaChegada, idadeDoGrupo, pedidoDosReservados, pedidosTocados } from './escolha.ts'
 import type { Escolhido } from './escolha.ts'
 
 // O banco aqui so devolve, em ordem, as linhas de cada consulta, e guarda o SQL de cada uma
@@ -112,6 +112,61 @@ describe('escolha dentro do grupo', () => {
   it('quantidade zero nao consulta nada', async () => {
     expect(await escolherAnimais(tx as never, { idParto: 4, sexo: 'F' }, 0)).toEqual([])
     expect(consultas).toHaveLength(0)
+  })
+
+  it('so do pedido: pega so os reservados dele, sem passar pelos livres', async () => {
+    respostas = [[animal(8, 9), animal(10, 9)]]
+
+    const escolhidos = await escolherAnimais(tx as never, { idCaixa: 3, sexo: 'M' }, 2, {
+      idPedido: 9,
+      soDoPedido: true,
+    })
+
+    expect(escolhidos.map((a) => a.id)).toEqual([8, 10])
+    expect(consultas).toHaveLength(1)
+    expect(consultas[0]?.text).toContain('"id_pedido" = $')
+    expect(consultas[0]?.text).not.toContain('"id_pedido" IS NULL')
+  })
+
+  it('so do pedido, sem reservados que bastem: SEM_ANIMAIS dizendo o pedido, mesmo com livres no grupo', async () => {
+    respostas = [[animal(8, 9)]]
+
+    await expect(
+      escolherAnimais(tx as never, { idCaixa: 3, sexo: 'M' }, 2, { idPedido: 9, soDoPedido: true }),
+    ).rejects.toEqual(
+      expect.objectContaining({ codigo: 'SEM_ANIMAIS', message: expect.stringContaining('machos do pedido #9') }),
+    )
+  })
+})
+
+describe('a idade do grupo', () => {
+  const comIdades = (...datas: string[]) => ({
+    parto: { findMany: async () => datas.map((data) => ({ dtPartoReal: d(data) })) },
+  })
+
+  it('a indicada vale sem consultar', async () => {
+    expect(await idadeDoGrupo({} as never, 3, 'M', '2026-10-01', 'dtNascimento')).toBe('2026-10-01')
+  })
+
+  it('sem indicar, a unica idade do sexo na caixa; sem vivo, nenhuma', async () => {
+    expect(await idadeDoGrupo(comIdades('2026-09-01') as never, 3, 'M', undefined, 'dtNascimento')).toBe('2026-09-01')
+    expect(await idadeDoGrupo(comIdades() as never, 3, 'M', undefined, 'dtNascimento')).toBeUndefined()
+  })
+
+  it('com mais de uma idade, pede a data no campo do formulario', async () => {
+    await expect(
+      idadeDoGrupo(comIdades('2026-09-01', '2026-10-01') as never, 3, 'F', undefined, 'femeas.dtNascimento'),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        status: 400,
+        extras: {
+          campos: {
+            'femeas.dtNascimento':
+              'A caixa tem femeas de mais de uma idade: diga a data de nascimento (2026-09-01, 2026-10-01).',
+          },
+        },
+      }),
+    )
   })
 })
 

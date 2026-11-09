@@ -1,140 +1,253 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { VivosDoParto, VivosNaCaixa } from '../colonia/consultas.ts'
 import { montarFicha } from './ficha.service.ts'
 
-// Caixa com dois casais: o CD (id 2), formado depois, e o AB (id 1), encerrado no 5o parto
-// com a ninhada ainda na caixa
+// A ficha junta o que outros modulos ja sabem contar: a ficha de cada parto (cicloFicha), a do
+// casal (casalFicha), os vivos da caixa (vivosNasCaixas) e os eventos (eventosDaCaixa). Aqui eles
+// sao de mentira, e o teste confere como a ficha os junta
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 
-const partoBase = {
-  dtSelecao: null,
-  eutanasiadoM: null,
-  eutanasiadoF: null,
-  dtDesmameReal: null,
-  dtSemNinhada: null,
-  motivoSemNinhada: null,
-  desmamadoM: null,
-  desmamadoF: null,
-  compromissos: [],
-  lotes: [],
-  dtRegistroParto: null,
-  dtRegistroSelecao: null,
-  dtRegistroDesmame: null,
-}
-
-const partos = [
-  {
-    ...partoBase,
-    id: 10,
-    idCasal: 1,
-    ordem: 5,
-    dtAcasalamento: d('2026-10-04'),
-    dtPartoPrevisto: d('2026-10-27'),
-    dtPartoReal: d('2026-10-27'),
-    nascidoM: 3,
-    nascidoF: 4,
-  },
-  {
-    ...partoBase,
-    id: 20,
-    idCasal: 2,
-    ordem: 1,
-    dtAcasalamento: d('2026-10-28'),
-    dtPartoPrevisto: d('2026-11-20'),
-    dtPartoReal: null,
-    nascidoM: null,
-    nascidoF: null,
-  },
-]
-
-/** Os animais do 5o parto do AB, vivos na caixa: a ficha do parto conta neles (cicloFicha) */
-const animais = [...Array(7).keys()].map((i) => ({
-  id: i + 1,
-  idParto: 10,
-  sexo: i < 3 ? 'M' : 'F',
-  situacao: 'vivo',
-  idCaixa: 7,
-  idPedido: null,
-  dtMovimento: null,
-  dtSaida: null,
-  caixa: { codigo: 'F1A', tipo: 'casal', estante: { numeroVisivel: 'E1' } },
+const banco = vi.hoisted(() => ({
+  caixa: null as Record<string, unknown> | null,
+  partos: [] as { id: number; idCasal: number }[],
+  ciclos: new Map<number, Record<string, unknown>>(),
+  casais: new Map<number, Record<string, unknown>>(),
+  vivos: null as unknown,
+  desmamados: null as unknown,
 }))
-
-const casais = [
-  { id: 2, identificacao: 'CD', grupoMacho: 'C', grupoFemea: 'D', ativo: true, dtEncerramento: null },
-  { id: 1, identificacao: 'AB', grupoMacho: 'A', grupoFemea: 'B', ativo: false, dtEncerramento: d('2026-10-27') },
-]
 
 vi.mock('../../shared/prisma.ts', () => ({
   prisma: {
-    caixa: {
-      findUnique: async () => ({
-        id: 7,
-        face: 1,
-        linha: 1,
-        coluna: 1,
-        estado: 'R',
-        estante: { numeroVisivel: 'E1', sala: { nome: 'Sala 1' }, colunas: 10 },
-        especie: { nome: 'Rato' },
-        casais: casais.map(({ id }) => ({ id })),
-      }),
-    },
-    casal: {
-      findUnique: async ({ where }: { where: { id: number } }) => {
-        const casal = casais.find((c) => c.id === where.id)
-        return casal && { ...casal, dtFormacao: d('2026-09-01'), linhagem: { nome: 'Wistar' } }
-      },
-    },
+    caixa: { findUnique: async () => banco.caixa },
     parto: {
-      findMany: async ({ where }: { where: { idCasal: number; dtPartoReal?: unknown } }) =>
-        partos.filter(
-          (p) => p.idCasal === where.idCasal && (where.dtPartoReal === undefined || p.dtPartoReal !== null),
-        ),
-      findUnique: async ({ where }: { where: { id: number } }) => partos.find((p) => p.id === where.id) ?? null,
+      findMany: async ({ where }: { where: { idCasal: number } }) => banco.partos.filter((p) => p.idCasal === where.idCasal),
     },
-    animal: {
-      findMany: async ({ where }: { where: { idParto: number } }) => animais.filter((a) => a.idParto === where.idParto),
-    },
-    historico: { findMany: async () => [] },
   },
 }))
 
-/** A ficha da caixa de casal: a de estoque nao tem casal nem parto */
-async function fichaDoCasal() {
-  const ficha = await montarFicha(7)
-  if (ficha.tipo !== 'casal') throw new Error('veio a ficha de estoque')
-  return ficha
-}
+vi.mock('../reproducao/cicloFicha.ts', () => ({ cicloFicha: async (id: number) => banco.ciclos.get(id) }))
+vi.mock('../reproducao/reproducao.service.ts', () => ({ casalFicha: async (id: number) => banco.casais.get(id) }))
 
-describe('ficha da caixa com casal novo', () => {
-  it('mostra o casal novo e os partos dele', async () => {
-    const ficha = await fichaDoCasal()
+vi.mock('../colonia/consultas.ts', async (original) => ({
+  ...(await original<typeof import('../colonia/consultas.ts')>()),
+  vivosNasCaixas: async (_banco: unknown, ids: number[]) => new Map(ids.map((id) => [id, banco.vivos])),
+}))
 
-    expect(ficha.casal?.identificacao).toBe('CD')
-    expect(ficha.partos.map((p) => p.id)).toEqual([20])
+vi.mock('./eventos.ts', () => ({
+  eventosDaCaixa: async (_idCaixa: number, desmamados: unknown) => {
+    banco.desmamados = desmamados
+    return [{ dataHora: '2026-10-01T00:00:00.000Z', tipo: 'nascimento', descricao: 'x', autor: 'Ana', idOcorrencia: 1, anulavel: false }]
+  },
+}))
+
+const doParto = (idParto: number, dtNascimento: string, vivos: [number, number], reservados: [number, number] = [0, 0], campos: Partial<VivosDoParto> = {}): VivosDoParto => ({
+  idParto,
+  ordem: 1,
+  casal: 'AB',
+  idLinhagem: 3,
+  dtNascimento,
+  desmamado: true,
+  caixaDoCasal: { idCaixa: 1, codigo: 'F1A', numeroVisivel: 'E1' },
+  vivos: { m: vivos[0], f: vivos[1] },
+  reservados: { m: reservados[0], f: reservados[1] },
+  ...campos,
+})
+
+const naCaixa = (partos: VivosDoParto[], pedidos: VivosNaCaixa['pedidos'] = []): VivosNaCaixa => ({
+  vivos: partos.reduce((s, p) => ({ m: s.m + p.vivos.m, f: s.f + p.vivos.f }), { m: 0, f: 0 }),
+  reservados: partos.reduce((s, p) => ({ m: s.m + p.reservados.m, f: s.f + p.reservados.f }), { m: 0, f: 0 }),
+  partos,
+  pedidos,
+})
+
+const ciclo = (id: number, campos: Record<string, unknown> = {}) => ({
+  id,
+  ordem: 1,
+  dtPartoReal: '2026-09-01',
+  dtSemNinhada: null,
+  desmamadoM: null,
+  desmamadoF: null,
+  ...campos,
+})
+
+const caixa = (campos: Record<string, unknown> = {}) => ({
+  id: 7,
+  codigo: 'F1A',
+  tipo: 'casal',
+  sexo: null,
+  idLinhagem: null,
+  ativa: true,
+  dtLiberacao: null,
+  motivoLiberacao: null,
+  especie: { nome: 'Rato' },
+  linhagem: null,
+  estante: { numeroVisivel: 'E1', sala: { nome: 'Sala 1' } },
+  casais: [{ id: 2 }, { id: 1 }],
+  ...campos,
+})
+
+beforeEach(() => {
+  banco.caixa = caixa()
+  banco.partos = [
+    { id: 10, idCasal: 1 },
+    { id: 20, idCasal: 2 },
+    { id: 21, idCasal: 2 },
+  ]
+  banco.ciclos = new Map([
+    [10, ciclo(10, { ordem: 5, desmamadoM: 3, desmamadoF: 4 })],
+    [20, ciclo(20, { desmamadoM: 5, desmamadoF: 5 })],
+    [21, ciclo(21, { ordem: 2, dtPartoReal: null })],
+  ])
+  banco.casais = new Map([
+    [2, { id: 2, identificacao: 'CD', linhagem: 'Wistar', ativo: true }],
+    [1, { id: 1, identificacao: 'AB', linhagem: 'Wistar', ativo: false }],
+  ])
+  banco.vivos = naCaixa([doParto(20, '2026-09-01', [5, 5], [1, 0])])
+  banco.desmamados = null
+})
+
+describe('a ficha da caixa de casal', () => {
+  it('o casal da caixa com os partos, os casais de antes, a coluna e os eventos', async () => {
+    const ficha = await montarFicha(7)
+
+    expect(ficha).toMatchObject({
+      tipo: 'casal',
+      virarEstoque: null,
+      caixa: {
+        id: 7,
+        endereco: { numeroVisivel: 'E1', sala: 'Sala 1', codigo: 'F1A' },
+        especie: 'rato',
+        linhagem: 'Wistar',
+        estado: 'livres',
+        ativa: true,
+        dtLiberacao: null,
+      },
+      casal: { identificacao: 'CD' },
+      partos: [{ id: 20 }, { id: 21 }],
+      anteriores: [{ casal: { identificacao: 'AB' }, partos: [{ id: 10 }] }],
+      eventos: [expect.objectContaining({ tipo: 'nascimento', idOcorrencia: 1 })],
+    })
   })
 
-  it('continua mostrando a ninhada que o casal encerrado deixou na caixa', async () => {
-    const ficha = await fichaDoCasal()
+  it('os eventos recebem as contagens do desmame de cada parto, contadas na ficha', async () => {
+    await montarFicha(7)
 
-    expect(ficha.anteriores).toEqual([
-      {
-        casal: expect.objectContaining({ id: 1, identificacao: 'AB', ativo: false }),
-        partos: [expect.objectContaining({ id: 10, ordem: 5, nascidoM: 3, nascidoF: 4 })],
-      },
-    ])
+    expect(banco.desmamados).toEqual(
+      new Map([
+        [20, { m: 5, f: 5 }],
+        [10, { m: 3, f: 4 }],
+      ]),
+    )
+  })
+
+  it('o casal encerrado com desmamados de um sexo so: a caixa pode virar de estoque com esse sexo', async () => {
+    banco.casais.set(2, { id: 2, identificacao: 'CD', linhagem: 'Wistar', ativo: false })
+    banco.ciclos.set(21, ciclo(21, { ordem: 2, dtPartoReal: '2026-10-01' }))
+    banco.vivos = naCaixa([doParto(20, '2026-09-01', [0, 5])])
+
+    expect((await montarFicha(7)).virarEstoque).toBe('F')
+  })
+
+  it('com parto pendente a caixa nao vira de estoque, nem com o casal encerrado', async () => {
+    banco.casais.set(2, { id: 2, identificacao: 'CD', linhagem: 'Wistar', ativo: false })
+    banco.vivos = naCaixa([doParto(20, '2026-09-01', [0, 5])])
+
+    expect((await montarFicha(7)).virarEstoque).toBeNull()
+  })
+
+  it('a caixa liberada continua tendo ficha, fora do Kanban', async () => {
+    banco.caixa = caixa({ ativa: false, dtLiberacao: d('2026-10-30'), motivoLiberacao: 'casal_encerrado' })
+    banco.vivos = naCaixa([])
+
+    expect((await montarFicha(7)).caixa).toMatchObject({
+      estado: null,
+      ativa: false,
+      dtLiberacao: '2026-10-30',
+      motivoLiberacao: 'casal_encerrado',
+    })
+  })
+
+  it('caixa que nao existe', async () => {
+    banco.caixa = null
+
+    await expect(montarFicha(7)).rejects.toEqual(expect.objectContaining({ status: 404 }))
   })
 })
 
-describe('eventos da ficha', () => {
-  it('saem pela data do fato, com o acasalamento antes do parto', async () => {
-    const ficha = await fichaDoCasal()
+describe('a ficha da caixa de estoque', () => {
+  beforeEach(() => {
+    banco.caixa = caixa({ tipo: 'estoque', sexo: 'M', idLinhagem: 3, linhagem: { nome: 'Wistar' }, casais: [] })
+    banco.vivos = naCaixa(
+      [
+        doParto(20, '2026-09-01', [4, 0], [0, 0]),
+        doParto(30, '2026-10-01', [3, 0], [2, 0], { ordem: 2, casal: 'EF', caixaDoCasal: { idCaixa: 5, codigo: 'T2C', numeroVisivel: 'E2' } }),
+        doParto(31, '2026-10-01', [1, 0], [1, 0], { ordem: 1, casal: 'GH' }),
+      ],
+      [{ idPedido: 9, m: 3, f: 0 }],
+    )
+  })
 
-    expect(ficha.eventos.map((e) => [e.dataHora.slice(0, 10), e.tipo])).toEqual([
-      ['2026-10-04', 'acasalamento'],
-      ['2026-10-27', 'parto'],
-      ['2026-10-27', 'encerramento'],
-      ['2026-10-28', 'acasalamento'],
+  it('os vivos por data de nascimento, com as origens; os pedidos com o que tem reservado nela', async () => {
+    const ficha = await montarFicha(7)
+
+    expect(ficha).toMatchObject({
+      tipo: 'estoque',
+      caixa: { id: 7, linhagem: 'Wistar', idLinhagem: 3, sexo: 'M', estado: 'estoque' },
+      total: 8,
+      reservado: 3,
+      livre: 5,
+      nascimentoDe: '2026-09-01',
+      nascimentoAte: '2026-10-01',
+      pedidos: [{ idPedido: 9, qtd: 3 }],
+      casaisAnteriores: [],
+    })
+    if (ficha.tipo !== 'estoque') throw new Error('ficha de casal')
+
+    expect(ficha.grupos).toEqual([
+      {
+        dtNascimento: '2026-09-01',
+        idadeDias: expect.any(Number),
+        total: 4,
+        reservados: 0,
+        livres: 4,
+        origens: [{ idParto: 20, ordem: 1, casal: 'AB', codigoOrigem: 'F1A', numeroVisivelOrigem: 'E1', qtd: 4 }],
+      },
+      {
+        dtNascimento: '2026-10-01',
+        idadeDias: expect.any(Number),
+        total: 4,
+        reservados: 3,
+        livres: 1,
+        origens: [
+          { idParto: 30, ordem: 2, casal: 'EF', codigoOrigem: 'T2C', numeroVisivelOrigem: 'E2', qtd: 3 },
+          { idParto: 31, ordem: 1, casal: 'GH', codigoOrigem: 'F1A', numeroVisivelOrigem: 'E1', qtd: 1 },
+        ],
+      },
     ])
+  })
+
+  it('a caixa que era de casal antes de virar de estoque mostra os casais dela', async () => {
+    banco.caixa = caixa({ tipo: 'estoque', sexo: 'M', idLinhagem: 3, linhagem: { nome: 'Wistar' }, casais: [{ id: 1 }] })
+
+    const ficha = await montarFicha(7)
+
+    expect(ficha).toMatchObject({ casaisAnteriores: [{ casal: { identificacao: 'AB' }, partos: [{ id: 10 }] }] })
+  })
+
+  it('a enviada aparece em Enviado na semana da entrega, sem vivo', async () => {
+    banco.caixa = caixa({
+      tipo: 'estoque',
+      sexo: 'M',
+      idLinhagem: 3,
+      linhagem: { nome: 'Wistar' },
+      casais: [],
+      ativa: false,
+      motivoLiberacao: 'entrega',
+      dtLiberacao: new Date(),
+    })
+    banco.vivos = naCaixa([])
+
+    expect(await montarFicha(7)).toMatchObject({ caixa: { estado: 'enviado', ativa: false }, total: 0, grupos: [] })
   })
 })

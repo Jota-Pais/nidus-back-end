@@ -1,26 +1,72 @@
 import { describe, expect, it } from 'vitest'
-import { faltasDosPedidos, ninhadasNaCaixa, vivosPorCaixa } from './consultas.ts'
+import { faltasDosPedidos, ninhadasNaCaixa, vivosNasCaixas } from './consultas.ts'
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 
 const linha = (campos: Record<string, unknown>, qtd: number) => ({ ...campos, _count: { _all: qtd } })
 
-describe('vivos por caixa', () => {
-  it('conta os vivos e os reservados por sexo; caixa sem vivo fica zerada', async () => {
-    const banco = {
-      animal: {
-        groupBy: async () => [
-          linha({ idCaixa: 2, sexo: 'M', idPedido: null }, 6),
-          linha({ idCaixa: 2, sexo: 'M', idPedido: 7 }, 4),
-          linha({ idCaixa: 2, sexo: 'F', idPedido: 7 }, 1),
-        ],
+/** um parto lido para as contagens, com a caixa do casal de onde veio */
+const parto = (id: number, ordem: number, nascimento: string, desmame: string | null, casal = 'AB') => ({
+  id,
+  ordem,
+  dtPartoReal: d(nascimento),
+  dtDesmameReal: desmame === null ? null : d(desmame),
+  casal: { identificacao: casal, idLinhagem: 3, caixa: { id: 1, codigo: 'F1A', estante: { numeroVisivel: 'E1' } } },
+})
+
+describe('vivos nas caixas', () => {
+  const banco = {
+    animal: {
+      groupBy: async () => [
+        linha({ idCaixa: 2, idParto: 4, sexo: 'M', idPedido: null }, 6),
+        linha({ idCaixa: 2, idParto: 4, sexo: 'M', idPedido: 7 }, 3),
+        linha({ idCaixa: 2, idParto: 6, sexo: 'M', idPedido: 7 }, 1),
+        linha({ idCaixa: 2, idParto: 6, sexo: 'M', idPedido: 9 }, 2),
+        linha({ idCaixa: 3, idParto: 6, sexo: 'F', idPedido: null }, 5),
+      ],
+    },
+    parto: { findMany: async () => [parto(4, 1, '2026-09-01', '2026-09-23'), parto(6, 2, '2026-10-01', null, 'CD')] },
+  }
+
+  it('conta os vivos e os reservados por sexo, e os reservados de cada pedido na caixa', async () => {
+    const caixa = (await vivosNasCaixas(banco as never, [2, 3, 5])).get(2)
+
+    expect(caixa?.vivos).toEqual({ m: 12, f: 0 })
+    expect(caixa?.reservados).toEqual({ m: 6, f: 0 })
+    expect(caixa?.pedidos).toEqual([
+      { idPedido: 7, m: 4, f: 0 },
+      { idPedido: 9, m: 2, f: 0 },
+    ])
+  })
+
+  it('separa os vivos por parto de origem, do nascimento mais antigo para o mais novo', async () => {
+    const caixa = (await vivosNasCaixas(banco as never, [2, 3])).get(2)
+
+    expect(caixa?.partos).toEqual([
+      {
+        idParto: 4,
+        ordem: 1,
+        casal: 'AB',
+        idLinhagem: 3,
+        dtNascimento: '2026-09-01',
+        desmamado: true,
+        caixaDoCasal: { idCaixa: 1, codigo: 'F1A', numeroVisivel: 'E1' },
+        vivos: { m: 9, f: 0 },
+        reservados: { m: 3, f: 0 },
       },
-    }
+      expect.objectContaining({ idParto: 6, casal: 'CD', desmamado: false, vivos: { m: 3, f: 0 }, reservados: { m: 3, f: 0 } }),
+    ])
+  })
 
-    const porCaixa = await vivosPorCaixa(banco as never, [2, 5])
+  it('um parto em duas caixas conta em cada uma so o que esta nela; caixa sem vivo fica zerada', async () => {
+    const porCaixa = await vivosNasCaixas(banco as never, [2, 3, 5])
 
-    expect(porCaixa.get(2)).toEqual({ vivos: { m: 10, f: 1 }, reservados: { m: 4, f: 1 } })
-    expect(porCaixa.get(5)).toEqual({ vivos: { m: 0, f: 0 }, reservados: { m: 0, f: 0 } })
+    expect(porCaixa.get(3)?.partos.map((p) => [p.idParto, p.vivos])).toEqual([[6, { m: 0, f: 5 }]])
+    expect(porCaixa.get(5)).toEqual({ vivos: { m: 0, f: 0 }, reservados: { m: 0, f: 0 }, partos: [], pedidos: [] })
+  })
+
+  it('sem caixa, sem consulta', async () => {
+    expect((await vivosNasCaixas({} as never, [])).size).toBe(0)
   })
 })
 
@@ -28,11 +74,12 @@ describe('ninhadas na caixa', () => {
   it('os vivos por parto, com o casal e se ja desmamou', async () => {
     const banco = {
       animal: {
-        groupBy: async () => [linha({ idParto: 4, sexo: 'M' }, 5), linha({ idParto: 4, sexo: 'F' }, 3)],
+        groupBy: async () => [
+          linha({ idCaixa: 1, idParto: 4, sexo: 'M', idPedido: null }, 5),
+          linha({ idCaixa: 1, idParto: 4, sexo: 'F', idPedido: null }, 3),
+        ],
       },
-      parto: {
-        findMany: async () => [{ id: 4, ordem: 2, dtDesmameReal: d('2026-10-23'), casal: { identificacao: 'AB' } }],
-      },
+      parto: { findMany: async () => [parto(4, 2, '2026-10-01', '2026-10-23')] },
     }
 
     expect(await ninhadasNaCaixa(banco as never, 1)).toEqual([

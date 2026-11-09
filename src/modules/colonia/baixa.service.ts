@@ -5,9 +5,9 @@ import { campoInvalido, erroDeRegra, naoEncontrado } from '../../shared/erros.ts
 import { prisma } from '../../shared/prisma.ts'
 import { hojeISO } from '../../shared/traducao.ts'
 import type { Prisma } from '@prisma/client'
-import { contagemDosPedidos, faltasDosPedidos, idadesNaCaixa, ninhadasNaCaixa } from './consultas.ts'
+import { contagemDosPedidos, faltasDosPedidos, ninhadasNaCaixa } from './consultas.ts'
 import { exigirEstoqueQueRecebe, recusaDoEstoque } from './destino.ts'
-import { escolherAnimais, exigirDepoisDaChegada, pedidosTocados } from './escolha.ts'
+import { escolherAnimais, exigirDepoisDaChegada, idadeDoGrupo, pedidosTocados } from './escolha.ts'
 import type { Escolhido } from './escolha.ts'
 import { caixaLiberada, liberarSeVazia } from './liberacao.ts'
 import { lancarOcorrencia } from './ocorrencia.ts'
@@ -30,28 +30,6 @@ export type ItemDaBaixa = {
 export type Baixa = { dtFato: string; motivo?: string | undefined; itens: ItemDaBaixa[] }
 
 /**
- * A idade dos animais do sexo na caixa quando ha uma so. Com mais de uma, quem registra diz de
- * qual (dtNascimento no item)
- */
-async function idadeUnica(
-  tx: Prisma.TransactionClient,
-  idCaixa: number,
-  sexo: Sexo,
-  campo: string,
-): Promise<string | undefined> {
-  const idades = await idadesNaCaixa(tx, idCaixa, sexo)
-
-  if (idades.length > 1) {
-    throw campoInvalido(
-      campo,
-      `A caixa tem ${ROTULO_DO_SEXO[sexo]} de mais de uma idade: diga a data de nascimento (${idades.join(', ')}).`,
-    )
-  }
-
-  return idades[0]
-}
-
-/**
  * POST /api/caixas/:id/baixa - morte ou eutanasia de animais da caixa, de qualquer tipo. Saem
  * primeiro os vivos livres do grupo (sexo e idade), depois os reservados do pedido indicado. A
  * caixa que esvazia e liberada na hora (a de casal, so com o casal encerrado e sem parto
@@ -70,8 +48,7 @@ export async function registrarBaixa(idCaixa: number, dados: Baixa, idUsuario: n
     const baixas: PorSexo = { m: 0, f: 0 }
 
     for (const [indice, item] of dados.itens.entries()) {
-      const dtNascimento =
-        item.dtNascimento ?? (await idadeUnica(tx, idCaixa, item.sexo, `itens.${indice}.dtNascimento`))
+      const dtNascimento = await idadeDoGrupo(tx, idCaixa, item.sexo, item.dtNascimento, `itens.${indice}.dtNascimento`)
 
       const doItem = await escolherAnimais(tx, { idCaixa, sexo: item.sexo, dtNascimento }, item.qtd, {
         idPedido: item.idPedido,

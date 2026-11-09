@@ -25,21 +25,23 @@ export function recusaDoEstoque(caixa: CaixaQueRecebe, quem: QuemEntra): string 
 /**
  * Recusa no campo do formulario a caixa que nao pode receber os animais (recusaDoEstoque). O
  * trigger dos animais cobra o mesmo no banco; aqui a recusa sai com o porque. A caixa ja esta
- * travada
+ * travada. Devolve o codigo da caixa, para a resposta dizer para onde os animais foram
  */
 export async function exigirEstoqueQueRecebe(
   tx: Pick<Prisma.TransactionClient, 'caixa'>,
   idCaixa: number,
   campo: string,
   quem: QuemEntra,
-): Promise<void> {
+): Promise<{ codigo: string }> {
   const caixa = await tx.caixa.findUnique({
     where: { id: idCaixa },
-    select: { ativa: true, tipo: true, sexo: true, idLinhagem: true },
+    select: { codigo: true, ativa: true, tipo: true, sexo: true, idLinhagem: true },
   })
 
   if (caixa === null) throw campoInvalido(campo, 'Esta caixa nao existe.')
 
   const recusa = recusaDoEstoque(caixa, quem)
   if (recusa !== null) throw campoInvalido(campo, recusa)
+
+  return { codigo: caixa.codigo }
 }

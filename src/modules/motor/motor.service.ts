@@ -1,5 +1,6 @@
-// A busca de atendimento lida do banco: caixas da especie que ja tiveram casal, os partos que
-// ja nasceram e o que cada um ainda tem livre. So entram partos com a idade na entrega dentro da faixa aceita do pedido
+// A busca de atendimento lida do banco: os vivos livres da linhagem, agrupados pelo lugar de onde
+// sairiam (a caixa e a data de nascimento: dentro da caixa, so a idade distingue os ratos). So
+// entram os que, na data da entrega, estao na faixa de idade aceita e ja desmamaram
 
 import {
   ALEITAMENTO_DIAS,
@@ -8,20 +9,16 @@ import {
   NINHADA_POR_SEXO,
 } from '../../shared/parametros.ts'
 import { prisma } from '../../shared/prisma.ts'
-import { dataISO, estadoCaixa, hojeISO } from '../../shared/traducao.ts'
-import { codigoDaPosicao } from '../infra/endereco.ts'
-import { SEXOS, livresNosLugares, selecaoDoPartoComLugares } from '../infra/estoque.ts'
-import type { LoteDoParto, PartoComLugares } from '../infra/estoque.ts'
+import { dataISO, hojeISO } from '../../shared/traducao.ts'
+import type { PorSexo } from '../colonia/tipos.ts'
 import { idDaEspecie } from '../infra/infra.service.ts'
-import { somarDias } from '../reproducao/cadeiaTemporal.ts'
-import { disponibilidadeDoParto } from '../reproducao/disponibilidade.ts'
+import { diasEntre, somarDias } from '../reproducao/cadeiaTemporal.ts'
 import { casaisParaODeficit, faixaDoPedido, ordenar, sugerirAlocacao } from './motor.ts'
 import type { Origem } from './motor.ts'
-import { caixaComEstoque } from '../infra/liberacaoDaCaixa.ts'
 
 export type PedidoDeBusca = {
   especie: string
-  idLinhagem?: number | undefined
+  idLinhagem: number
   machos: number
   femeas: number
   /** de qualquer sexo: sai da sobra das caixas depois de machos e femeas */
@@ -31,12 +28,6 @@ export type PedidoDeBusca = {
   idadeMax: number
   /** sem data, a referencia e hoje */
   dataEntrega?: string | undefined
-  /** caixas ja sugeridas em remessas anteriores do mesmo pedido */
-  excluir?: number[] | undefined
-}
-
-export function diasEntre(de: string, ate: string): number {
-  return Math.round((Date.parse(`${ate}T00:00:00Z`) - Date.parse(`${de}T00:00:00Z`)) / 86_400_000)
 }
 
 /** O dia em que o animal ja esta desmamado: o desmame real ou, sem ele, nascimento + aleitamento */
@@ -44,65 +35,124 @@ export function dataDoDesmame(nascimento: string, dtDesmameReal: Date | null): s
   return dtDesmameReal ? dataISO(dtDesmameReal) : somarDias(nascimento, ALEITAMENTO_DIAS)
 }
 
-/** O que a busca le de uma caixa para escrever o codigo dela */
-const POSICAO = {
-  face: true,
-  linha: true,
-  coluna: true,
-  estante: { select: { numeroVisivel: true, colunas: true } },
-} as const
-
-type Posicao = {
-  face: number
-  linha: number
-  coluna: number
-  estante: { numeroVisivel: string; colunas: number }
-}
-
-/** Uma caixa com animais livres do parto: a do casal, ou uma de estoque */
-export type LugarDosLivres = {
+/** Os vivos livres de um parto numa caixa, como a busca os le */
+export type LivresDoParto = {
+  idCaixa: number
   codigo: string
   numeroVisivel: string
   tipo: 'casal' | 'estoque'
-  m: number
-  f: number
+  ordem: number
+  casal: string
+  /** 'aaaa-mm-dd' */
+  dtNascimento: string
+  dtDesmameReal: Date | null
+  livres: PorSexo
 }
 
-/** Os desmamados do parto numa caixa de estoque, com a posicao dela */
-type LoteComPosicao = LoteDoParto & { caixa: LoteDoParto['caixa'] & Posicao }
+/** Um lugar candidato: a caixa e a data de nascimento, com os livres e os partos de onde vieram */
+export type CandidataDaBusca = {
+  idCaixa: number
+  codigo: string
+  numeroVisivel: string
+  tipo: 'casal' | 'estoque'
+  dtNascimento: string
+  idadeNaEntrega: number
+  origem: Origem
+  livres: PorSexo
+  partos: { ordem: number; casal: string }[]
+}
 
 /**
- * Onde estao os animais livres do parto: o que sobrou na caixa do casal e as caixas de estoque
- * para onde os desmamados passaram, com quantos de cada sexo, na ordem da retirada
+ * Os lugares que atendem a data: livres de partos na faixa de idade aceita e ja desmamados ate a
+ * entrega (o desmame real, ou o previsto). Os partos do mesmo dia na mesma caixa viram um lugar
+ * so. A origem e 'de_fato' quando todos ja desmamaram de verdade; senao, 'previsao'
  */
-export function ondeEstaoOsLivres(
-  parto: Omit<PartoComLugares, 'lotes'> & { lotes: LoteComPosicao[] },
-  caixaDoCasal: Posicao,
-): LugarDosLivres[] {
-  const porCaixa = new Map<number | null, LugarDosLivres>()
+export function lugaresDaBusca(
+  livres: LivresDoParto[],
+  faixa: { min: number; max: number },
+  referencia: string,
+): CandidataDaBusca[] {
+  const porLugar = new Map<string, CandidataDaBusca>()
 
-  for (const sexo of SEXOS) {
-    for (const { idCaixa, qtd } of livresNosLugares(parto, sexo)) {
-      const caixa =
-        idCaixa === null ? caixaDoCasal : parto.lotes.find((lote) => lote.idCaixa === idCaixa)?.caixa
-      if (caixa === undefined) continue
+  for (const doParto of livres) {
+    const idadeNaEntrega = diasEntre(doParto.dtNascimento, referencia)
+    if (idadeNaEntrega < faixa.min || idadeNaEntrega > faixa.max) continue
+    if (dataDoDesmame(doParto.dtNascimento, doParto.dtDesmameReal) > referencia) continue
 
-      const lugar = porCaixa.get(idCaixa) ?? {
-        codigo: codigoDaPosicao(caixa.face, caixa.linha, caixa.coluna, caixa.estante.colunas),
-        numeroVisivel: caixa.estante.numeroVisivel,
-        tipo: idCaixa === null ? 'casal' : 'estoque',
-        m: 0,
-        f: 0,
-      }
-      porCaixa.set(idCaixa, { ...lugar, [sexo === 'M' ? 'm' : 'f']: qtd })
+    const chave = `${doParto.idCaixa}:${doParto.dtNascimento}`
+    const lugar: CandidataDaBusca = porLugar.get(chave) ?? {
+      idCaixa: doParto.idCaixa,
+      codigo: doParto.codigo,
+      numeroVisivel: doParto.numeroVisivel,
+      tipo: doParto.tipo,
+      dtNascimento: doParto.dtNascimento,
+      idadeNaEntrega,
+      origem: 'de_fato',
+      livres: { m: 0, f: 0 },
+      partos: [],
     }
+
+    lugar.livres = { m: lugar.livres.m + doParto.livres.m, f: lugar.livres.f + doParto.livres.f }
+    if (doParto.dtDesmameReal === null) lugar.origem = 'previsao'
+    lugar.partos.push({ ordem: doParto.ordem, casal: doParto.casal })
+    porLugar.set(chave, lugar)
   }
 
-  // na ordem da retirada: a caixa do casal, depois as de estoque, da que recebeu primeiro
-  return [null, ...parto.lotes.map((lote) => lote.idCaixa)].flatMap((idCaixa) => {
-    const lugar = porCaixa.get(idCaixa)
-    return lugar === undefined ? [] : [lugar]
+  // uma ordem fixa antes de ordenar: a estante e a caixa, para o empate sair sempre igual
+  return [...porLugar.values()].sort(
+    (a, b) =>
+      a.numeroVisivel.localeCompare(b.numeroVisivel) ||
+      a.codigo.localeCompare(b.codigo) ||
+      a.dtNascimento.localeCompare(b.dtNascimento),
+  )
+}
+
+/** Os vivos livres da linhagem na especie, por caixa e parto */
+async function lerLivres(idEspecie: number, idLinhagem: number): Promise<LivresDoParto[]> {
+  const linhas = await prisma.animal.groupBy({
+    by: ['idCaixa', 'idParto', 'sexo'],
+    where: { situacao: 'vivo', idPedido: null, caixa: { idEspecie }, parto: { casal: { idLinhagem } } },
+    _count: { _all: true },
   })
+  if (linhas.length === 0) return []
+
+  const [caixas, partos] = await Promise.all([
+    prisma.caixa.findMany({
+      where: { id: { in: [...new Set(linhas.map((linha) => linha.idCaixa))] } },
+      select: { id: true, codigo: true, tipo: true, estante: { select: { numeroVisivel: true } } },
+    }),
+    prisma.parto.findMany({
+      where: { id: { in: [...new Set(linhas.map((linha) => linha.idParto))] } },
+      select: { id: true, ordem: true, dtPartoReal: true, dtDesmameReal: true, casal: { select: { identificacao: true } } },
+    }),
+  ])
+
+  const porParto = new Map<string, LivresDoParto>()
+
+  for (const linha of linhas) {
+    const caixa = caixas.find((c) => c.id === linha.idCaixa)
+    const parto = partos.find((p) => p.id === linha.idParto)
+    if (caixa === undefined || parto === undefined || parto.dtPartoReal === null) continue
+
+    const chave = `${caixa.id}:${parto.id}`
+    const lido: LivresDoParto = porParto.get(chave) ?? {
+      idCaixa: caixa.id,
+      codigo: caixa.codigo,
+      numeroVisivel: caixa.estante.numeroVisivel,
+      tipo: caixa.tipo === 'estoque' ? 'estoque' : 'casal',
+      ordem: parto.ordem,
+      casal: parto.casal.identificacao.trim(),
+      dtNascimento: dataISO(parto.dtPartoReal),
+      dtDesmameReal: parto.dtDesmameReal,
+      livres: { m: 0, f: 0 },
+    }
+
+    if (linha.sexo === 'M') lido.livres.m += linha._count._all
+    else lido.livres.f += linha._count._all
+    porParto.set(chave, lido)
+  }
+
+  return [...porParto.values()]
 }
 
 /** GET /api/busca */
@@ -111,89 +161,9 @@ export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new
   const referencia = pedido.dataEntrega ?? hoje
   const idEspecie = await idDaEspecie(pedido.especie)
 
-  const caixas = await prisma.caixa.findMany({
-    where: {
-      idEspecie,
-      ...caixaComEstoque,
-      ...(pedido.excluir && pedido.excluir.length > 0 ? { id: { notIn: pedido.excluir } } : {}),
-      casais: {
-        some: pedido.idLinhagem === undefined ? {} : { idLinhagem: pedido.idLinhagem },
-      },
-    },
-    select: {
-      id: true,
-      face: true,
-      linha: true,
-      coluna: true,
-      estado: true,
-      estante: { select: { numeroVisivel: true, colunas: true } },
-      casais: {
-        where: pedido.idLinhagem === undefined ? {} : { idLinhagem: pedido.idLinhagem },
-        select: {
-          identificacao: true,
-          partos: {
-            orderBy: { ordem: 'asc' },
-            select: {
-              ...selecaoDoPartoComLugares,
-              ordem: true,
-              dtPartoReal: true,
-              dtDesmameReal: true,
-              // as caixas de estoque com os desmamados, para dizer onde estao os livres
-              lotes: {
-                orderBy: { id: 'asc' },
-                select: {
-                  id: true,
-                  idCaixa: true,
-                  qtd: true,
-                  caixa: { select: { sexo: true, ...POSICAO } },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  })
-
   const idade = { min: pedido.idadeMin, max: pedido.idadeMax }
   const faixa = faixaDoPedido(idade)
-
-  const candidatas = caixas.flatMap((caixa) =>
-    caixa.casais.flatMap((casal) =>
-      casal.partos.flatMap((parto) => {
-        if (parto.dtPartoReal === null) return []
-
-        const nascimento = dataISO(parto.dtPartoReal)
-        const idadeNaEntrega = diasEntre(nascimento, referencia)
-        if (idadeNaEntrega < faixa.min || idadeNaEntrega > faixa.max) return []
-
-        // o animal tem de estar desmamado ate a entrega
-        if (dataDoDesmame(nascimento, parto.dtDesmameReal) > referencia) return []
-
-        const { disponivel } = disponibilidadeDoParto(parto)
-        if (disponivel.m + disponivel.f === 0) return []
-
-        const origem: Origem = parto.dtDesmameReal ? 'de_fato' : 'previsao'
-
-        return [
-          {
-            idCaixa: caixa.id,
-            idParto: parto.id,
-            codigo: codigoDaPosicao(caixa.face, caixa.linha, caixa.coluna, caixa.estante.colunas),
-            numeroVisivel: caixa.estante.numeroVisivel,
-            estado: estadoCaixa.paraApi(caixa.estado),
-            casal: casal.identificacao.trim(),
-            parto: parto.ordem,
-            origem,
-            nascimento,
-            idadeNaEntrega,
-            disponivel,
-            onde: ondeEstaoOsLivres(parto, caixa),
-          },
-        ]
-      }),
-    ),
-  )
+  const candidatas = lugaresDaBusca(await lerLivres(idEspecie, pedido.idLinhagem), faixa, referencia)
 
   const { itens, deficit } = sugerirAlocacao(ordenar(candidatas, idade), {
     m: pedido.machos,

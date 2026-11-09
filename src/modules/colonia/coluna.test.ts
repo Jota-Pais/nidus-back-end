@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { colunaDaCaixa } from './coluna.ts'
+import { colunaDaCaixa, inicioDoEnviado } from './coluna.ts'
 import type { CaixaNoQuadro } from './coluna.ts'
 
 const hoje = '2026-11-08'
@@ -33,6 +33,8 @@ describe('coluna do Kanban calculada dos animais', () => {
     expect(enviada('2026-11-08')).toBe('enviado')
     expect(enviada('2026-11-01')).toBe('enviado')
     expect(enviada('2026-10-31')).toBeNull()
+    // o mesmo corte que o Kanban usa para ler as caixas enviadas do banco
+    expect(inicioDoEnviado(hoje)).toBe('2026-11-01')
   })
 
   it('liberada por baixa, mudanca ou casal encerrado nao aparece, nem a caixa de casal enviada', () => {

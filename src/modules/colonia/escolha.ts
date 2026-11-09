@@ -8,8 +8,9 @@
 // escolhe ao mesmo tempo pula os travados (SKIP LOCKED) em vez de esperar.
 
 import { Prisma } from '@prisma/client'
-import { erroDeRegra } from '../../shared/erros.ts'
+import { campoInvalido, erroDeRegra } from '../../shared/erros.ts'
 import { exigirOrdem } from '../reproducao/ordemDasDatas.ts'
+import { idadesNaCaixa } from './consultas.ts'
 import { ROTULO_DO_SEXO } from './tipos.ts'
 import type { Sexo } from './tipos.ts'
 
@@ -29,6 +30,11 @@ export type Escolha = {
   idPedido?: number | undefined
   /** Nunca os reservados: a troca de sexo, por exemplo, nao mexe em animal de pedido */
   soLivres?: boolean | undefined
+  /**
+   * So os reservados do pedido indicado, sem passar pelos livres: a mudanca que junta numa caixa
+   * os animais de um pedido
+   */
+  soDoPedido?: boolean | undefined
   /** Ids ja escolhidos nesta transacao, que o FOR UPDATE nao esconde de quem os travou */
   excluir?: number[] | undefined
   /** O campo do formulario que recebe a mensagem quando falta dizer o pedido */
@@ -114,8 +120,8 @@ export function pedidoDosReservados(
   )
 }
 
-function semAnimais(grupo: Grupo, qtd: number, achados: number) {
-  const rotulo = ROTULO_DO_SEXO[grupo.sexo]
+function semAnimais(grupo: Grupo, qtd: number, achados: number, idPedido?: number) {
+  const rotulo = idPedido === undefined ? ROTULO_DO_SEXO[grupo.sexo] : `${ROTULO_DO_SEXO[grupo.sexo]} do pedido #${idPedido}`
   const onde = grupo.idParto === undefined ? 'neste grupo' : 'deste parto'
 
   return erroDeRegra(
@@ -124,6 +130,31 @@ function semAnimais(grupo: Grupo, qtd: number, achados: number) {
       ? `Nao ha ${rotulo} vivos ${onde} para esta operacao.`
       : `Pediu ${qtd} ${rotulo}, mas so ha ${achados} vivos ${onde} para esta operacao.`,
   )
+}
+
+/**
+ * A idade do grupo de onde saem os animais de um sexo da caixa: a indicada, ou a unica que ha.
+ * Com mais de uma idade naquele sexo, quem registra diz de qual (mensagem no campo)
+ */
+export async function idadeDoGrupo(
+  tx: Parameters<typeof idadesNaCaixa>[0],
+  idCaixa: number,
+  sexo: Sexo,
+  indicada: string | undefined,
+  campo: string,
+): Promise<string | undefined> {
+  if (indicada !== undefined) return indicada
+
+  const idades = await idadesNaCaixa(tx, idCaixa, sexo)
+
+  if (idades.length > 1) {
+    throw campoInvalido(
+      campo,
+      `A caixa tem ${ROTULO_DO_SEXO[sexo]} de mais de uma idade: diga a data de nascimento (${idades.join(', ')}).`,
+    )
+  }
+
+  return idades[0]
 }
 
 /**
@@ -139,6 +170,13 @@ export async function escolherAnimais(
   if (qtd === 0) return []
 
   const excluir = escolha.excluir ?? []
+
+  if (escolha.soDoPedido === true && escolha.idPedido !== undefined) {
+    const doPedido = await travarVivos(tx, grupo, excluir, escolha.idPedido, qtd)
+    if (doPedido.length < qtd) throw semAnimais(grupo, qtd, doPedido.length, escolha.idPedido)
+    return doPedido
+  }
+
   const livres = await travarVivos(tx, grupo, excluir, null, qtd)
   const faltam = qtd - livres.length
 

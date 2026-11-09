@@ -122,7 +122,7 @@ const db = {
     findFirst: async () => (banco.parValido ? { id: 1 } : null),
     findMany: async () => [{ grupoFemea: 'B' }],
   },
-  estante: { findUnique: async () => ({ id: 1, faces: 2, linhas: 3, colunas: 3 }) },
+  estante: { findFirst: async () => ({ id: 1, numeroVisivel: 'E1', faces: 2, linhas: 3, colunas: 3 }) },
   caixa: {
     findUnique: async ({ where }: { where: { id: number } }) => {
       const caixa = banco.caixas.get(where.id)

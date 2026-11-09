@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { DATA_PROXIMA_DEMAIS, avaliarViabilidade, resumirBusca } from './viabilidade.service.ts'
 
-// O banco aqui e de mentira, como em 'motor.service.test.ts': a linhagem e de rato e
-// 'caixa.findMany' devolve as caixas que cada teste deixou em 'banco'. Nada e gravado
+// O banco aqui e de mentira, como em 'motor.service.test.ts': a linhagem e de rato e os vivos
+// livres sao os das caixas que cada teste deixou em 'banco'. Nada e gravado
 
 // hoje e 30/10 em Brasilia. Com idade minima de 21 dias, o acasalamento novo entrega a partir
 // de 30/10 + 23 + 21 = 13/12
@@ -13,39 +13,9 @@ const DATA_MINIMA = '2026-12-13'
 const dia = (data: string) => new Date(`${data}T00:00:00.000Z`)
 
 /** caixa com um parto ja desmamado, nascido em 'nascimento', com 4 machos e 4 femeas livres */
-const caixa = (id: number, nascimento: string) => ({
-  id,
-  face: 1,
-  linha: 1,
-  coluna: id,
-  estado: 'R',
-  estante: { numeroVisivel: '1', colunas: 12 },
-  casais: [
-    {
-      identificacao: 'AB',
-      ativo: true,
-      partos: [
-        {
-          id,
-          ordem: 1,
-          dtPartoPrevisto: dia(nascimento),
-          dtPartoReal: dia(nascimento),
-          dtDesmameReal: dia('2026-11-02'),
-          nascidoM: 5,
-          nascidoF: 5,
-          eutanasiadoM: 1,
-          eutanasiadoF: 1,
-          desmamadoM: 4,
-          desmamadoF: 4,
-          compromissos: [],
-          lotes: [],
-        },
-      ],
-    },
-  ],
-})
+const caixa = (id: number, nascimento: string) => ({ id, nascimento })
 
-const banco = vi.hoisted(() => ({ caixas: [] as unknown[], linhagem: true }))
+const banco = vi.hoisted(() => ({ caixas: [] as { id: number; nascimento: string }[], linhagem: true }))
 
 vi.mock('../../shared/prisma.ts', () => ({
   prisma: {
@@ -53,7 +23,26 @@ vi.mock('../../shared/prisma.ts', () => ({
       findUnique: async () => (banco.linhagem ? { especie: { nome: 'Rato' } } : null),
     },
     especie: { findMany: async () => [{ id: 1, nome: 'Rato' }] },
-    caixa: { findMany: async () => banco.caixas },
+    animal: {
+      groupBy: async () =>
+        banco.caixas.flatMap(({ id }) =>
+          ['M', 'F'].map((sexo) => ({ idCaixa: id, idParto: id, sexo, _count: { _all: 4 } })),
+        ),
+    },
+    caixa: {
+      findMany: async () =>
+        banco.caixas.map(({ id }) => ({ id, codigo: 'F1A', tipo: 'casal', estante: { numeroVisivel: '1' } })),
+    },
+    parto: {
+      findMany: async () =>
+        banco.caixas.map(({ id, nascimento }) => ({
+          id,
+          ordem: 1,
+          dtPartoReal: dia(nascimento),
+          dtDesmameReal: dia('2026-11-02'),
+          casal: { identificacao: 'AB' },
+        })),
+    },
   },
 }))
 

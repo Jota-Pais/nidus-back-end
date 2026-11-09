@@ -25,6 +25,11 @@ export type CaixaNoQuadro = {
   reservados: number
 }
 
+/** A entrega mais antiga cuja caixa ainda aparece em Enviado hoje, 'aaaa-mm-dd' */
+export function inicioDoEnviado(hoje: string = hojeISO()): string {
+  return somarDias(hoje, -DIAS_EM_ENVIADO)
+}
+
 /**
  * A coluna da caixa, ou null quando ela nao aparece no Kanban. A de casal ativa fica em Livres
  * (o card diz quantos reservados tem). A de estoque ativa fica em Reserva se tem vivos e todos
@@ -41,7 +46,7 @@ export function colunaDaCaixa(caixa: CaixaNoQuadro, hoje: string = hojeISO()): C
     caixa.tipo === 'estoque' &&
     caixa.motivoLiberacao === 'entrega' &&
     caixa.dtLiberacao !== null &&
-    caixa.dtLiberacao >= somarDias(hoje, -DIAS_EM_ENVIADO)
+    caixa.dtLiberacao >= inicioDoEnviado(hoje)
 
   return enviadaHaPouco ? 'enviado' : null
 }

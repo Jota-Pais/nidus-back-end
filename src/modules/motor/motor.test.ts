@@ -26,12 +26,12 @@ describe('faixa de idade aceita', () => {
   })
 })
 
-const candidata = (id: number, origem: Candidata['origem'], idade: number, m: number, f: number): Candidata => ({
+/** um lugar candidato; o idCaixa so serve para o teste reconhecer a ordem */
+const candidata = (id: number, origem: Candidata['origem'], idade: number, m: number, f: number) => ({
   idCaixa: id,
-  idParto: id,
   origem,
   idadeNaEntrega: idade,
-  disponivel: { m, f },
+  livres: { m, f },
 })
 
 const exata = (idade: number) => ({ min: idade, max: idade })
@@ -104,7 +104,7 @@ describe('ordem das candidatas', () => {
 })
 
 describe('sugestao de alocacao', () => {
-  it('pega na ordem ate cobrir o pedido, sem passar do disponivel', () => {
+  it('pega na ordem ate cobrir o pedido, sem passar dos livres', () => {
     const { itens, deficit } = sugerirAlocacao(
       [candidata(1, 'de_fato', 28, 3, 5), candidata(2, 'previsao', 28, 4, 4), candidata(3, 'previsao', 28, 4, 4)],
       { m: 5, f: 5, qualquer: 0 },

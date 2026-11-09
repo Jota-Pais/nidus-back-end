@@ -41,12 +41,22 @@ O que mora aqui:
   por engano se anula (`POST /api/ocorrencias/:id/anulacao`). Cada ação grava uma
   ocorrência com os animais que tocou, e só `lancarOcorrencia`
   (`src/modules/colonia/ocorrencia.ts`) escreve nos animais
+- **Caixas** - a caixa é só o lugar. Desmamados mudam de caixa por
+  `POST /api/caixas/:id/mudanca`: da caixa do casal para o estoque, ou de estoque
+  para estoque, cada sexo para uma caixa de estoque do mesmo sexo e linhagem ou
+  para uma caixa nova numa posição vazia. Saem os livres primeiro, ou só os
+  reservados do pedido indicado, e a reserva vai junto. A caixa do casal
+  encerrado com desmamados de um sexo vira de estoque no lugar
+  (`POST /api/caixas/:id/estoque`). A caixa que esvazia é liberada com a data e o
+  motivo do fato. A coluna do Kanban não é gravada: sai do que a caixa tem
+  (`colunaDaCaixa`), e a de estoque esvaziada pela entrega fica 7 dias em Enviado
 - **Solicitações** - o pedido do pesquisador, com o protocolo CEUA dele, sem
   depender de projeto cadastrado: machos, fêmeas e animais de qualquer sexo, com
   idade exata ou faixa de idade
-- **Busca de atendimento** - dado um pedido, quais caixas atendem: primeiro o que
-  já desmamou, depois o que já nasceu, por último o parto previsto. Dentro de
-  cada grupo, na faixa de idade, primeiro o que está dentro da faixa pedida e
+- **Busca de atendimento** - dado um pedido, de onde sairiam os animais: os vivos
+  livres da linhagem, por caixa e data de nascimento (dentro da caixa, só a idade
+  distingue os ratos). Primeiro o que já desmamou, depois o que desmama até a
+  entrega. Dentro de cada grupo, na faixa de idade, primeiro o que está dentro da faixa pedida e
   depois o que só entra pela tolerância, cada parte do mais velho para o mais
   novo; na idade exata, a mais próxima. O que faltar vira casais novos a formar
 - **Alocação** - cada caixa aceita vira compromisso, e a soma dos compromissos de
@@ -146,7 +156,7 @@ src/
   shared/              prisma, erros, tradução dos códigos do banco, autorização,
                        parâmetros biológicos, envio de e-mail
   modules/
-    infra/             salas, estantes, grade, kanban e ficha
+    infra/             salas, estantes, grade, kanban, ficha e a mudanca de animais entre caixas
     reproducao/        casais e partos
     colonia/           os animais: escolha, baixa, anulacao, liberacao da caixa e a trilha
     demanda/           projetos CEUA, solicitações e alocação

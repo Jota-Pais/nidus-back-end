@@ -1,35 +1,41 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mudarDePosicao } from './caixa.service.ts'
 
+// A mudanca de posicao com o banco de mentira: o codigo novo vem do trigger da posicao, que aqui
+// e o 'update' devolvendo o codigo que o banco escreveria
+
 const banco = vi.hoisted(() => ({
   caixa: null as Record<string, unknown> | null,
   estante: null as Record<string, unknown> | null,
   ocupante: null as Record<string, unknown> | null,
   gravado: null as Record<string, unknown> | null,
   historico: null as Record<string, unknown> | null,
+  travas: [] as unknown[],
 }))
 
-vi.mock('../../shared/prisma.ts', () => ({
-  prisma: {
-    caixa: {
-      findUnique: async () => banco.caixa,
-      findFirst: async () => banco.ocupante,
-    },
-    estante: { findFirst: async () => banco.estante },
-    $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
-      fn({
-        caixa: {
-          update: async ({ data }: { data: Record<string, unknown> }) => {
-            banco.gravado = data
-          },
-        },
-        historico: {
-          create: async ({ data }: { data: Record<string, unknown> }) => {
-            banco.historico = data
-          },
-        },
-      }),
+const tx = {
+  $queryRaw: async (...args: unknown[]) => {
+    banco.travas.push(args)
+    return []
   },
+  caixa: {
+    findUnique: async () => banco.caixa,
+    findFirst: async () => banco.ocupante,
+    update: async ({ data }: { data: Record<string, unknown> }) => {
+      banco.gravado = data
+      return { codigo: 'T3G' }
+    },
+  },
+  estante: { findFirst: async () => banco.estante },
+  historico: {
+    create: async ({ data }: { data: Record<string, unknown> }) => {
+      banco.historico = data
+    },
+  },
+}
+
+vi.mock('../../shared/prisma.ts', () => ({
+  prisma: { $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(tx) },
 }))
 
 const destino = { idEstante: 2, face: 'traseira' as const, linha: 3, coluna: 2 }
@@ -41,12 +47,20 @@ beforeEach(() => {
   banco.ocupante = null
   banco.gravado = null
   banco.historico = null
+  banco.travas = []
 })
 
 describe('mudar caixa de posicao', () => {
-  it('posicao vazia: grava o endereco novo e o codigo da etiqueta', async () => {
+  it('posicao vazia: grava o endereco novo, sem escrever o codigo, e devolve o que o trigger escreveu', async () => {
     await expect(mudarDePosicao(7, destino, 1)).resolves.toEqual({ idCaixa: 7, idEstante: 2, codigo: 'T3G' })
-    expect(banco.gravado).toEqual({ idEstante: 2, face: 2, linha: 3, coluna: 2, codigo: 'T3G' })
+    expect(banco.gravado).toMatchObject({ idEstante: 2, face: 2, linha: 3, coluna: 2 })
+    expect(banco.gravado).not.toHaveProperty('codigo')
+  })
+
+  it('trava a caixa antes de ler: duas mudancas da mesma caixa ficam em fila', async () => {
+    await mudarDePosicao(7, destino, 1)
+
+    expect(banco.travas).toHaveLength(1)
   })
 
   it('grava no historico quem moveu, de onde e para onde', async () => {
@@ -61,6 +75,12 @@ describe('mudar caixa de posicao', () => {
     })
   })
 
+  it('a posicao onde ela ja esta e aceita', async () => {
+    banco.ocupante = { id: 7 }
+
+    await expect(mudarDePosicao(7, destino, 1)).resolves.toMatchObject({ idCaixa: 7 })
+  })
+
   it('posicao ocupada por outra caixa e recusada', async () => {
     banco.ocupante = { id: 9 }
 
@@ -68,8 +88,10 @@ describe('mudar caixa de posicao', () => {
     expect(banco.gravado).toBeNull()
   })
 
-  it('posicao fora da estante e recusada', async () => {
-    await expect(mudarDePosicao(7, { ...destino, linha: 6 }, 1)).rejects.toEqual(recusa(400, 'VALIDACAO'))
+  it('posicao fora da estante e recusada no campo', async () => {
+    await expect(mudarDePosicao(7, { ...destino, linha: 6 }, 1)).rejects.toEqual(
+      expect.objectContaining({ status: 400, extras: { campos: { posicao: 'Esta posicao nao existe na estante.' } } }),
+    )
     expect(banco.gravado).toBeNull()
   })
 
@@ -79,10 +101,16 @@ describe('mudar caixa de posicao', () => {
     await expect(mudarDePosicao(7, destino, 1)).rejects.toEqual(recusa(404, 'NAO_ENCONTRADO'))
   })
 
-  it('caixa inativa nao se move', async () => {
-    banco.caixa = { id: 7, ativa: false }
+  it('caixa liberada nao se move: a posicao dela ja pode ter outra caixa', async () => {
+    banco.caixa = { id: 7, ativa: false, codigo: 'F1A' }
+
+    await expect(mudarDePosicao(7, destino, 1)).rejects.toEqual(recusa(409, 'CAIXA_LIBERADA'))
+    expect(banco.gravado).toBeNull()
+  })
+
+  it('caixa que nao existe', async () => {
+    banco.caixa = null
 
     await expect(mudarDePosicao(7, destino, 1)).rejects.toEqual(recusa(404, 'NAO_ENCONTRADO'))
-    expect(banco.gravado).toBeNull()
   })
 })

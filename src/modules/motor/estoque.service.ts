@@ -1,81 +1,74 @@
+// O que a colonia tem livre, por linhagem: os vivos sem reserva, contados nos animais. Confirmado
+// e quem ja desmamou; previsto, quem ainda mama. Quem morreu sai pela baixa
+
 import { prisma } from '../../shared/prisma.ts'
+import type { PorSexo } from '../colonia/tipos.ts'
 import { idDaEspecie } from '../infra/infra.service.ts'
-import { compromissosAtivos, disponibilidadeDoParto } from '../reproducao/disponibilidade.ts'
-import type { PorSexo } from '../reproducao/disponibilidade.ts'
-import { caixaComEstoque } from '../infra/liberacaoDaCaixa.ts'
 
 type Faixa = 'confirmado' | 'previsto'
 
-export type PartoDoEstoque = {
-  dtPartoReal: Date | null
-  nascidoM: number | null
-  nascidoF: number | null
-  eutanasiadoM: number | null
-  eutanasiadoF: number | null
-  desmamadoM: number | null
-  desmamadoF: number | null
-  compromissos: { qtdM: number; qtdF: number }[]
-  casal: { idLinhagem: number }
-}
+/** Os vivos livres de um parto, num sexo */
+export type LivresNoEstoque = { idLinhagem: number; desmamado: boolean; sexo: string; qtd: number }
 
-function faixaDo(parto: PartoDoEstoque): Faixa | null {
-  if (parto.desmamadoM !== null && parto.desmamadoF !== null) return 'confirmado'
-  if (parto.nascidoM !== null && parto.nascidoF !== null) return 'previsto'
-  return null
-}
-
-const somar = (a: PorSexo, b: PorSexo): PorSexo => ({ m: a.m + b.m, f: a.f + b.f })
-
-export function montarEstoque(
-  linhagens: { id: number; nome: string }[],
-  partos: PartoDoEstoque[],
-) {
+export function montarEstoque(linhagens: { id: number; nome: string }[], livres: LivresNoEstoque[]) {
   return linhagens.map((linhagem) => {
-    const vazio = { m: 0, f: 0 }
-    const faixas: Record<Faixa, PorSexo> = { confirmado: vazio, previsto: vazio }
+    const faixas: Record<Faixa, PorSexo> = { confirmado: { m: 0, f: 0 }, previsto: { m: 0, f: 0 } }
 
-    for (const parto of partos) {
-      if (parto.casal.idLinhagem !== linhagem.id) continue
+    for (const grupo of livres) {
+      if (grupo.idLinhagem !== linhagem.id) continue
 
-      const faixa = faixaDo(parto)
-      if (faixa === null) continue
-
-      faixas[faixa] = somar(faixas[faixa], disponibilidadeDoParto(parto).disponivel)
+      const faixa = faixas[grupo.desmamado ? 'confirmado' : 'previsto']
+      if (grupo.sexo === 'M') faixa.m += grupo.qtd
+      else faixa.f += grupo.qtd
     }
 
     return {
       idLinhagem: linhagem.id,
       linhagem: linhagem.nome,
       ...faixas,
-      total: somar(faixas.confirmado, faixas.previsto),
+      total: { m: faixas.confirmado.m + faixas.previsto.m, f: faixas.confirmado.f + faixas.previsto.f },
     }
   })
 }
 
+/** GET /api/estoque */
 export async function consultarEstoque(codigoEspecie: string) {
   const idEspecie = await idDaEspecie(codigoEspecie)
 
-  const [linhagens, partos] = await Promise.all([
+  const [linhagens, linhas] = await Promise.all([
     prisma.linhagem.findMany({
       where: { idEspecie, ativa: true },
       orderBy: { nome: 'asc' },
       select: { id: true, nome: true },
     }),
-    prisma.parto.findMany({
-      where: { casal: { caixa: { idEspecie, ...caixaComEstoque } } },
-      select: {
-        dtPartoReal: true,
-        nascidoM: true,
-        nascidoF: true,
-        eutanasiadoM: true,
-        eutanasiadoF: true,
-        desmamadoM: true,
-        desmamadoF: true,
-        compromissos: compromissosAtivos,
-        casal: { select: { idLinhagem: true } },
-      },
+    prisma.animal.groupBy({
+      by: ['idParto', 'sexo'],
+      where: { situacao: 'vivo', idPedido: null, caixa: { idEspecie } },
+      _count: { _all: true },
     }),
   ])
 
-  return { especie: codigoEspecie, linhagens: montarEstoque(linhagens, partos) }
+  const partos =
+    linhas.length === 0
+      ? []
+      : await prisma.parto.findMany({
+          where: { id: { in: [...new Set(linhas.map((linha) => linha.idParto))] } },
+          select: { id: true, dtDesmameReal: true, casal: { select: { idLinhagem: true } } },
+        })
+
+  const livres = linhas.flatMap((linha): LivresNoEstoque[] => {
+    const parto = partos.find((p) => p.id === linha.idParto)
+    if (parto === undefined) return []
+
+    return [
+      {
+        idLinhagem: parto.casal.idLinhagem,
+        desmamado: parto.dtDesmameReal !== null,
+        sexo: linha.sexo,
+        qtd: linha._count._all,
+      },
+    ]
+  })
+
+  return { especie: codigoEspecie, linhagens: montarEstoque(linhagens, livres) }
 }

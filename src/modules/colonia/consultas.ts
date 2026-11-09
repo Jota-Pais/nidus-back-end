@@ -19,28 +19,114 @@ function contar(linhas: { sexo: string; _count: { _all: number } }[]): PorSexo {
 
 // ------------------------------------------------------------ por caixa
 
-export type VivosDaCaixa = { vivos: PorSexo; reservados: PorSexo }
+/** Os vivos de um parto dentro de uma caixa: a menor parte que as telas mostram */
+export type VivosDoParto = {
+  idParto: number
+  ordem: number
+  /** a identificacao do casal que teve o parto */
+  casal: string
+  idLinhagem: number
+  /** 'aaaa-mm-dd' */
+  dtNascimento: string
+  desmamado: boolean
+  /** a caixa do casal, de onde a ninhada saiu (ou onde ainda esta) */
+  caixaDoCasal: { idCaixa: number; codigo: string; numeroVisivel: string }
+  vivos: PorSexo
+  reservados: PorSexo
+}
 
-/** Os vivos de cada caixa, por sexo, e quantos deles estao reservados. Caixa sem vivo fica zerada */
-export async function vivosPorCaixa(banco: Leitura, idsCaixa: number[]): Promise<Map<number, VivosDaCaixa>> {
-  const porCaixa = new Map<number, VivosDaCaixa>(
-    idsCaixa.map((id) => [id, { vivos: { m: 0, f: 0 }, reservados: { m: 0, f: 0 } }]),
-  )
+/** O que esta vivo numa caixa: o total, os reservados, por parto e por pedido */
+export type VivosNaCaixa = {
+  vivos: PorSexo
+  reservados: PorSexo
+  /** do nascimento mais antigo para o mais novo */
+  partos: VivosDoParto[]
+  /** os reservados de cada pedido nesta caixa, em ordem de pedido */
+  pedidos: (PorSexo & { idPedido: number })[]
+}
+
+/** A caixa sem vivo nenhum */
+export const semVivos = (): VivosNaCaixa => ({ vivos: { m: 0, f: 0 }, reservados: { m: 0, f: 0 }, partos: [], pedidos: [] })
+
+function somarNo(contagem: PorSexo, sexo: string, qtd: number): void {
+  if (sexo === 'M') contagem.m += qtd
+  else contagem.f += qtd
+}
+
+/**
+ * Os vivos de cada caixa, numa leitura so: o total e os reservados por sexo, por parto de origem
+ * e por pedido. E de onde o Kanban, a grade, o card e as fichas tiram os numeros. Caixa sem vivo
+ * fica zerada
+ */
+export async function vivosNasCaixas(banco: Leitura, idsCaixa: number[]): Promise<Map<number, VivosNaCaixa>> {
+  const porCaixa = new Map<number, VivosNaCaixa>(idsCaixa.map((id) => [id, semVivos()]))
   if (idsCaixa.length === 0) return porCaixa
 
   const linhas = await banco.animal.groupBy({
-    by: ['idCaixa', 'sexo', 'idPedido'],
+    by: ['idCaixa', 'idParto', 'sexo', 'idPedido'],
     where: { idCaixa: { in: idsCaixa }, situacao: 'vivo' },
     _count: { _all: true },
   })
+  if (linhas.length === 0) return porCaixa
 
-  for (const linha of linhas) {
-    const caixa = porCaixa.get(linha.idCaixa)
-    if (caixa === undefined) continue
+  const partos = await banco.parto.findMany({
+    where: { id: { in: [...new Set(linhas.map((linha) => linha.idParto))] } },
+    orderBy: [{ dtPartoReal: 'asc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      ordem: true,
+      dtPartoReal: true,
+      dtDesmameReal: true,
+      casal: {
+        select: {
+          identificacao: true,
+          idLinhagem: true,
+          caixa: { select: { id: true, codigo: true, estante: { select: { numeroVisivel: true } } } },
+        },
+      },
+    },
+  })
 
-    const lado = linha.sexo === 'M' ? 'm' : 'f'
-    caixa.vivos[lado] += linha._count._all
-    if (linha.idPedido !== null) caixa.reservados[lado] += linha._count._all
+  for (const [idCaixa, caixa] of porCaixa) {
+    const daCaixa = linhas.filter((linha) => linha.idCaixa === idCaixa)
+    const pedidos = new Map<number, PorSexo>()
+
+    for (const linha of daCaixa) {
+      somarNo(caixa.vivos, linha.sexo, linha._count._all)
+      if (linha.idPedido === null) continue
+
+      somarNo(caixa.reservados, linha.sexo, linha._count._all)
+      const doPedido = pedidos.get(linha.idPedido) ?? { m: 0, f: 0 }
+      somarNo(doPedido, linha.sexo, linha._count._all)
+      pedidos.set(linha.idPedido, doPedido)
+    }
+
+    caixa.pedidos = [...pedidos.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([idPedido, qtd]) => ({ idPedido, ...qtd }))
+
+    caixa.partos = partos.flatMap((parto) => {
+      const doParto = daCaixa.filter((linha) => linha.idParto === parto.id)
+      if (doParto.length === 0 || parto.dtPartoReal === null) return []
+
+      return [
+        {
+          idParto: parto.id,
+          ordem: parto.ordem,
+          casal: parto.casal.identificacao.trim(),
+          idLinhagem: parto.casal.idLinhagem,
+          dtNascimento: dataISO(parto.dtPartoReal),
+          desmamado: parto.dtDesmameReal !== null,
+          caixaDoCasal: {
+            idCaixa: parto.casal.caixa.id,
+            codigo: parto.casal.caixa.codigo,
+            numeroVisivel: parto.casal.caixa.estante.numeroVisivel,
+          },
+          vivos: contar(doParto),
+          reservados: contar(doParto.filter((linha) => linha.idPedido !== null)),
+        },
+      ]
+    })
   }
 
   return porCaixa
@@ -58,25 +144,15 @@ export type NinhadaNaCaixa = {
 
 /** Os vivos de uma caixa por parto de origem, na ordem dos partos. Vazio quando nao ha vivo */
 export async function ninhadasNaCaixa(banco: Leitura, idCaixa: number): Promise<NinhadaNaCaixa[]> {
-  const linhas = await banco.animal.groupBy({
-    by: ['idParto', 'sexo'],
-    where: { idCaixa, situacao: 'vivo' },
-    _count: { _all: true },
-  })
-  if (linhas.length === 0) return []
+  const naCaixa = (await vivosNasCaixas(banco, [idCaixa])).get(idCaixa)
 
-  const partos = await banco.parto.findMany({
-    where: { id: { in: [...new Set(linhas.map((linha) => linha.idParto))] } },
-    orderBy: [{ dtPartoReal: 'asc' }, { id: 'asc' }],
-    select: { id: true, ordem: true, dtDesmameReal: true, casal: { select: { identificacao: true } } },
-  })
-
-  return partos.map((parto) => ({
-    idParto: parto.id,
+  return (naCaixa?.partos ?? []).map((parto) => ({
+    idParto: parto.idParto,
     ordem: parto.ordem,
-    casal: parto.casal.identificacao.trim(),
-    ...contar(linhas.filter((linha) => linha.idParto === parto.id)),
-    desmamado: parto.dtDesmameReal !== null,
+    casal: parto.casal,
+    m: parto.vivos.m,
+    f: parto.vivos.f,
+    desmamado: parto.desmamado,
   }))
 }
 

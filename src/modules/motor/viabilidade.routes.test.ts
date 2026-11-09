@@ -14,7 +14,8 @@ vi.mock('../../shared/prisma.ts', () => ({
   prisma: {
     linhagem: { findUnique: async () => ({ especie: { nome: 'Rato' } }) },
     especie: { findMany: async () => [{ id: 1, nome: 'Rato' }] },
-    caixa: { findMany: async () => [] },
+    // a colonia vazia: nenhum vivo livre
+    animal: { groupBy: async () => [] },
   },
 }))
 

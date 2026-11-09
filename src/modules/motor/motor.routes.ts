@@ -14,7 +14,7 @@ export const viabilidadeRoutes = Router()
 export const filtroDaBusca = z
   .object({
     especie: z.string().trim().min(1),
-    idLinhagem: z.coerce.number().int().positive().max(2147483647).optional(),
+    idLinhagem: z.coerce.number().int().positive().max(2147483647),
     machos: z.coerce.number().int().min(0).max(9999),
     femeas: z.coerce.number().int().min(0).max(9999),
     qualquer: z.coerce.number().int().min(0).max(9999),
@@ -22,11 +22,6 @@ export const filtroDaBusca = z
     idadeMin: z.coerce.number().int().min(1).max(300),
     idadeMax: z.coerce.number().int().min(1).max(300),
     dataEntrega: z.iso.date('Data invalida. Use aaaa-mm-dd.').optional(),
-    /** ids separados por virgula */
-    excluir: z
-      .string()
-      .optional()
-      .transform((ids) => (ids ? ids.split(',').map(Number).filter(Number.isInteger) : [])),
   })
   .refine((filtro) => filtro.idadeMax >= filtro.idadeMin, {
     path: ['idadeMax'],

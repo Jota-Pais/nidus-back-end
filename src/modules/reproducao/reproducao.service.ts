@@ -11,6 +11,8 @@ import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { dataISO, paraData } from '../../shared/traducao.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
+import { lerPosicao } from '../infra/posicao.ts'
+import type { PosicaoNaEstante } from '../infra/posicao.ts'
 import { animaisDoParto, faltasDosPedidos, ninhadasNaCaixa } from '../colonia/consultas.ts'
 import type { NinhadaNaCaixa } from '../colonia/consultas.ts'
 import { escolherAnimais, exigirDepoisDaChegada, pedidosTocados } from '../colonia/escolha.ts'
@@ -162,42 +164,13 @@ export type PartoTravado = Awaited<ReturnType<typeof travarELerParto>>
 
 // ------------------------------------------------------------ formar casal
 
-export type PosicaoVazia = {
-  idEstante: number
-  face: 'frontal' | 'traseira'
-  linha: number
-  coluna: number
-}
-
 export type NovoCasal = {
   idCaixa?: number | undefined
-  posicao?: PosicaoVazia | undefined
+  posicao?: PosicaoNaEstante | undefined
   idLinhagem: number
   grupoMacho: string
   grupoFemea: string
   dtFormacao: string
-}
-
-/** A estante e a caixa ativa que ocupa a posicao (null se vazia). Recusa posicao fora da estante */
-async function caixaNaPosicao(tx: Transacao, posicao: PosicaoVazia) {
-  const estante = await tx.estante.findUnique({ where: { id: posicao.idEstante } })
-
-  if (estante === null) {
-    throw naoEncontrado('Estante')
-  }
-
-  const face = posicao.face === 'frontal' ? 1 : 2
-
-  if (face > estante.faces || posicao.linha > estante.linhas || posicao.coluna > estante.colunas) {
-    throw new ErroDeAplicacao(400, 'VALIDACAO', 'Esta posicao nao existe na estante.')
-  }
-
-  const caixa = await tx.caixa.findFirst({
-    where: { idEstante: estante.id, face, linha: posicao.linha, coluna: posicao.coluna, ativa: true },
-    select: { id: true },
-  })
-
-  return { estante, face, caixa }
 }
 
 /**
@@ -272,21 +245,21 @@ export async function formarCasal(dados: NovoCasal, idUsuario: number) {
   // um casal ativo por caixa tambem fica no indice parcial do banco, e uma posicao com uma caixa
   // ativa no outro: se a corrida passar por aqui, erros-do-banco.ts traduz
   const casal = await prisma.$transaction(async (tx) => {
-    const naPosicao = dados.posicao === undefined ? null : await caixaNaPosicao(tx, dados.posicao)
-    const idExistente = dados.idCaixa ?? naPosicao?.caixa?.id
+    const naPosicao = dados.posicao === undefined ? null : await lerPosicao(tx, dados.posicao, 'posicao')
+    const idExistente = dados.idCaixa ?? naPosicao?.ocupante?.id
     let idCaixa: number
 
     if (idExistente !== undefined) {
       await travarCaixas(tx, [idExistente])
       await exigirCaixaParaCasal(tx, idExistente, linhagem.idEspecie)
       idCaixa = idExistente
-    } else if (naPosicao !== null && dados.posicao !== undefined) {
+    } else if (naPosicao !== null) {
       const criada = await tx.caixa.create({
         data: {
           idEstante: naPosicao.estante.id,
           face: naPosicao.face,
-          linha: dados.posicao.linha,
-          coluna: dados.posicao.coluna,
+          linha: naPosicao.linha,
+          coluna: naPosicao.coluna,
           idEspecie: linhagem.idEspecie,
           tipo: 'casal',
         },

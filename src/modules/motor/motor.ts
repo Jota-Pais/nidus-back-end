@@ -3,7 +3,7 @@
 // quem le o banco e 'motor.service.ts'
 
 import { ESPERADOS_POR_CASAL, FAIXAS_IDADE } from '../../shared/parametros.ts'
-import type { PorSexo } from '../reproducao/disponibilidade.ts'
+import type { PorSexo } from '../colonia/tipos.ts'
 
 /** De onde vem o animal: ja desmamado ou ja nascido */
 export type Origem = 'de_fato' | 'previsao'
@@ -37,12 +37,11 @@ export function faixaDoPedido(idade: IdadePedida): { min: number; max: number } 
   return { min: faixaAceita(idade.min).min, max: faixaAceita(idade.max).max }
 }
 
+/** Um lugar de onde sair animais: a caixa e a data de nascimento, com os vivos livres dela */
 export type Candidata = {
-  idCaixa: number
-  idParto: number
   origem: Origem
   idadeNaEntrega: number
-  disponivel: PorSexo
+  livres: PorSexo
 }
 
 /**
@@ -62,7 +61,7 @@ export function ordenar<T extends Candidata>(candidatas: T[], idade: IdadePedida
     (a, b) =>
       PRIORIDADE[a.origem] - PRIORIDADE[b.origem] ||
       pelaIdade(a, b) ||
-      b.disponivel.m + b.disponivel.f - (a.disponivel.m + a.disponivel.f),
+      b.livres.m + b.livres.f - (a.livres.m + a.livres.f),
   )
 }
 
@@ -79,8 +78,8 @@ export function sugerirAlocacao<T extends Candidata>(
 
   const itens = candidatas.map((candidata) => {
     const alocar = {
-      m: Math.min(candidata.disponivel.m, falta.m),
-      f: Math.min(candidata.disponivel.f, falta.f),
+      m: Math.min(candidata.livres.m, falta.m),
+      f: Math.min(candidata.livres.f, falta.f),
     }
     falta.m -= alocar.m
     falta.f -= alocar.f
@@ -90,8 +89,8 @@ export function sugerirAlocacao<T extends Candidata>(
   // o "qualquer" entra no 'alocar' da caixa como macho ou femea: primeiro os machos que
   // sobraram, depois as femeas
   for (const item of itens) {
-    const machos = Math.min(item.disponivel.m - item.alocar.m, falta.qualquer)
-    const femeas = Math.min(item.disponivel.f - item.alocar.f, falta.qualquer - machos)
+    const machos = Math.min(item.livres.m - item.alocar.m, falta.qualquer)
+    const femeas = Math.min(item.livres.f - item.alocar.f, falta.qualquer - machos)
     item.alocar.m += machos
     item.alocar.f += femeas
     falta.qualquer -= machos + femeas
