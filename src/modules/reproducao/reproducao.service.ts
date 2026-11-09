@@ -102,6 +102,7 @@ export async function casalFicha(idCasal: number) {
     grupoMacho: casal.grupoMacho,
     grupoFemea: casal.grupoFemea,
     linhagem: casal.linhagem.nome,
+    idLinhagem: casal.idLinhagem,
     dtFormacao: dataISO(casal.dtFormacao),
     ativo: casal.ativo,
     dtEncerramento: casal.dtEncerramento === null ? null : dataISO(casal.dtEncerramento),
@@ -614,7 +615,7 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
     await travarCaixas(tx, [parto.casal.idCaixa])
 
     const animais = await animaisDoParto(tx, idParto)
-    await exigirDataDoDesmame(tx, parto, dados.dtDesmameReal, animais)
+    await exigirDataDoDesmame(tx, parto, dados.dtDesmameReal)
 
     const { vivos, morreramDepois } = contarNoDesmame(animais, parto.casal.idCaixa, dados.dtDesmameReal)
     const acima = { m: dados.desmamadoM > vivos.m, f: dados.desmamadoF > vivos.f }

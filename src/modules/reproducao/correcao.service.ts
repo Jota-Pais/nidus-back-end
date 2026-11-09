@@ -31,7 +31,7 @@ import { cicloFicha } from './cicloFicha.ts'
 import { exigirOrdem } from './ordemDasDatas.ts'
 import { contagemInvalida, travarELerParto } from './reproducao.service.ts'
 import type { Nascimento, PartoTravado } from './reproducao.service.ts'
-import { baixaDoParto, exigirDataDoDesmame, primeiroFato, rotuloDoFato } from './trilhaDoParto.ts'
+import { baixaDoParto, exigirDataDoDesmame, primeiroFatoDoNascimento, rotuloDoFato } from './trilhaDoParto.ts'
 
 type Transacao = Prisma.TransactionClient
 
@@ -272,7 +272,7 @@ export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNasci
       where: { idCasal: parto.idCasal, ordem: parto.ordem + 1 },
       select: { dtAcasalamento: true },
     })
-    const fato = await primeiroFato(tx, idParto, ['baixa', 'mudanca', 'entrega'])
+    const fato = await primeiroFatoDoNascimento(tx, idParto)
 
     exigirOrdem('dtPartoReal', dados.dtPartoReal, {
       depoisDe: [{ evento: 'do acasalamento', data: parto.dtAcasalamento }],
@@ -455,7 +455,7 @@ export async function corrigirDesmame(
       throw erroDeRegra('SEQUENCIA_INVALIDA', 'O desmame deste parto ainda nao foi registrado.')
     }
 
-    await exigirDataDoDesmame(tx, parto, dados.dtDesmameReal, await animaisDoParto(tx, idParto))
+    await exigirDataDoDesmame(tx, parto, dados.dtDesmameReal)
 
     const naoChegaram = await baixaDoParto(tx, idParto, MOTIVO_NAO_CHEGOU_AO_DESMAME, 'asc')
 

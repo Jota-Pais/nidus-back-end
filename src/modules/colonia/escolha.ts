@@ -259,14 +259,23 @@ function maisRecente(datas: (Date | null)[]): Date | null {
 }
 
 /**
+ * A chegada mais recente dos animais na caixa onde estao: o fato deles nesta caixa nao fica antes
+ * dela. Null quando nenhum chegou de outra caixa (estao onde nasceram)
+ */
+export function chegadaDosAnimais(animais: Pick<Escolhido, 'dtMovimento'>[]): Date | null {
+  return maisRecente(animais.map((animal) => animal.dtMovimento))
+}
+
+/**
  * A saida (baixa, entrega) ou a chegada numa caixa nova nao pode ser antes do nascimento nem da
- * chegada dos escolhidos na caixa onde estao. O mesmo dia vale. Mensagem no campo da data
+ * chegada dos escolhidos na caixa onde estao (chegadaDosAnimais). O mesmo dia vale. Mensagem no
+ * campo da data
  */
 export function exigirDepoisDaChegada(campo: string, data: string, escolhidos: Escolhido[]): void {
   exigirOrdem(campo, data, {
     depoisDe: [
       { evento: 'do nascimento dos animais', data: maisRecente(escolhidos.map((animal) => animal.dtNascimento)) },
-      { evento: 'da chegada dos animais na caixa', data: maisRecente(escolhidos.map((animal) => animal.dtMovimento)) },
+      { evento: 'da chegada dos animais na caixa', data: chegadaDosAnimais(escolhidos) },
     ],
   })
 }

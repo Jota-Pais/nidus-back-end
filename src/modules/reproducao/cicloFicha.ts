@@ -9,6 +9,7 @@ import type { AnimalDoParto } from '../colonia/consultas.ts'
 import { contarPorSexo, sexoDe, somarUm } from '../colonia/tipos.ts'
 import type { PorSexo } from '../colonia/tipos.ts'
 import { calcularCicloInicial, calcularDesmamePrevisto } from './cadeiaTemporal.ts'
+import { limitesDoDesmame, primeiraSaida, primeiroFatoDoNascimento } from './trilhaDoParto.ts'
 
 /** Uma caixa onde estao vivos do parto */
 export type OndeEstao = {
@@ -19,6 +20,8 @@ export type OndeEstao = {
   m: number
   f: number
   reservados: number
+  /** os vivos reservados nesta caixa, por pedido */
+  pedidos: (PorSexo & { idPedido: number })[]
 }
 
 export type ContagemDoParto = {
@@ -34,6 +37,11 @@ export type ContagemDoParto = {
   reservados: (PorSexo & { idPedido: number })[]
 }
 
+/** As contagens por pedido, em ordem de pedido */
+function porPedido(contagens: Map<number, PorSexo>): (PorSexo & { idPedido: number })[] {
+  return [...contagens.entries()].sort(([a], [b]) => a - b).map(([idPedido, qtd]) => ({ idPedido, ...qtd }))
+}
+
 /** As contagens do parto a partir dos seus animais */
 export function contarDoParto(dtDesmameReal: Date | null, animais: AnimalDoParto[]): ContagemDoParto {
   const existiram = animais.filter((animal) => animal.situacao !== 'anulado')
@@ -46,7 +54,8 @@ export function contarDoParto(dtDesmameReal: Date | null, animais: AnimalDoParto
   const baixasAntesDoDesmame = contarPorSexo(mortosAntes)
   const nascidos = contarPorSexo(existiram)
 
-  const onde = new Map<number, OndeEstao>()
+  const onde = new Map<number, Omit<OndeEstao, 'pedidos'>>()
+  const pedidosNaCaixa = new Map<number, Map<number, PorSexo>>()
   const reservados = new Map<number, PorSexo>()
 
   for (const animal of vivos) {
@@ -70,6 +79,10 @@ export function contarDoParto(dtDesmameReal: Date | null, animais: AnimalDoParto
 
     if (animal.idPedido !== null) {
       reservados.set(animal.idPedido, somarUm(reservados.get(animal.idPedido) ?? { m: 0, f: 0 }, sexo))
+
+      const naCaixa = pedidosNaCaixa.get(animal.idCaixa) ?? new Map<number, PorSexo>()
+      naCaixa.set(animal.idPedido, somarUm(naCaixa.get(animal.idPedido) ?? { m: 0, f: 0 }, sexo))
+      pedidosNaCaixa.set(animal.idCaixa, naCaixa)
     }
   }
 
@@ -82,10 +95,10 @@ export function contarDoParto(dtDesmameReal: Date | null, animais: AnimalDoParto
         : { m: nascidos.m - baixasAntesDoDesmame.m, f: nascidos.f - baixasAntesDoDesmame.f },
     vivos: contarPorSexo(vivos),
     entregues: contarPorSexo(animais.filter((animal) => animal.situacao === 'entregue')),
-    onde: [...onde.values()].sort((a, b) => a.idCaixa - b.idCaixa),
-    reservados: [...reservados.entries()]
-      .sort(([a], [b]) => a - b)
-      .map(([idPedido, qtd]) => ({ idPedido, ...qtd })),
+    onde: [...onde.values()]
+      .sort((a, b) => a.idCaixa - b.idCaixa)
+      .map((lugar) => ({ ...lugar, pedidos: porPedido(pedidosNaCaixa.get(lugar.idCaixa) ?? new Map()) })),
+    reservados: porPedido(reservados),
   }
 }
 
@@ -106,6 +119,7 @@ export async function cicloFicha(idParto: number) {
       dtDesmameReal: true,
       dtSemNinhada: true,
       motivoSemNinhada: true,
+      casal: { select: { idCaixa: true } },
     },
   })
 
@@ -117,6 +131,10 @@ export async function cicloFicha(idParto: number) {
   const dtPartoPrevisto = calcularCicloInicial(dataISO(parto.dtAcasalamento)).dtPartoPrevisto
   const dtPartoReal = iso(parto.dtPartoReal)
   const nasceu = dtPartoReal !== null
+  // os limites que as correcoes conferem, das mesmas funcoes que recusam a data fora deles. O parto
+  // que nao nasceu nao tem animal, nem trilha que limite
+  const desmame = nasceu ? await limitesDoDesmame(prisma, parto) : null
+  const primeiroFato = nasceu ? await primeiroFatoDoNascimento(prisma, idParto) : null
 
   return {
     id: parto.id,
@@ -140,6 +158,12 @@ export async function cicloFicha(idParto: number) {
     /** Os vivos reservados, por pedido */
     reservados: contagem.reservados,
     entregues: contagem.entregues,
+    /** a ultima eutanasia de selecao nao anulada: o desmame nao fica antes dela */
+    dtUltimaSelecao: iso(desmame?.ultimaSelecao ?? null),
+    /** o primeiro dia em que um animal do parto deixou a caixa do casal: o desmame nao passa dele */
+    dtPrimeiraSaida: iso(desmame === null ? null : primeiraSaida(desmame)),
+    /** a primeira baixa, mudanca ou entrega nao anulada dos animais: o nascimento nao passa dela */
+    dtPrimeiroFato: iso(primeiroFato?.dtFato ?? null),
   }
 }
 

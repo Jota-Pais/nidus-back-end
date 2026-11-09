@@ -5,15 +5,27 @@ import { cicloFicha, contarDoParto } from './cicloFicha.ts'
 // A ficha do parto conta os animais do parto, onde estiverem. O banco aqui devolve o parto e os
 // animais montados no teste
 
+type Onde = { tipo?: string | { in: string[] }; motivo?: string; idCaixaDestino?: unknown }
+
 const banco = vi.hoisted(() => ({
   parto: null as Record<string, unknown> | null,
   animais: [] as unknown[],
+  /** o que a trilha devolve para cada limite: a selecao, a saida, a chegada fora e o primeiro fato */
+  trilha: {} as Record<string, { tipo: string; dtFato: Date } | null>,
 }))
+
+/** Qual limite a consulta da trilha procura, pelo filtro que ela manda */
+function limiteDa(onde: Onde): string {
+  if (onde.motivo !== undefined) return 'selecao'
+  const tipos = typeof onde.tipo === 'object' ? onde.tipo.in.join(',') : String(onde.tipo)
+  return { 'mudanca,entrega': 'saida', 'mudanca,correcao,anulacao': 'chegada', 'baixa,mudanca,entrega': 'fato' }[tipos] ?? tipos
+}
 
 vi.mock('../../shared/prisma.ts', () => ({
   prisma: {
     parto: { findUnique: async () => banco.parto },
     animal: { findMany: async () => banco.animais },
+    ocorrencia: { findFirst: async ({ where }: { where: Onde }) => banco.trilha[limiteDa(where)] ?? null },
   },
 }))
 
@@ -53,6 +65,7 @@ const ninhada = (): AnimalDoParto[] => [
 
 beforeEach(() => {
   proximo = 1
+  banco.trilha = {}
 })
 
 describe('contagens do parto contadas nos animais', () => {
@@ -70,8 +83,8 @@ describe('contagens do parto contadas nos animais', () => {
     const contagem = contarDoParto(d('2026-10-23'), ninhada())
 
     expect(contagem.onde).toEqual([
-      { idCaixa: 1, codigo: 'F1A', numeroVisivel: 'E1', tipo: 'casal', m: 0, f: 2, reservados: 1 },
-      { idCaixa: 6, codigo: 'F2C', numeroVisivel: 'E1', tipo: 'estoque', m: 2, f: 0, reservados: 1 },
+      { idCaixa: 1, codigo: 'F1A', numeroVisivel: 'E1', tipo: 'casal', m: 0, f: 2, reservados: 1, pedidos: [{ idPedido: 3, m: 0, f: 1 }] },
+      { idCaixa: 6, codigo: 'F2C', numeroVisivel: 'E1', tipo: 'estoque', m: 2, f: 0, reservados: 1, pedidos: [{ idPedido: 3, m: 1, f: 0 }] },
     ])
     expect(contagem.reservados).toEqual([{ idPedido: 3, m: 1, f: 1 }])
   })
@@ -94,6 +107,7 @@ describe('cicloFicha', () => {
       dtDesmameReal: d('2026-10-23'),
       dtSemNinhada: null,
       motivoSemNinhada: null,
+      casal: { idCaixa: 1 },
     }
     banco.animais = ninhada()
 
@@ -114,7 +128,41 @@ describe('cicloFicha', () => {
       desmamadoF: 2,
       vivos: { m: 2, f: 2 },
       entregues: { m: 2, f: 0 },
+      // sem nada na trilha, nada limita as correcoes
+      dtUltimaSelecao: null,
+      dtPrimeiraSaida: null,
+      dtPrimeiroFato: null,
     })
+  })
+
+  it('os limites das correcoes saem da trilha: a ultima selecao, a primeira saida (mudanca, entrega ou chegada fora) e o primeiro fato', async () => {
+    banco.parto = {
+      id: 9,
+      ordem: 1,
+      dtAcasalamento: d('2026-09-08'),
+      dtPartoReal: d('2026-10-01'),
+      dtDesmameReal: d('2026-10-23'),
+      dtSemNinhada: null,
+      motivoSemNinhada: null,
+      casal: { idCaixa: 1 },
+    }
+    banco.animais = ninhada()
+    banco.trilha = {
+      selecao: { tipo: 'baixa', dtFato: d('2026-10-03') },
+      saida: { tipo: 'mudanca', dtFato: d('2026-10-30') },
+      chegada: { tipo: 'correcao', dtFato: d('2026-10-25') },
+      fato: { tipo: 'baixa', dtFato: d('2026-10-03') },
+    }
+
+    expect(await cicloFicha(9)).toMatchObject({
+      dtUltimaSelecao: '2026-10-03',
+      // a chegada fora veio antes da primeira mudanca: e ela que limita o desmame
+      dtPrimeiraSaida: '2026-10-25',
+      dtPrimeiroFato: '2026-10-03',
+    })
+
+    banco.trilha.chegada = null
+    expect((await cicloFicha(9)).dtPrimeiraSaida).toBe('2026-10-30')
   })
 
   it('o parto que nao nasceu nao tem nascido nem desmamado', async () => {
@@ -126,8 +174,11 @@ describe('cicloFicha', () => {
       dtDesmameReal: null,
       dtSemNinhada: d('2026-11-05'),
       motivoSemNinhada: 'casal separado sem prenhez',
+      casal: { idCaixa: 1 },
     }
     banco.animais = []
+    // sem animal nao ha trilha: a ficha nem pergunta (o que viesse dela seria de outro parto)
+    banco.trilha = { selecao: { tipo: 'baixa', dtFato: d('2026-10-03') }, fato: { tipo: 'baixa', dtFato: d('2026-10-03') } }
 
     const ciclo = await cicloFicha(10)
 
@@ -140,6 +191,9 @@ describe('cicloFicha', () => {
       dtSemNinhada: '2026-11-05',
       motivoSemNinhada: 'casal separado sem prenhez',
       onde: [],
+      dtUltimaSelecao: null,
+      dtPrimeiraSaida: null,
+      dtPrimeiroFato: null,
     })
   })
 

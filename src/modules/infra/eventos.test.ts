@@ -17,11 +17,23 @@ const banco = vi.hoisted(() => ({
   ondeOcorrencias: null as unknown,
   ondeChegadas: null as unknown,
   ondeHistorico: null as unknown,
+  /** os animais de cada baixa anulavel (ocorrencia_animal) e a caixa onde ela aconteceu */
+  ligacoes: [] as unknown[],
+  ondeLigacoes: null as unknown,
+  caixasDaBaixa: [] as unknown[],
 }))
 
 vi.mock('../../shared/prisma.ts', () => ({
   prisma: {
-    caixa: { findUnique: async () => banco.caixa },
+    caixa: { findUnique: async () => banco.caixa, findMany: async () => banco.caixasDaBaixa },
+    ocorrenciaAnimal: {
+      findMany: async ({ where }: { where: unknown }) => {
+        banco.ondeLigacoes = where
+        return banco.ligacoes
+      },
+    },
+    // a caixa de casal da baixa sem outra ninhada viva
+    animal: { groupBy: async () => [] },
     casal: { findMany: async () => banco.casais },
     ocorrencia: {
       // a trilha da caixa filtra o tipo; as chegadas de fora, so o destino
@@ -82,8 +94,19 @@ const chegada = (dia: string, idParto: number, casal: string, horas = '15:00') =
   animais: [{ animal: { idParto, parto: { casal: { idCaixa: 3, identificacao: casal } } } }],
 })
 
+/** Um animal de baixa anulavel, como a anulacao le: desmamado e da linhagem 3 */
+const daBaixa = (idOcorrencia: number, id: number, sexo: string) => ({
+  idOcorrencia,
+  animal: { id, sexo, idPedido: null, idParto: 10, parto: { dtDesmameReal: d('2026-09-23'), casal: { idLinhagem: 3 } } },
+})
+
+/** A caixa 7 hoje: virou de estoque de femeas da linhagem 3 */
+const caixa7 = (campos: Record<string, unknown> = {}) => ({ id: 7, codigo: 'F1A', ativa: true, tipo: 'estoque', sexo: 'F', idLinhagem: 3, ...campos })
+
 beforeEach(() => {
   banco.caixa = { dtLiberacao: null }
+  banco.ligacoes = [daBaixa(2, 101, 'M'), daBaixa(2, 102, 'F')]
+  banco.caixasDaBaixa = [caixa7()]
   banco.chegadas = []
   banco.casais = [
     {
@@ -170,6 +193,40 @@ describe('os eventos da ficha', () => {
       [5, false],
     ])
     expect(eventos.find((e) => e.tipo === 'acasalamento')).toMatchObject({ idOcorrencia: null, anulavel: false })
+  })
+
+  it('a baixa anulavel diz quantos de cada sexo, a linhagem e se a caixa dela ainda os recebe; as outras, null', async () => {
+    const eventos = await eventosDaCaixa(7, new Map())
+    const daTrilha = eventos.filter((e) => e.idOcorrencia !== null)
+
+    // so a baixa anulavel e lida: a anulada e o resto da trilha nao
+    expect(banco.ondeLigacoes).toEqual({ idOcorrencia: { in: [2] } })
+    // a caixa virou estoque de femeas: o macho da selecao nao volta para ela
+    expect(daTrilha.map((e) => [e.idOcorrencia, e.baixa])).toEqual([
+      [1, null],
+      [2, { sexos: { m: 1, f: 1 }, idLinhagem: 3, voltaNaOrigem: false }],
+      [3, null],
+      [4, null],
+      [5, null],
+    ])
+    expect(eventos.find((e) => e.tipo === 'acasalamento')?.baixa).toBeNull()
+
+    // so a femea: o estoque de femeas da linhagem dela a recebe
+    banco.ligacoes = [daBaixa(2, 102, 'F')]
+    expect((await eventosDaCaixa(7, new Map())).find((e) => e.idOcorrencia === 2)?.baixa).toEqual({
+      sexos: { m: 0, f: 1 },
+      idLinhagem: 3,
+      voltaNaOrigem: true,
+    })
+
+    // a caixa liberada nao recebe ninguem
+    banco.caixasDaBaixa = [caixa7({ ativa: false })]
+    expect((await eventosDaCaixa(7, new Map())).find((e) => e.idOcorrencia === 2)?.baixa?.voltaNaOrigem).toBe(false)
+
+    // a de casal sem outra ninhada viva recebe os dois sexos
+    banco.ligacoes = [daBaixa(2, 101, 'M'), daBaixa(2, 102, 'F')]
+    banco.caixasDaBaixa = [caixa7({ tipo: 'casal', sexo: null, idLinhagem: null })]
+    expect((await eventosDaCaixa(7, new Map())).find((e) => e.idOcorrencia === 2)?.baixa?.voltaNaOrigem).toBe(true)
   })
 
   it('le a trilha da caixa sem a correcao, que aparece pelo historico, e com a entrega dos animais dela', async () => {

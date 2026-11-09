@@ -145,9 +145,33 @@ describe('a trilha no historico', () => {
 
     expect(historico.map((linha) => [linha.fonte, linha.id, linha.entidade, linha.idEntidade, linha.acao, linha.descricao])).toEqual([
       ['historico', 10, 'pedido', 4, 'recusa', 'Pedido #4 recusado'],
-      ['trilha', 3, 'pedido', 4, 'reserva', 'Em 2026-11-05: Reserva para o pedido #4: 2 machos e 1 femea.'],
+      ['trilha', 3, 'pedido', 4, 'reserva', 'Em 05/11/2026: Reserva para o pedido #4: 2 machos e 1 femea.'],
     ])
     expect(ocorrenciaFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: {}, take: 2 }))
+  })
+
+  it('a linha da baixa, tambem a da selecao, e da caixa onde ela aconteceu: a tela abre a ficha dela', async () => {
+    ocorrenciaFindMany.mockResolvedValue([
+      ocorrencia(5, 'baixa', '2026-11-06T12:00:00.000Z', {
+        idParto: 9,
+        idCaixaOrigem: 2,
+        caixaOrigem: { codigo: 'F2A' },
+        motivo: 'eutanasia de selecao',
+        parto: { ordem: 1, casal: { identificacao: 'AB' } },
+        animais: animais(1, 0),
+      }),
+      ocorrencia(4, 'baixa', '2026-11-05T12:00:00.000Z', { idCaixaOrigem: 6, caixaOrigem: { codigo: 'F2C' }, motivo: 'morte', animais: animais(2, 0, 6) }),
+    ])
+
+    const { historico } = await listarHistorico({ limite: 10 })
+
+    expect(historico.map((linha) => [linha.entidade, linha.idEntidade, linha.acao])).toEqual([
+      ['caixa', 2, 'baixa'],
+      ['caixa', 6, 'baixa'],
+    ])
+    // o texto diz a data como a tela; os dados guardam a data do fato em ISO
+    expect(historico.map((linha) => linha.descricao)).toEqual([expect.stringMatching(/^Em 05\/11\/2026: /), expect.stringMatching(/^Em 05\/11\/2026: /)])
+    expect(historico[0]?.dados).toEqual({ dtFato: '2026-11-05', motivo: 'eutanasia de selecao' })
   })
 
   it('o filtro de uma entidade sem fato de animal nao le a trilha', async () => {
@@ -170,7 +194,7 @@ describe('a trilha no historico', () => {
 
     const { historico } = await listarHistorico({ busca: 'f2c', limite: 300 })
 
-    expect(historico.map((linha) => linha.descricao)).toEqual(['Em 2026-11-05: 3 machos mudaram da caixa F2A para a caixa F2C.'])
+    expect(historico.map((linha) => linha.descricao)).toEqual(['Em 05/11/2026: 3 machos mudaram da caixa F2A para a caixa F2C.'])
     expect((await listarHistorico({ busca: 'caio', limite: 300 })).historico).toHaveLength(2)
   })
 

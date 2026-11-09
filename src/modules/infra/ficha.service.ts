@@ -7,6 +7,7 @@ import { naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { codigoDaEspecie, dataISO } from '../../shared/traducao.ts'
 import { colunaDaCaixa } from '../colonia/coluna.ts'
+import { chegadaDosAnimais } from '../colonia/escolha.ts'
 import { semVivos, vivosNasCaixas } from '../colonia/consultas.ts'
 import type { MotivoDaLiberacao, PorSexo, Sexo } from '../colonia/tipos.ts'
 import { cicloFicha } from '../reproducao/cicloFicha.ts'
@@ -46,6 +47,40 @@ function desmamadosDosPartos(casais: CasalComPartos[]): Map<number, PorSexo> {
       ),
     ),
   )
+}
+
+/** Os vivos da caixa um a um, com o que cada idade da ficha de estoque mostra alem das contagens */
+function vivosUmAUm(idCaixa: number) {
+  return prisma.animal.findMany({
+    where: { idCaixa, situacao: 'vivo' },
+    orderBy: { id: 'asc' },
+    select: { idPedido: true, dtMovimento: true, parto: { select: { dtPartoReal: true } } },
+  })
+}
+
+type VivoUmAUm = Awaited<ReturnType<typeof vivosUmAUm>>[number]
+
+/**
+ * Os vivos de uma idade na caixa: os reservados por pedido e a chegada mais recente deles na caixa,
+ * a mesma que a baixa, a mudanca e a entrega conferem (chegadaDosAnimais) quando todos os escolhidos
+ * sao desta idade
+ */
+function daIdade(vivos: VivoUmAUm[], dtNascimento: string) {
+  const daqui = vivos.filter((animal) => animal.parto.dtPartoReal !== null && dataISO(animal.parto.dtPartoReal) === dtNascimento)
+  const pedidos = new Map<number, number>()
+
+  for (const animal of daqui) {
+    if (animal.idPedido !== null) pedidos.set(animal.idPedido, (pedidos.get(animal.idPedido) ?? 0) + 1)
+  }
+
+  const chegada = chegadaDosAnimais(daqui)
+
+  return {
+    /** os reservados desta idade, por pedido */
+    pedidos: [...pedidos.entries()].sort(([a], [b]) => a - b).map(([idPedido, qtd]) => ({ idPedido, qtd })),
+    /** a chegada mais recente dos vivos desta idade na caixa; null se nenhum chegou de outra */
+    dtChegada: chegada === null ? null : dataISO(chegada),
+  }
 }
 
 /**
@@ -106,6 +141,7 @@ export async function montarFicha(idCaixa: number) {
 
   if (deEstoque) {
     const grupos = gruposPorNascimento(naCaixa.partos)
+    const umAUm = await vivosUmAUm(idCaixa)
 
     return {
       tipo: 'estoque' as const,
@@ -123,6 +159,7 @@ export async function montarFicha(idCaixa: number) {
       /** os vivos por data de nascimento, com os partos de onde vieram */
       grupos: grupos.map(({ partos, ...grupo }) => ({
         ...grupo,
+        ...daIdade(umAUm, grupo.dtNascimento),
         origens: partos.map((parto) => ({
           idParto: parto.idParto,
           ordem: parto.ordem,
@@ -158,7 +195,7 @@ export async function montarFicha(idCaixa: number) {
     /** o sexo que a caixa teria se virasse de estoque no lugar; null quando nao pode */
     virarEstoque: 'recusa' in virada ? null : virada.sexo,
     // a linhagem vem do casal, e aparece mesmo com o casal encerrado: a ficha e historico
-    caixa: { ...dadosDaCaixa, linhagem: atual?.casal.linhagem ?? null },
+    caixa: { ...dadosDaCaixa, linhagem: atual?.casal.linhagem ?? null, idLinhagem: atual?.casal.idLinhagem ?? null },
     casal: atual?.casal ?? null,
     partos: atual?.partos ?? [],
     /** os casais que vieram antes do atual nesta caixa, com os partos deles */

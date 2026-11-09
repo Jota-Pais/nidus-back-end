@@ -5,7 +5,7 @@
 
 import type { Prisma } from '@prisma/client'
 import { prisma } from '../../shared/prisma.ts'
-import { dataISO } from '../../shared/traducao.ts'
+import { dataISO, dataLegivel } from '../../shared/traducao.ts'
 import { descreverOcorrencia, selecaoDaDescricao } from '../colonia/descricao.ts'
 import { MOTIVO_SELECAO } from '../colonia/tipos.ts'
 
@@ -199,7 +199,7 @@ function linhaDaOcorrencia(ocorrencia: OcorrenciaDaLinha): LinhaDoHistorico {
     ...entidadeDaOcorrencia(ocorrencia),
     acao: ocorrencia.tipo,
     // o registro pode ser de outro dia: o texto diz quando o fato aconteceu
-    descricao: `Em ${dtFato}: ${descreverOcorrencia(ocorrencia)}`,
+    descricao: `Em ${dataLegivel(dtFato)}: ${descreverOcorrencia(ocorrencia)}`,
     dados: { dtFato, motivo: ocorrencia.motivo },
   }
 }

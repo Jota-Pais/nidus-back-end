@@ -43,24 +43,58 @@ export function baixaDoParto(tx: Transacao, idParto: number, motivo: string, ord
 }
 
 /**
- * Quando o primeiro animal do parto chegou a uma caixa que nao e a do casal: pela mudanca ou como
- * animal a mais da correcao do nascimento, que entra direto no estoque. Null se nenhum saiu
+ * Quando o primeiro animal do parto chegou a uma caixa que nao e a do casal, pela trilha: a
+ * mudanca, o animal a mais da correcao do nascimento, que entra direto no estoque, e a volta da
+ * anulacao para outra caixa. Pela trilha, e nao pela chegada gravada no animal: essa e a da caixa
+ * atual, e o animal que chegou ao estoque e mudou de novo perderia a primeira. Registro anulado
+ * nao conta (o animal nao existiu). Null se nenhum saiu
  */
-export function primeiraChegadaFora(animais: AnimalDoParto[], idCaixaDoCasal: number): Date | null {
-  return animais.reduce<Date | null>(
-    (primeira, animal) =>
-      animal.situacao !== 'anulado' &&
-      animal.idCaixa !== idCaixaDoCasal &&
-      animal.dtMovimento !== null &&
-      (primeira === null || animal.dtMovimento < primeira)
-        ? animal.dtMovimento
-        : primeira,
-    null,
-  )
+export async function primeiraChegadaFora(tx: Transacao, idParto: number, idCaixaDoCasal: number): Promise<Date | null> {
+  const chegada = await tx.ocorrencia.findFirst({
+    where: {
+      tipo: { in: ['mudanca', 'correcao', 'anulacao'] },
+      AND: [{ idCaixaDestino: { not: null } }, { idCaixaDestino: { not: idCaixaDoCasal } }],
+      animais: { some: { animal: { idParto, situacao: { not: 'anulado' } } } },
+    },
+    orderBy: { dtFato: 'asc' },
+    select: { dtFato: true },
+  })
+
+  return chegada?.dtFato ?? null
 }
 
 /** O parto como os limites do desmame precisam dele */
 type PartoDoDesmame = { id: number; dtPartoReal: Date | null; casal: { idCaixa: number } }
+
+/** O que limita a data do desmame, lido na trilha do parto */
+export type LimitesDoDesmame = {
+  /** a ultima eutanasia de selecao que nao foi anulada: o desmame nao fica antes dela */
+  ultimaSelecao: Date | null
+  /** a primeira mudanca ou entrega dos animais do parto: o desmame nao passa dela */
+  saida: { tipo: string; dtFato: Date } | null
+  /** a primeira chegada de animais do parto numa caixa que nao e a do casal (primeiraChegadaFora) */
+  chegadaFora: Date | null
+}
+
+/** Os limites do desmame do parto, os mesmos no registro, na correcao e na ficha */
+export async function limitesDoDesmame(tx: Transacao, parto: PartoDoDesmame): Promise<LimitesDoDesmame> {
+  // uma consulta de cada vez: a transacao e uma conexao so
+  const ultimaSelecao = await baixaDoParto(tx, parto.id, MOTIVO_SELECAO, 'desc')
+  const saida = await primeiroFato(tx, parto.id, ['mudanca', 'entrega'])
+  const chegadaFora = await primeiraChegadaFora(tx, parto.id, parto.casal.idCaixa)
+
+  return { ultimaSelecao: ultimaSelecao?.dtFato ?? null, saida, chegadaFora }
+}
+
+/**
+ * O primeiro dia em que um animal do parto deixou a caixa do casal (a saida ou a chegada fora,
+ * a que veio antes): o desmame nao passa dele. Null quando nenhum deixou
+ */
+export function primeiraSaida(limites: LimitesDoDesmame): Date | null {
+  const { saida, chegadaFora } = limites
+  if (saida === null) return chegadaFora
+  return chegadaFora === null || saida.dtFato <= chegadaFora ? saida.dtFato : chegadaFora
+}
 
 /**
  * A data do desmame fica depois do parto e da ultima eutanasia de selecao (a selecao e antes do
@@ -68,29 +102,30 @@ type PartoDoDesmame = { id: number; dtPartoReal: Date | null; casal: { idCaixa: 
  * entrega ou chegando ao estoque como animal a mais. Morte na caixa nao limita: quem morreu depois
  * da data chegou ao desmame, e quem morreu antes, nao (contarNoDesmame)
  */
-export async function exigirDataDoDesmame(
-  tx: Transacao,
-  parto: PartoDoDesmame,
-  dtDesmame: string,
-  animais: AnimalDoParto[],
-): Promise<void> {
-  // uma consulta de cada vez: a transacao e uma conexao so
-  const ultimaSelecao = await baixaDoParto(tx, parto.id, MOTIVO_SELECAO, 'desc')
-  const saida = await primeiroFato(tx, parto.id, ['mudanca', 'entrega'])
+export async function exigirDataDoDesmame(tx: Transacao, parto: PartoDoDesmame, dtDesmame: string): Promise<void> {
+  const { ultimaSelecao, saida, chegadaFora } = await limitesDoDesmame(tx, parto)
 
   exigirOrdem('dtDesmameReal', dtDesmame, {
     depoisDe: [
       { evento: 'do parto', data: parto.dtPartoReal },
-      { evento: 'da ultima eutanasia de selecao', data: ultimaSelecao?.dtFato },
+      { evento: 'da ultima eutanasia de selecao', data: ultimaSelecao },
     ],
     antesDe: [
       { evento: rotuloDoFato(saida), data: saida?.dtFato },
-      {
-        evento: 'da chegada de animais deste parto numa caixa de estoque',
-        data: primeiraChegadaFora(animais, parto.casal.idCaixa),
-      },
+      { evento: 'da chegada de animais deste parto numa caixa de estoque', data: chegadaFora },
     ],
   })
+}
+
+/** Os tipos de fato dos animais que a data do nascimento nunca passa */
+const FATOS_DEPOIS_DO_NASCIMENTO = ['baixa', 'mudanca', 'entrega']
+
+/**
+ * O primeiro fato dos animais do parto que a data do nascimento nao passa: a primeira baixa,
+ * mudanca ou entrega nao anulada. O mesmo na correcao do nascimento e na ficha
+ */
+export function primeiroFatoDoNascimento(tx: Transacao, idParto: number) {
+  return primeiroFato(tx, idParto, FATOS_DEPOIS_DO_NASCIMENTO)
 }
 
 /** Os animais do parto no dia do desmame, por sexo */

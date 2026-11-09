@@ -9,7 +9,8 @@
 import { prisma } from '../../shared/prisma.ts'
 import { dataISO, hojeISO } from '../../shared/traducao.ts'
 import { descreverOcorrencia, selecaoDaDescricao } from '../colonia/descricao.ts'
-import { quantosAnimais } from '../colonia/tipos.ts'
+import { animalDaBaixa, selecaoDaCaixaDaBaixa, selecaoDoAnimalDaBaixa, voltaNaOrigem } from '../colonia/baixa.service.ts'
+import { contarPorSexo, quantosAnimais } from '../colonia/tipos.ts'
 import type { PorSexo } from '../colonia/tipos.ts'
 import { NOME_DO_SISTEMA } from '../historico/historico.service.ts'
 
@@ -23,6 +24,16 @@ export type EventoDaFicha = {
   idOcorrencia: number | null
   /** a baixa que ainda pode ser anulada */
   anulavel: boolean
+  /** so na baixa anulavel: o que a anulacao dela precisa saber antes (null nos outros) */
+  baixa: BaixaAnulavel | null
+}
+
+/** O que a anulacao de uma baixa pede: quantos de cada sexo, a linhagem e para onde voltam */
+export type BaixaAnulavel = {
+  sexos: PorSexo
+  idLinhagem: number
+  /** a caixa da baixa ainda recebe a volta (porQueNaoVolta); senao, a anulacao pede caixa de estoque */
+  voltaNaOrigem: boolean
 }
 
 /** No mesmo dia, a ordem em que as coisas acontecem na colonia */
@@ -70,7 +81,7 @@ function evento(
   descricao: string,
   autor: string,
   registro: Date | null,
-  ocorrencia: { id: number; anulavel: boolean } | null = null,
+  ocorrencia: { id: number; anulavel: boolean; baixa: BaixaAnulavel | null } | null = null,
 ): Evento {
   return {
     dataHora: `${data}T00:00:00.000Z`,
@@ -79,6 +90,7 @@ function evento(
     autor,
     idOcorrencia: ocorrencia?.id ?? null,
     anulavel: ocorrencia?.anulavel ?? false,
+    baixa: ocorrencia?.baixa ?? null,
     registro,
   }
 }
@@ -105,14 +117,55 @@ function lerOcorrencias(idCaixa: number) {
   })
 }
 
-function eventoDaOcorrencia(ocorrencia: OcorrenciaLida, idCaixa: number): Evento {
+/** A baixa que ainda pode ser anulada */
+const anulavel = (ocorrencia: OcorrenciaLida) => ocorrencia.tipo === 'baixa' && ocorrencia.anulacoes.length === 0
+
+/**
+ * O que a anulacao de cada baixa anulavel pede, por id: os animais dela por sexo, a linhagem deles
+ * e se a caixa da baixa ainda os recebe, pela mesma regra da anulacao (voltaNaOrigem)
+ */
+async function baixasAnulaveis(ocorrencias: OcorrenciaLida[]): Promise<Map<number, BaixaAnulavel>> {
+  const anulaveis = ocorrencias.filter(anulavel)
+  const porId = new Map<number, BaixaAnulavel>()
+  if (anulaveis.length === 0) return porId
+
+  const ligacoes = await prisma.ocorrenciaAnimal.findMany({
+    where: { idOcorrencia: { in: anulaveis.map((ocorrencia) => ocorrencia.id) } },
+    orderBy: [{ idOcorrencia: 'asc' }, { idAnimal: 'asc' }],
+    select: { idOcorrencia: true, animal: { select: selecaoDoAnimalDaBaixa } },
+  })
+  const caixas = await prisma.caixa.findMany({
+    where: { id: { in: anulaveis.flatMap((ocorrencia) => ocorrencia.idCaixaOrigem ?? []) } },
+    select: selecaoDaCaixaDaBaixa,
+  })
+
+  // uma baixa de cada vez: a regra le as ninhadas da caixa, e a ficha tem poucas baixas
+  for (const ocorrencia of anulaveis) {
+    const animais = ligacoes
+      .filter((ligacao) => ligacao.idOcorrencia === ocorrencia.id)
+      .map((ligacao) => animalDaBaixa(ligacao.animal))
+    const origem = caixas.find((caixa) => caixa.id === ocorrencia.idCaixaOrigem)
+    const [primeiro] = animais
+    if (origem === undefined || primeiro === undefined) continue
+
+    porId.set(ocorrencia.id, {
+      sexos: contarPorSexo(animais),
+      idLinhagem: primeiro.idLinhagem,
+      voltaNaOrigem: await voltaNaOrigem(prisma, origem, animais),
+    })
+  }
+
+  return porId
+}
+
+function eventoDaOcorrencia(ocorrencia: OcorrenciaLida, idCaixa: number, baixas: Map<number, BaixaAnulavel>): Evento {
   return evento(
     dataISO(ocorrencia.dtFato),
     ocorrencia.tipo,
     descreverOcorrencia(ocorrencia, idCaixa),
     ocorrencia.usuario?.nome ?? NOME_DO_SISTEMA,
     ocorrencia.dtRegistro,
-    { id: ocorrencia.id, anulavel: ocorrencia.tipo === 'baixa' && ocorrencia.anulacoes.length === 0 },
+    { id: ocorrencia.id, anulavel: anulavel(ocorrencia), baixa: baixas.get(ocorrencia.id) ?? null },
   )
 }
 
@@ -227,7 +280,8 @@ export async function eventosDaCaixa(idCaixa: number, desmamados: Map<number, Po
   const autorDo = (registro: (typeof registros)[number] | undefined) =>
     registro === undefined ? DESCONHECIDO : (registro.usuario?.nome ?? NOME_DO_SISTEMA)
 
-  const eventos: Evento[] = ocorrencias.map((ocorrencia) => eventoDaOcorrencia(ocorrencia, idCaixa))
+  const baixas = await baixasAnulaveis(ocorrencias)
+  const eventos: Evento[] = ocorrencias.map((ocorrencia) => eventoDaOcorrencia(ocorrencia, idCaixa, baixas))
 
   for (const casal of casais) {
     const identificacao = casal.identificacao.trim()

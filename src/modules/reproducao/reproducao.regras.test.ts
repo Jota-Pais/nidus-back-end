@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Escolha, Escolhido, Grupo } from '../colonia/escolha.ts'
 import type { Lancamento } from '../colonia/ocorrencia.ts'
+import { cicloFicha } from './cicloFicha.ts'
 import { corrigirAcasalamento, corrigirDesmame, corrigirNascimento } from './correcao.service.ts'
 import {
   encerrarCasal,
@@ -67,6 +68,8 @@ type Ocorrencia = {
   motivo: string | null
   ids: number[]
   anulada: boolean
+  /** a caixa onde os animais chegaram (mudanca, a mais da correcao, volta da anulacao) */
+  idCaixaDestino?: number | null
 }
 
 const banco = vi.hoisted(() => ({
@@ -98,7 +101,9 @@ type FiltroDeOcorrencia = {
   tipo?: string | { in: string[] }
   idParto?: number
   motivo?: string
-  animais?: { some: { animal: { idParto: number } } }
+  animais?: { some: { animal: { idParto: number; situacao?: { not: string } } } }
+  /** os 'not' do destino: { not: null } e { not: idCaixa }, como o Prisma (o null nunca passa no 'not') */
+  AND?: { idCaixaDestino: { not: number | null } }[]
 }
 
 function ocorrenciasQue(where: FiltroDeOcorrencia) {
@@ -109,8 +114,13 @@ function ocorrenciasQue(where: FiltroDeOcorrencia) {
     if (where.idParto !== undefined && o.idParto !== where.idParto) return false
     if (where.motivo !== undefined && o.motivo !== where.motivo) return false
     if (where.animais !== undefined) {
-      const { idParto } = where.animais.some.animal
-      if (!o.ids.some((id) => banco.animais.find((a) => a.id === id)?.idParto === idParto)) return false
+      const { idParto, situacao } = where.animais.some.animal
+      const casa = (a: Animal | undefined) => a?.idParto === idParto && (situacao === undefined || a.situacao !== situacao.not)
+      if (!o.ids.some((id) => casa(banco.animais.find((a) => a.id === id)))) return false
+    }
+    for (const { idCaixaDestino } of where.AND ?? []) {
+      const destino = o.idCaixaDestino ?? null
+      if (destino === null || destino === idCaixaDestino.not) return false
     }
     return true
   })
@@ -336,6 +346,7 @@ vi.mock('../colonia/ocorrencia.ts', () => ({
       motivo: l.motivo ?? null,
       ids,
       anulada: false,
+      idCaixaDestino: l.tipo === 'correcao' ? (l.novos?.idCaixa ?? null) : null,
     }
     banco.ocorrencias.push(ocorrencia)
     return { idOcorrencia: ocorrencia.id, ids }
@@ -410,6 +421,13 @@ function morteNaCaixa(qtd: number, dtFato: string) {
   for (const a of mortos) Object.assign(a, { situacao: 'morto', dtSaida: d(dtFato) })
   const ids = mortos.map((a) => a.id)
   banco.ocorrencias.push({ id: banco.proximoId++, tipo: 'baixa', dtFato: d(dtFato), idParto: null, motivo: 'morte', ids, anulada: false })
+  return ids
+}
+
+/** Um animal a mais do 1o parto que chegou na caixa de estoque, com a ocorrencia que a correcao grava */
+function chegaAMais(idCaixa: number, dtFato: string) {
+  const ids = criarAnimais(1, idCaixa, 1, 0, d(dtFato))
+  banco.ocorrencias.push({ id: banco.proximoId++, tipo: 'correcao', dtFato: d(dtFato), idParto: 1, motivo: 'a mais', ids, anulada: false, idCaixaDestino: idCaixa })
   return ids
 }
 
@@ -841,6 +859,20 @@ describe('correcao do nascimento', () => {
     ...campos,
   })
 
+  it('a dtPrimeiroFato da ficha e o limite da correcao da data: no dia passa, no dia seguinte recusa', async () => {
+    nascido()
+    morteNaCaixa(1, '2026-09-28')
+
+    const { dtPrimeiroFato } = await cicloFicha(1)
+    expect(dtPrimeiroFato).toBe('2026-09-28')
+
+    await expect(corrigirNascimento(1, correcao({ dtPartoReal: '2026-09-29' }), 4)).rejects.toEqual(
+      noCampo('dtPartoReal', 'primeira baixa dos animais deste parto'),
+    )
+    await corrigirNascimento(1, correcao({ dtPartoReal: dtPrimeiroFato ?? '' }), 4)
+    expect(iso(banco.partos.get(1)?.dtPartoReal ?? null)).toBe('2026-09-28')
+  })
+
   it('a data muda no parto e na ocorrencia do nascimento, e com ela a idade de todos', async () => {
     nascido()
     banco.ocorrencias.push({ id: 1, tipo: 'nascimento', dtFato: d('2026-09-24'), idParto: 1, motivo: null, ids: [], anulada: false })
@@ -1146,7 +1178,7 @@ describe('correcao da data do desmame', () => {
   it('nunca depois da chegada dos animais a mais na caixa de estoque', async () => {
     nascido(2, 0)
     Object.assign(banco.partos.get(1) as Parto, { dtDesmameReal: d('2026-10-16') })
-    criarAnimais(1, 6, 1, 0, d('2026-10-16'))
+    chegaAMais(6, '2026-10-16')
 
     await expect(corrigirDesmame(1, { dtDesmameReal: '2026-10-18', motivo: 'x' }, 4)).rejects.toEqual(
       noCampo('dtDesmameReal', 'chegada de animais deste parto numa caixa de estoque'),
@@ -1154,6 +1186,69 @@ describe('correcao da data do desmame', () => {
 
     await corrigirDesmame(1, { dtDesmameReal: '2026-10-14', motivo: 'x' }, 4)
     expect(banco.partos.get(1)?.dtDesmameReal).toEqual(d('2026-10-14'))
+  })
+
+  it('a primeira chegada ao estoque vem da trilha: o a mais que chegou e mudou de novo nao perde a primeira', async () => {
+    nascido(2, 0)
+    Object.assign(banco.partos.get(1) as Parto, { dtDesmameReal: d('2026-10-14') })
+    const [novo] = chegaAMais(6, '2026-10-16')
+    // muda da caixa 6 para a 7 em 20/10: a chegada gravada no animal passa a ser a da caixa 7
+    Object.assign(banco.animais.find((a) => a.id === novo) as Animal, { idCaixa: 7, dtMovimento: d('2026-10-20') })
+    banco.ocorrencias.push({ id: banco.proximoId++, tipo: 'mudanca', dtFato: d('2026-10-20'), idParto: null, motivo: null, ids: [novo as number], anulada: false, idCaixaDestino: 7 })
+
+    // pela chegada gravada no animal, 18/10 passaria; pela trilha, a primeira chegada foi em 16/10
+    await expect(corrigirDesmame(1, { dtDesmameReal: '2026-10-18', motivo: 'x' }, 4)).rejects.toEqual(
+      noCampo('dtDesmameReal', 'chegada de animais deste parto numa caixa de estoque (16/10/2026)'),
+    )
+    expect((await cicloFicha(1)).dtPrimeiraSaida).toBe('2026-10-16')
+  })
+
+  it('o registro anulado que chegou ao estoque nao limita o desmame', async () => {
+    nascido(2, 0)
+    Object.assign(banco.partos.get(1) as Parto, { dtDesmameReal: d('2026-10-14') })
+    const [novo] = chegaAMais(6, '2026-10-16')
+    Object.assign(banco.animais.find((a) => a.id === novo) as Animal, { situacao: 'anulado' })
+
+    expect((await cicloFicha(1)).dtPrimeiraSaida).toBeNull()
+    await corrigirDesmame(1, { dtDesmameReal: '2026-10-18', motivo: 'x' }, 4)
+    expect(banco.partos.get(1)?.dtDesmameReal).toEqual(d('2026-10-18'))
+  })
+
+  it('a dtPrimeiraSaida da ficha e o limite da correcao: no dia passa, no dia seguinte recusa', async () => {
+    const ids = nascido(2, 0)
+    Object.assign(banco.partos.get(1) as Parto, { dtDesmameReal: d('2026-10-14') })
+    banco.ocorrencias.push({ id: banco.proximoId++, tipo: 'mudanca', dtFato: d('2026-10-20'), idParto: null, motivo: null, ids: ids.slice(0, 1), anulada: false, idCaixaDestino: 6 })
+    chegaAMais(7, '2026-10-17')
+
+    const { dtPrimeiraSaida } = await cicloFicha(1)
+    expect(dtPrimeiraSaida).toBe('2026-10-17')
+
+    await expect(corrigirDesmame(1, { dtDesmameReal: '2026-10-18', motivo: 'x' }, 4)).rejects.toEqual(
+      noCampo('dtDesmameReal', 'chegada de animais deste parto numa caixa de estoque'),
+    )
+    await corrigirDesmame(1, { dtDesmameReal: dtPrimeiraSaida ?? '', motivo: 'x' }, 4)
+    expect(iso(banco.partos.get(1)?.dtDesmameReal ?? null)).toBe('2026-10-17')
+  })
+
+  it('a dtUltimaSelecao da ficha e o limite da correcao: no dia passa, na vespera recusa; a selecao anulada nao conta', async () => {
+    nascido(3, 3)
+    await registrarSelecao(1, { dtSelecao: '2026-10-01', eutanasiadoM: 1, eutanasiadoF: 0 }, 4)
+    await registrarSelecao(1, { dtSelecao: '2026-10-05', eutanasiadoM: 1, eutanasiadoF: 0 }, 4)
+    await registrarDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 1, desmamadoF: 3 }, 4)
+
+    const { dtUltimaSelecao } = await cicloFicha(1)
+    expect(dtUltimaSelecao).toBe('2026-10-05')
+
+    await expect(corrigirDesmame(1, { dtDesmameReal: '2026-10-04', motivo: 'x' }, 4)).rejects.toEqual(
+      noCampo('dtDesmameReal', 'ultima eutanasia de selecao'),
+    )
+    await corrigirDesmame(1, { dtDesmameReal: dtUltimaSelecao ?? '', motivo: 'x' }, 4)
+    expect(iso(banco.partos.get(1)?.dtDesmameReal ?? null)).toBe('2026-10-05')
+
+    // a selecao de 05/10 anulada: a ultima passa a ser a de 01/10
+    const anulada = banco.ocorrencias.find((o) => o.tipo === 'baixa' && iso(o.dtFato) === '2026-10-05') as Ocorrencia
+    anulada.anulada = true
+    expect((await cicloFicha(1)).dtUltimaSelecao).toBe('2026-10-01')
   })
 
   it('so corrige desmame registrado', async () => {

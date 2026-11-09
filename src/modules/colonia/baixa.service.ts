@@ -92,7 +92,7 @@ export type AnulacaoDeBaixa = {
 const CAMPO_DO_DESTINO: Record<Sexo, 'idCaixaMachos' | 'idCaixaFemeas'> = { M: 'idCaixaMachos', F: 'idCaixaFemeas' }
 
 /** Um animal da baixa a anular, com o que decide para onde ele volta */
-type AnimalDaBaixa = {
+export type AnimalDaBaixa = {
   id: number
   sexo: Sexo
   idPedido: number | null
@@ -101,8 +101,28 @@ type AnimalDaBaixa = {
   idLinhagem: number
 }
 
+/** O que se le de cada animal da baixa para decidir para onde ele volta */
+export const selecaoDoAnimalDaBaixa = {
+  id: true,
+  sexo: true,
+  idPedido: true,
+  idParto: true,
+  parto: { select: { dtDesmameReal: true, casal: { select: { idLinhagem: true } } } },
+} satisfies Prisma.AnimalSelect
+
+export function animalDaBaixa(animal: Prisma.AnimalGetPayload<{ select: typeof selecaoDoAnimalDaBaixa }>): AnimalDaBaixa {
+  return {
+    id: animal.id,
+    sexo: sexoDe(animal),
+    idPedido: animal.idPedido,
+    idParto: animal.idParto,
+    desmamado: animal.parto.dtDesmameReal !== null,
+    idLinhagem: animal.parto.casal.idLinhagem,
+  }
+}
+
 /** A caixa onde a baixa aconteceu, com o que decide se os animais voltam para ela */
-type CaixaDaBaixa = {
+export type CaixaDaBaixa = {
   id: number
   codigo: string
   ativa: boolean
@@ -110,6 +130,15 @@ type CaixaDaBaixa = {
   sexo: string | null
   idLinhagem: number | null
 }
+
+export const selecaoDaCaixaDaBaixa = {
+  id: true,
+  codigo: true,
+  ativa: true,
+  tipo: true,
+  sexo: true,
+  idLinhagem: true,
+} satisfies Prisma.CaixaSelect
 
 /** Para onde voltou cada sexo da baixa */
 export type Volta = { sexo: Sexo; qtd: number; idCaixa: number; codigo: string }
@@ -137,6 +166,23 @@ async function porQueNaoVolta(
   const cabem = animais.every((animal) => animal.desmamado && recusaDoEstoque(origem, animal) === null)
 
   return cabem ? null : `virou caixa de estoque de ${ROTULO_DO_SEXO[sexoDe({ sexo: origem.sexo ?? '' })]}`
+}
+
+/**
+ * Se a caixa da baixa ainda recebe a volta de todos os animais dela, cada sexo pela regra da
+ * anulacao (porQueNaoVolta): a ficha diz antes se a anulacao vai pedir caixa de estoque
+ */
+export async function voltaNaOrigem(
+  tx: Prisma.TransactionClient,
+  origem: CaixaDaBaixa,
+  animais: AnimalDaBaixa[],
+): Promise<boolean> {
+  for (const sexo of SEXOS) {
+    const doSexo = animais.filter((animal) => animal.sexo === sexo)
+    if (doSexo.length > 0 && (await porQueNaoVolta(tx, origem, doSexo)) !== null) return false
+  }
+
+  return true
 }
 
 /**
@@ -220,20 +266,7 @@ export async function anularBaixa(
         idParto: true,
         idCaixaOrigem: true,
         anulacoes: { select: { id: true }, take: 1 },
-        animais: {
-          orderBy: { idAnimal: 'asc' },
-          select: {
-            animal: {
-              select: {
-                id: true,
-                sexo: true,
-                idPedido: true,
-                idParto: true,
-                parto: { select: { dtDesmameReal: true, casal: { select: { idLinhagem: true } } } },
-              },
-            },
-          },
-        },
+        animais: { orderBy: { idAnimal: 'asc' }, select: { animal: { select: selecaoDoAnimalDaBaixa } } },
       },
     })
 
@@ -247,16 +280,7 @@ export async function anularBaixa(
       throw erroDeRegra('OCORRENCIA_JA_ANULADA', 'Esta baixa ja foi anulada. Atualize a ficha.')
     }
 
-    const animais = baixa.animais.map(
-      ({ animal }): AnimalDaBaixa => ({
-        id: animal.id,
-        sexo: sexoDe(animal),
-        idPedido: animal.idPedido,
-        idParto: animal.idParto,
-        desmamado: animal.parto.dtDesmameReal !== null,
-        idLinhagem: animal.parto.casal.idLinhagem,
-      }),
-    )
+    const animais = baixa.animais.map(({ animal }) => animalDaBaixa(animal))
 
     const indicadas: Record<Sexo, number | undefined> = { M: dados.idCaixaMachos, F: dados.idCaixaFemeas }
 
@@ -268,10 +292,7 @@ export async function anularBaixa(
 
     await travarCaixas(tx, [baixa.idCaixaOrigem, ...SEXOS.flatMap((sexo) => indicadas[sexo] ?? [])])
 
-    const origem = await tx.caixa.findUnique({
-      where: { id: baixa.idCaixaOrigem },
-      select: { id: true, codigo: true, ativa: true, tipo: true, sexo: true, idLinhagem: true },
-    })
+    const origem = await tx.caixa.findUnique({ where: { id: baixa.idCaixaOrigem }, select: selecaoDaCaixaDaBaixa })
 
     if (origem === null) throw naoEncontrado('Caixa')
 

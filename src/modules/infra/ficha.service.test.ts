@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { VivosDoParto, VivosNaCaixa } from '../colonia/consultas.ts'
+import { exigirDepoisDaChegada } from '../colonia/escolha.ts'
 import { montarFicha } from './ficha.service.ts'
 
 // A ficha junta o que outros modulos ja sabem contar: a ficha de cada parto (cicloFicha), a do
@@ -15,11 +16,14 @@ const banco = vi.hoisted(() => ({
   casais: new Map<number, Record<string, unknown>>(),
   vivos: null as unknown,
   desmamados: null as unknown,
+  /** os vivos da caixa um a um: o pedido, a chegada e o nascimento */
+  umAUm: [] as { idPedido: number | null; dtMovimento: Date | null; parto: { dtPartoReal: Date | null } }[],
 }))
 
 vi.mock('../../shared/prisma.ts', () => ({
   prisma: {
     caixa: { findUnique: async () => banco.caixa },
+    animal: { findMany: async () => banco.umAUm },
     parto: {
       findMany: async ({ where }: { where: { idCasal: number } }) => banco.partos.filter((p) => p.idCasal === where.idCasal),
     },
@@ -100,8 +104,8 @@ beforeEach(() => {
     [21, ciclo(21, { ordem: 2, dtPartoReal: null })],
   ])
   banco.casais = new Map([
-    [2, { id: 2, identificacao: 'CD', linhagem: 'Wistar', ativo: true }],
-    [1, { id: 1, identificacao: 'AB', linhagem: 'Wistar', ativo: false }],
+    [2, { id: 2, identificacao: 'CD', linhagem: 'Wistar', idLinhagem: 3, ativo: true }],
+    [1, { id: 1, identificacao: 'AB', linhagem: 'Wistar', idLinhagem: 3, ativo: false }],
   ])
   banco.vivos = naCaixa([doParto(20, '2026-09-01', [5, 5], [1, 0])])
   banco.desmamados = null
@@ -119,6 +123,7 @@ describe('a ficha da caixa de casal', () => {
         endereco: { numeroVisivel: 'E1', sala: 'Sala 1', codigo: 'F1A' },
         especie: 'rato',
         linhagem: 'Wistar',
+        idLinhagem: 3,
         estado: 'livres',
         ativa: true,
         dtLiberacao: null,
@@ -176,7 +181,24 @@ describe('a ficha da caixa de casal', () => {
 })
 
 describe('a ficha da caixa de estoque', () => {
+  /** um vivo da caixa: o pedido, quando chegou nela e quando nasceu */
+  const vivo = (dtNascimento: string, dtMovimento: string | null, idPedido: number | null = null) => ({
+    idPedido,
+    dtMovimento: dtMovimento === null ? null : d(dtMovimento),
+    parto: { dtPartoReal: d(dtNascimento) },
+  })
+
   beforeEach(() => {
+    banco.umAUm = [
+      vivo('2026-09-01', '2026-09-25'),
+      vivo('2026-09-01', '2026-09-28'),
+      vivo('2026-09-01', '2026-09-25'),
+      vivo('2026-09-01', null),
+      vivo('2026-10-01', '2026-10-25', 9),
+      vivo('2026-10-01', '2026-10-25', 9),
+      vivo('2026-10-01', '2026-10-27'),
+      vivo('2026-10-01', '2026-10-25', 9),
+    ]
     banco.caixa = caixa({ tipo: 'estoque', sexo: 'M', idLinhagem: 3, linhagem: { nome: 'Wistar' }, casais: [] })
     banco.vivos = naCaixa(
       [
@@ -211,6 +233,8 @@ describe('a ficha da caixa de estoque', () => {
         total: 4,
         reservados: 0,
         livres: 4,
+        pedidos: [],
+        dtChegada: '2026-09-28',
         origens: [{ idParto: 20, ordem: 1, casal: 'AB', codigoOrigem: 'F1A', numeroVisivelOrigem: 'E1', qtd: 4 }],
       },
       {
@@ -219,12 +243,39 @@ describe('a ficha da caixa de estoque', () => {
         total: 4,
         reservados: 3,
         livres: 1,
+        pedidos: [{ idPedido: 9, qtd: 3 }],
+        dtChegada: '2026-10-27',
         origens: [
           { idParto: 30, ordem: 2, casal: 'EF', codigoOrigem: 'T2C', numeroVisivelOrigem: 'E2', qtd: 3 },
           { idParto: 31, ordem: 1, casal: 'GH', codigoOrigem: 'F1A', numeroVisivelOrigem: 'E1', qtd: 1 },
         ],
       },
     ])
+  })
+
+  it('a chegada de cada idade e o limite que a baixa, a mudanca e a entrega conferem com os escolhidos dela', async () => {
+    const ficha = await montarFicha(7)
+    if (ficha.tipo !== 'estoque') throw new Error('ficha de casal')
+
+    for (const grupo of ficha.grupos) {
+      const escolhidos = banco.umAUm
+        .filter((animal) => animal.parto.dtPartoReal?.toISOString().slice(0, 10) === grupo.dtNascimento)
+        .map((animal, i) => ({ id: i, idCaixa: 7, idPedido: animal.idPedido, dtMovimento: animal.dtMovimento, dtNascimento: d(grupo.dtNascimento) }))
+      const chegada = grupo.dtChegada ?? ''
+      const vespera = new Date(d(chegada).getTime() - 86_400_000).toISOString().slice(0, 10)
+
+      // no dia da chegada passa; na vespera, recusa
+      expect(() => exigirDepoisDaChegada('dtFato', chegada, escolhidos)).not.toThrow()
+      expect(() => exigirDepoisDaChegada('dtFato', vespera, escolhidos)).toThrow()
+    }
+  })
+
+  it('a idade cujos vivos nunca mudaram de caixa nao tem chegada', async () => {
+    banco.umAUm = banco.umAUm.map((animal) => ({ ...animal, dtMovimento: null }))
+    const ficha = await montarFicha(7)
+    if (ficha.tipo !== 'estoque') throw new Error('ficha de casal')
+
+    expect(ficha.grupos.map((grupo) => grupo.dtChegada)).toEqual([null, null])
   })
 
   it('a caixa que era de casal antes de virar de estoque mostra os casais dela', async () => {
