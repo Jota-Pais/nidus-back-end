@@ -33,6 +33,14 @@ O que mora aqui:
   com parto, eutanásia de seleção e desmame. As datas previstas saem sozinhas:
   parto = acasalamento + 23 dias, desmame = parto + 22, próximo acasalamento =
   parto real + 6
+- **Animais** - cada filhote que nasce vira uma linha anônima em `colonia.animal`,
+  com o parto de origem, o sexo, a caixa onde está e a situação (vivo, morto,
+  entregue ou anulado). Toda contagem da ficha é contada nos animais. Morte e
+  eutanásia são uma ação só, a baixa (`POST /api/caixas/:id/baixa`), em qualquer
+  caixa; a seleção e a diferença do desmame são baixas do parto. Baixa lançada
+  por engano se anula (`POST /api/ocorrencias/:id/anulacao`). Cada ação grava uma
+  ocorrência com os animais que tocou, e só `lancarOcorrencia`
+  (`src/modules/colonia/ocorrencia.ts`) escreve nos animais
 - **Solicitações** - o pedido do pesquisador, com o protocolo CEUA dele, sem
   depender de projeto cadastrado: machos, fêmeas e animais de qualquer sexo, com
   idade exata ou faixa de idade
@@ -140,6 +148,7 @@ src/
   modules/
     infra/             salas, estantes, grade, kanban e ficha
     reproducao/        casais e partos
+    colonia/           os animais: escolha, baixa, anulacao, liberacao da caixa e a trilha
     demanda/           projetos CEUA, solicitações e alocação
     motor/             busca de atendimento
     catalogo/          espécies, linhagens e pares genéticos

@@ -5,11 +5,11 @@ import {
   exigirPerfil,
   usuarioDaRequisicao,
 } from '../../shared/middlewares/autorizacao.ts'
-import { hojeISO } from '../../shared/traducao.ts'
-import { destinosDoEstoque, passarParaOEstoque } from '../infra/estoque.service.ts'
-import { corrigirDesmame, corrigirNascimento, corrigirSelecao } from './correcao.service.ts'
+import { dataDoFato, idNaRota, idNoCorpo, motivoDaCorrecao } from '../../shared/validacao.ts'
+import { corrigirAcasalamento, corrigirDesmame, corrigirNascimento } from './correcao.service.ts'
 import {
   encerrarCasal,
+  fecharSemNinhada,
   formarCasal,
   registrarAcasalamento,
   registrarDesmame,
@@ -26,19 +26,9 @@ import {
 export const casalRoutes = Router()
 export const partoRoutes = Router()
 
-const idNaRota = z.object({ id: z.coerce.number().int().positive().max(2147483647) })
-
-/**
- * A data de algo que ja aconteceu na caixa (acasalamento, parto, selecao, desmame,
- * encerramento): 'aaaa-mm-dd', nunca timestamp, e no maximo hoje em Brasilia. Previsao nao
- * entra por aqui, sai da cadeia temporal
- */
-const dataDoFato = z.iso
-  .date('Data invalida. Use aaaa-mm-dd.')
-  .refine((data) => data >= '2000-01-01', 'Use um ano a partir de 2000.')
-  .refine((data) => data <= hojeISO(), 'A data nao pode ser depois de hoje.')
-
 const grupoGenetico = z.enum(['A', 'B', 'C', 'D', 'E'])
+
+const contagem = z.number().int().min(0).max(999, 'No maximo 999 animais.')
 
 /**
  * Corpo de POST /api/casais. O casal vai numa caixa que ja existe ('idCaixa') ou numa posicao
@@ -47,16 +37,16 @@ const grupoGenetico = z.enum(['A', 'B', 'C', 'D', 'E'])
  */
 export const casalNovo = z
   .object({
-    idCaixa: z.number().int().positive().max(2147483647).optional(),
+    idCaixa: idNoCorpo.optional(),
     posicao: z
       .object({
-        idEstante: z.number().int().positive().max(2147483647),
+        idEstante: idNoCorpo,
         face: z.enum(['frontal', 'traseira']),
-        linha: z.number().int().positive().max(2147483647),
-        coluna: z.number().int().positive().max(2147483647),
+        linha: idNoCorpo,
+        coluna: idNoCorpo,
       })
       .optional(),
-    idLinhagem: z.number().int().positive().max(2147483647),
+    idLinhagem: idNoCorpo,
     grupoMacho: grupoGenetico,
     grupoFemea: grupoGenetico,
     dtFormacao: dataDoFato,
@@ -95,8 +85,8 @@ casalRoutes.post('/:id/acasalamento', exigirPerfil(...OPERA_A_COLONIA), async (r
 
 const nascimento = z.object({
   dtPartoReal: dataDoFato,
-  nascidoM: z.number().int().min(0).max(999, 'No maximo 999 animais.'),
-  nascidoF: z.number().int().min(0).max(999, 'No maximo 999 animais.'),
+  nascidoM: contagem,
+  nascidoF: contagem,
 })
 
 partoRoutes.post('/:id/nascimento', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
@@ -106,11 +96,21 @@ partoRoutes.post('/:id/nascimento', exigirPerfil(...OPERA_A_COLONIA), async (req
   res.json(await registrarNascimento(id, dados, usuarioDaRequisicao(req).id))
 })
 
-const selecao = z.object({
-  dtSelecao: dataDoFato,
-  eutanasiadoM: z.number().int().min(0).max(999, 'No maximo 999 animais.'),
-  eutanasiadoF: z.number().int().min(0).max(999, 'No maximo 999 animais.'),
-})
+/** De qual pedido saem os reservados quando os livres nao bastam. So quando a resposta pedir */
+const pedidoDosReservados = { idPedido: idNoCorpo.optional() }
+
+/** Corpo de POST /api/partos/:id/selecao: uma rodada de eutanasia, com ao menos um animal */
+export const selecao = z
+  .object({
+    dtSelecao: dataDoFato,
+    eutanasiadoM: contagem,
+    eutanasiadoF: contagem,
+    ...pedidoDosReservados,
+  })
+  .refine((dados) => dados.eutanasiadoM + dados.eutanasiadoF > 0, {
+    path: ['eutanasiadoM'],
+    error: 'Informe ao menos um animal.',
+  })
 
 partoRoutes.post('/:id/selecao', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
@@ -122,8 +122,9 @@ partoRoutes.post('/:id/selecao', exigirPerfil(...OPERA_A_COLONIA), async (req, r
 /** Corpo de POST /api/partos/:id/desmame. Chave a mais que o front mande e descartada */
 export const desmame = z.object({
   dtDesmameReal: dataDoFato,
-  desmamadoM: z.number().int().min(0).max(999, 'No maximo 999 animais.'),
-  desmamadoF: z.number().int().min(0).max(999, 'No maximo 999 animais.'),
+  desmamadoM: contagem,
+  desmamadoF: contagem,
+  ...pedidoDosReservados,
 })
 
 partoRoutes.post('/:id/desmame', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
@@ -133,66 +134,49 @@ partoRoutes.post('/:id/desmame', exigirPerfil(...OPERA_A_COLONIA), async (req, r
   res.json(await registrarDesmame(id, dados, usuarioDaRequisicao(req).id))
 })
 
-const motivoDaCorrecao = z.object({
-  motivo: z.string().trim().min(1, 'Diga o motivo da correcao.').max(200),
+/** Corpo de POST /api/partos/:id/sem-ninhada */
+export const semNinhada = z.object({
+  dtSemNinhada: dataDoFato,
+  motivo: z.string().trim().min(1, 'Diga por que o parto nao vai nascer.').max(200),
+})
+
+partoRoutes.post('/:id/sem-ninhada', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+  const { id } = idNaRota.parse(req.params)
+  const dados = semNinhada.parse(req.body)
+
+  res.json(await fecharSemNinhada(id, dados, usuarioDaRequisicao(req).id))
+})
+
+/** Corpo de PATCH /api/partos/:id/nascimento */
+export const correcaoDoNascimento = nascimento.extend({
+  motivo: motivoDaCorrecao,
+  idCaixa: idNoCorpo.optional(),
+  ...pedidoDosReservados,
 })
 
 partoRoutes.patch('/:id/nascimento', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
-  const dados = nascimento.extend(motivoDaCorrecao.shape).parse(req.body)
+  const dados = correcaoDoNascimento.parse(req.body)
 
   res.json(await corrigirNascimento(id, dados, usuarioDaRequisicao(req).id))
 })
 
-partoRoutes.patch('/:id/selecao', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
-  const { id } = idNaRota.parse(req.params)
-  const dados = selecao.extend(motivoDaCorrecao.shape).parse(req.body)
-
-  res.json(await corrigirSelecao(id, dados, usuarioDaRequisicao(req).id))
-})
+/** Corpo de PATCH /api/partos/:id/desmame: so a data. A contagem se corrige pelas baixas */
+export const correcaoDoDesmame = z.object({ dtDesmameReal: dataDoFato, motivo: motivoDaCorrecao })
 
 partoRoutes.patch('/:id/desmame', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
-  const dados = desmame.extend(motivoDaCorrecao.shape).parse(req.body)
+  const dados = correcaoDoDesmame.parse(req.body)
 
   res.json(await corrigirDesmame(id, dados, usuarioDaRequisicao(req).id))
 })
 
-/** O destino dos desmamados de um sexo: uma caixa de estoque que ja existe, ou uma posicao vazia */
-const destinoDoEstoque = z.union([
-  z.object({ idCaixa: z.number().int().positive().max(2147483647) }),
-  z.object({
-    posicao: z.object({
-      idEstante: z.number().int().positive().max(2147483647),
-      face: z.enum(['frontal', 'traseira']),
-      linha: z.number().int().positive().max(2147483647),
-      coluna: z.number().int().positive().max(2147483647),
-    }),
-  }),
-])
+/** Corpo de PATCH /api/partos/:id/acasalamento */
+export const correcaoDoAcasalamento = z.object({ dtAcasalamento: dataDoFato, motivo: motivoDaCorrecao })
 
-const transferencia = z.object({
-  qtd: z.number().int().positive('Informe quantos animais.'),
-  destino: destinoDoEstoque,
-})
-
-const passagemParaOEstoque = z
-  .object({ machos: transferencia.optional(), femeas: transferencia.optional() })
-  .refine((dados) => dados.machos !== undefined || dados.femeas !== undefined, {
-    error: 'Informe os machos, as femeas ou os dois.',
-  })
-
-/** POST /api/partos/:id/estoque - os desmamados saem da caixa do casal para caixas de estoque */
-partoRoutes.post('/:id/estoque', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+partoRoutes.patch('/:id/acasalamento', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
-  const dados = passagemParaOEstoque.parse(req.body)
+  const dados = correcaoDoAcasalamento.parse(req.body)
 
-  res.status(201).json(await passarParaOEstoque(id, dados, usuarioDaRequisicao(req).id))
-})
-
-/** GET /api/partos/:id/destinos-do-estoque - as caixas de estoque que recebem os desmamados do parto */
-partoRoutes.get('/:id/destinos-do-estoque', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
-  const { id } = idNaRota.parse(req.params)
-
-  res.json(await destinosDoEstoque(id))
+  res.json(await corrigirAcasalamento(id, dados, usuarioDaRequisicao(req).id))
 })

@@ -1,132 +1,311 @@
-import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
+// As correcoes da ficha do parto: o acasalamento, o nascimento (data, contagem e sexo) e a data
+// do desmame. A contagem do desmame e a selecao nao se corrigem aqui: anula-se a baixa errada e
+// lanca-se a certa (colonia/baixa.service.ts).
+//
+// Corrigir uma data nunca deixa um fato dos animais fora de ordem: a trilha (colonia.ocorrencia)
+// diz quando cada um morreu, mudou de caixa ou foi entregue.
+
+import type { Prisma } from '@prisma/client'
+import { erroDeRegra } from '../../shared/erros.ts'
 import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { prisma } from '../../shared/prisma.ts'
-import { dataISO, paraData } from '../../shared/traducao.ts'
+import { dataISO, hojeISO, paraData } from '../../shared/traducao.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
-import { calcularDesmamePrevisto } from './cadeiaTemporal.ts'
-import { compromissosAtivosComPedido, faltaNaReserva, separarEntregues } from './disponibilidade.ts'
-import { noEstoque } from '../infra/estoque.ts'
-import type { ContagemDoCiclo } from './disponibilidade.ts'
+import { animaisDoParto, faltasDosPedidos } from '../colonia/consultas.ts'
+import { escolherAnimais, pedidosTocados } from '../colonia/escolha.ts'
+import type { Escolhido } from '../colonia/escolha.ts'
+import { liberarSeVazia } from '../colonia/liberacao.ts'
+import { lancarOcorrencia } from '../colonia/ocorrencia.ts'
+import { MOTIVO_NAO_CHEGOU_AO_DESMAME, MOTIVO_SELECAO, ROTULO_DO_SEXO, SEXOS, contarPorSexo, doSexo } from '../colonia/tipos.ts'
+import type { PorSexo, Sexo } from '../colonia/tipos.ts'
+import { travarCaixas } from '../colonia/travas.ts'
+import { cicloFicha } from './cicloFicha.ts'
 import { exigirOrdem } from './ordemDasDatas.ts'
-import { cicloFicha, contagemInvalida } from './reproducao.service.ts'
-import type { Desmame, Nascimento, Selecao } from './reproducao.service.ts'
+import { campoInvalido, contagemInvalida, travarELerParto } from './reproducao.service.ts'
+import type { Nascimento, PartoTravado } from './reproducao.service.ts'
+
+type Transacao = Prisma.TransactionClient
 
 export type ComMotivo<T> = T & { motivo: string }
 
-async function partoParaCorrigir(idParto: number) {
-  const parto = await prisma.parto.findUnique({
-    where: { id: idParto },
-    include: {
-      compromissos: compromissosAtivosComPedido,
-      lotes: { select: { qtd: true, caixa: { select: { sexo: true } } } },
-      casal: { select: { id: true, dtEncerramento: true } },
-    },
+const ROTULO_DO_FATO: Record<string, string> = { baixa: 'baixa', mudanca: 'mudanca de caixa', entrega: 'entrega' }
+
+/**
+ * O primeiro fato dos animais do parto entre os tipos pedidos, sem contar baixa anulada (o animal
+ * nao morreu). Null quando nao houve nenhum
+ */
+async function primeiroFato(tx: Transacao, idParto: number, tipos: string[]) {
+  return tx.ocorrencia.findFirst({
+    where: { tipo: { in: tipos }, anulacao: { is: null }, animais: { some: { animal: { idParto } } } },
+    orderBy: { dtFato: 'asc' },
+    select: { tipo: true, dtFato: true },
   })
-
-  if (parto === null) {
-    throw naoEncontrado('Parto')
-  }
-
-  return parto
 }
 
-/** O aviso da correcao que deixa a ninhada com menos animais do que o reservado. A correcao grava */
-function alertaDeCompromisso(
-  contagem: ContagemDoCiclo,
-  compromissos: { qtdM: number; qtdF: number; remessa: { idSolicitacao: number } }[],
-): string | null {
-  const falta = faltaNaReserva({ ...contagem, compromissos })
-
-  if (falta === null) return null
-
-  const pedidos = falta.pedidos
-    .map((pedido) => `#${pedido.idSolicitacao} (${pedido.m} M, ${pedido.f} F)`)
-    .join(', ')
-
-  return `A ninhada ficou com menos animais do que o reservado: faltam ${falta.m} M e ${falta.f} F. Pedidos com reserva nela: ${pedidos}. Na lista de solicitacoes, o pedido em falta pode ser devolvido para analise.`
+function rotuloDoFato(fato: { tipo: string } | null): string {
+  return `da primeira ${fato === null ? 'saida' : (ROTULO_DO_FATO[fato.tipo] ?? fato.tipo)} dos animais deste parto`
 }
 
-function contagemDo(parto: ContagemDoCiclo): ContagemDoCiclo {
-  return {
-    nascidoM: parto.nascidoM,
-    nascidoF: parto.nascidoF,
-    eutanasiadoM: parto.eutanasiadoM,
-    eutanasiadoF: parto.eutanasiadoF,
-    desmamadoM: parto.desmamadoM,
-    desmamadoF: parto.desmamadoF,
-  }
-}
+// ------------------------------------------------------------ acasalamento
 
-export async function corrigirNascimento(
+/**
+ * PATCH /api/partos/:id/acasalamento - corrige a data do acasalamento: o erro de digitacao e a
+ * nova monta quando o acasalamento nao pegou, sem gastar um dos 5 partos. A data fica depois da
+ * formacao e do parto anterior, e antes do nascimento, do fechamento sem ninhada e do
+ * encerramento do casal
+ */
+export async function corrigirAcasalamento(
   idParto: number,
-  dados: ComMotivo<Nascimento>,
+  dados: ComMotivo<{ dtAcasalamento: string }>,
   idUsuario: number,
 ) {
-  const parto = await partoParaCorrigir(idParto)
-
-  if (parto.dtPartoReal === null || parto.nascidoM === null || parto.nascidoF === null) {
-    throw erroDeRegra(
-      'SEQUENCIA_INVALIDA',
-      'Este parto ainda nao foi registrado: registre antes de corrigir.',
-    )
-  }
-
-  const seguinte = await prisma.parto.findFirst({
-    where: { idCasal: parto.idCasal, ordem: parto.ordem + 1 },
-    select: { dtAcasalamento: true },
-  })
-
-  exigirOrdem('dtPartoReal', dados.dtPartoReal, {
-    depoisDe: [{ evento: 'do acasalamento', data: parto.dtAcasalamento }],
-    antesDe: [
-      { evento: 'da eutanasia', data: parto.dtSelecao },
-      { evento: 'do desmame', data: parto.dtDesmameReal },
-      { evento: `do acasalamento do ${parto.ordem + 1}o parto`, data: seguinte?.dtAcasalamento },
-    ],
-  })
-
-  const vivosM = dados.nascidoM - (parto.eutanasiadoM ?? 0)
-  const vivosF = dados.nascidoF - (parto.eutanasiadoF ?? 0)
-  const nascidoAbaixo = {
-    m: vivosM < (parto.desmamadoM ?? 0) || vivosM < 0,
-    f: vivosF < (parto.desmamadoF ?? 0) || vivosF < 0,
-  }
-
-  if (nascidoAbaixo.m || nascidoAbaixo.f) {
-    throw contagemInvalida(
-      'nascido',
-      nascidoAbaixo,
-      'O nascido nao pode ficar abaixo da eutanasia e do desmame ja registrados.',
-    )
-  }
-
-  const dataAntiga = dataISO(parto.dtPartoReal)
-  const mudouData = dados.dtPartoReal !== dataAntiga
-
-  const novaContagem = { ...contagemDo(parto), nascidoM: dados.nascidoM, nascidoF: dados.nascidoF }
-
   await prisma.$transaction(async (tx) => {
-    await tx.parto.update({
-      where: { id: idParto },
-      data: {
-        dtPartoReal: paraData(dados.dtPartoReal),
-        dtDesmamePrevisto: paraData(
-          calcularDesmamePrevisto(dataISO(parto.dtPartoPrevisto), dados.dtPartoReal),
-        ),
-        nascidoM: dados.nascidoM,
-        nascidoF: dados.nascidoF,
-      },
+    const parto = await travarELerParto(tx, idParto)
+    const anterior = await tx.parto.findFirst({
+      where: { idCasal: parto.idCasal, ordem: parto.ordem - 1 },
+      select: { ordem: true, dtPartoReal: true },
     })
 
-    if (
-      mudouData &&
-      parto.ordem >= MAX_PARTOS_POR_CASAL &&
-      parto.casal.dtEncerramento !== null &&
-      dataISO(parto.casal.dtEncerramento) === dataAntiga
-    ) {
-      await tx.casal.update({
-        where: { id: parto.casal.id },
-        data: { dtEncerramento: paraData(dados.dtPartoReal) },
+    exigirOrdem('dtAcasalamento', dados.dtAcasalamento, {
+      depoisDe: [
+        { evento: 'da formacao do casal', data: parto.casal.dtFormacao },
+        { evento: `do ${anterior?.ordem}o parto`, data: anterior?.dtPartoReal },
+      ],
+      antesDe: [
+        { evento: 'do parto', data: parto.dtPartoReal },
+        { evento: 'do fechamento sem ninhada', data: parto.dtSemNinhada },
+        { evento: 'do encerramento do casal', data: parto.casal.dtEncerramento },
+      ],
+    })
+
+    const antes = dataISO(parto.dtAcasalamento)
+
+    await tx.parto.update({
+      where: { id: idParto },
+      data: { dtAcasalamento: paraData(dados.dtAcasalamento), dtManutencao: new Date() },
+    })
+
+    await registrarHistorico(tx, {
+      idUsuario,
+      entidade: 'parto',
+      idEntidade: idParto,
+      acao: 'correcao_acasalamento',
+      descricao: `Correcao do acasalamento do ${parto.ordem}o parto: ${dados.motivo}`,
+      dados: {
+        motivo: dados.motivo,
+        antes: { dtAcasalamento: antes },
+        depois: { dtAcasalamento: dados.dtAcasalamento },
+      },
+    })
+  })
+
+  return cicloFicha(idParto)
+}
+
+// ------------------------------------------------------------ nascimento
+
+/** O que muda nos animais para a contagem do parto passar de 'atual' para 'nova' */
+export type PlanoDaContagem = {
+  /** Animais registrados com o sexo trocado */
+  troca: { de: Sexo; para: Sexo; qtd: number } | null
+  /** Animais que nasceram e nao foram registrados */
+  novos: PorSexo
+  /** Registros de animal que nao existiu */
+  anular: PorSexo
+}
+
+/**
+ * Quando um sexo sobe e o outro desce, a diferenca comum e troca de sexo (eram machos registrados
+ * como femeas, ou o contrario). O resto e animal a mais ou registro a anular
+ */
+export function planoDaContagem(atual: PorSexo, nova: PorSexo): PlanoDaContagem {
+  const difM = nova.m - atual.m
+  const difF = nova.f - atual.f
+
+  if (difM > 0 && difF < 0) {
+    const qtd = Math.min(difM, -difF)
+    return { troca: { de: 'F', para: 'M', qtd }, novos: { m: difM - qtd, f: 0 }, anular: { m: 0, f: -difF - qtd } }
+  }
+
+  if (difF > 0 && difM < 0) {
+    const qtd = Math.min(difF, -difM)
+    return { troca: { de: 'M', para: 'F', qtd }, novos: { m: 0, f: difF - qtd }, anular: { m: -difM - qtd, f: 0 } }
+  }
+
+  return {
+    troca: null,
+    novos: { m: Math.max(0, difM), f: Math.max(0, difF) },
+    anular: { m: Math.max(0, -difM), f: Math.max(0, -difF) },
+  }
+}
+
+/**
+ * Onde entram os animais a mais: onde a ninhada esta. Na caixa do casal se ela continua ativa, ou
+ * na caixa indicada (de estoque, depois do desmame, chegando na data do desmame)
+ */
+async function destinoDosNovos(tx: Transacao, parto: PartoTravado, idCaixa: number | undefined) {
+  if (idCaixa === undefined || idCaixa === parto.casal.idCaixa) {
+    if (!parto.casal.caixa.ativa) {
+      throw campoInvalido(
+        'idCaixa',
+        `A caixa ${parto.casal.caixa.codigo} do casal ja foi liberada: diga em qual caixa entram os animais a mais.`,
+      )
+    }
+
+    return { idCaixa: parto.casal.idCaixa, dtMovimento: null }
+  }
+
+  const caixa = await tx.caixa.findUnique({ where: { id: idCaixa }, select: { ativa: true } })
+
+  if (caixa === null) throw campoInvalido('idCaixa', 'Esta caixa nao existe.')
+  if (!caixa.ativa) throw campoInvalido('idCaixa', 'Esta caixa ja foi liberada.')
+
+  if (parto.dtDesmameReal === null) {
+    throw erroDeRegra('SEQUENCIA_INVALIDA', 'Antes do desmame os filhotes ficam na caixa do casal.')
+  }
+
+  return { idCaixa, dtMovimento: dataISO(parto.dtDesmameReal) }
+}
+
+export type CorrecaoDoNascimento = ComMotivo<Nascimento> & {
+  /** Onde entram os animais a mais quando a ninhada ja saiu da caixa do casal */
+  idCaixa?: number | undefined
+  /** De qual pedido saem os reservados a anular, quando os livres nao bastam */
+  idPedido?: number | undefined
+}
+
+/**
+ * PATCH /api/partos/:id/nascimento - corrige a data e a contagem do parto. A data muda no parto e
+ * na ocorrencia do nascimento, e com ela a idade de todos os animais do parto, onde estiverem.
+ * Na contagem: troca de sexo de vivos livres na caixa do casal, animais a mais onde a ninhada esta
+ * e anulacao de registros (livres primeiro; nunca morto ou entregue)
+ */
+export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNascimento, idUsuario: number) {
+  const faltas = await prisma.$transaction(async (tx) => {
+    const parto = await travarELerParto(tx, idParto)
+
+    if (parto.dtPartoReal === null) {
+      throw erroDeRegra('SEQUENCIA_INVALIDA', 'Este parto ainda nao foi registrado: registre antes de corrigir.')
+    }
+
+    const [seguinte, fato] = await Promise.all([
+      tx.parto.findFirst({
+        where: { idCasal: parto.idCasal, ordem: parto.ordem + 1 },
+        select: { dtAcasalamento: true },
+      }),
+      primeiroFato(tx, idParto, ['baixa', 'mudanca', 'entrega']),
+    ])
+
+    exigirOrdem('dtPartoReal', dados.dtPartoReal, {
+      depoisDe: [{ evento: 'do acasalamento', data: parto.dtAcasalamento }],
+      antesDe: [
+        { evento: 'do desmame', data: parto.dtDesmameReal },
+        { evento: `do acasalamento do ${parto.ordem + 1}o parto`, data: seguinte?.dtAcasalamento },
+        { evento: rotuloDoFato(fato), data: fato?.dtFato },
+      ],
+    })
+
+    const animais = await animaisDoParto(tx, idParto)
+    const nascidos = contarPorSexo(animais.filter((animal) => animal.situacao !== 'anulado'))
+    const vivos = contarPorSexo(animais.filter((animal) => animal.situacao === 'vivo'))
+    const plano = planoDaContagem(nascidos, { m: dados.nascidoM, f: dados.nascidoF })
+
+    // so vivo se anula: o morto e o entregue aconteceram
+    const passou = { m: plano.anular.m > vivos.m, f: plano.anular.f > vivos.f }
+
+    if (passou.m || passou.f) {
+      throw contagemInvalida(
+        'nascido',
+        passou,
+        `Os mortos e os entregues continuam contando: o nascido nao fica abaixo de ${nascidos.m - vivos.m} M e ${nascidos.f - vivos.f} F.`,
+      )
+    }
+
+    // a troca de sexo vale so para vivo livre na caixa do casal: o reservado conta no pedido pelo
+    // sexo, e a caixa de estoque guarda um sexo so
+    const troca = plano.troca
+
+    if (troca !== null) {
+      const trocaveis = animais.filter(
+        (animal) =>
+          animal.situacao === 'vivo' &&
+          animal.sexo === troca.de &&
+          animal.idPedido === null &&
+          animal.idCaixa === parto.casal.idCaixa,
+      ).length
+
+      if (trocaveis < troca.qtd) {
+        throw erroDeRegra(
+          'SEQUENCIA_INVALIDA',
+          `Para trocar o sexo de ${troca.qtd} ${ROTULO_DO_SEXO[troca.de]}, eles tem de estar vivos, livres e na caixa do casal, e so ha ${trocaveis}. Desfaca a reserva ou corrija de outro jeito.`,
+        )
+      }
+    }
+
+    // as caixas que a correcao pode tocar, travadas juntas e em ordem antes de ler o destino
+    await travarCaixas(tx, [
+      parto.casal.idCaixa,
+      ...(dados.idCaixa === undefined ? [] : [dados.idCaixa]),
+      ...animais.filter((animal) => animal.situacao === 'vivo').map((animal) => animal.idCaixa),
+    ])
+
+    const novos =
+      plano.novos.m + plano.novos.f === 0 ? null : await destinoDosNovos(tx, parto, dados.idCaixa)
+
+    const trocados =
+      troca === null
+        ? []
+        : await escolherAnimais(tx, { idParto, idCaixa: parto.casal.idCaixa, sexo: troca.de }, troca.qtd, {
+            soLivres: true,
+          })
+
+    const anulados: Escolhido[] = []
+
+    for (const sexo of SEXOS) {
+      anulados.push(
+        ...(await escolherAnimais(tx, { idParto, sexo }, doSexo(plano.anular, sexo), {
+          idPedido: dados.idPedido,
+          excluir: [...trocados, ...anulados].map((animal) => animal.id),
+        })),
+      )
+    }
+
+    const dataAntiga = dataISO(parto.dtPartoReal)
+
+    if (dados.dtPartoReal !== dataAntiga) {
+      await tx.parto.update({
+        where: { id: idParto },
+        data: { dtPartoReal: paraData(dados.dtPartoReal), dtManutencao: new Date() },
+      })
+
+      await tx.ocorrencia.updateMany({
+        where: { idParto, tipo: 'nascimento' },
+        data: { dtFato: paraData(dados.dtPartoReal) },
+      })
+
+      // o 5o parto encerrou o casal na data dele: o encerramento acompanha a data corrigida
+      if (
+        parto.ordem >= MAX_PARTOS_POR_CASAL &&
+        parto.casal.dtEncerramento !== null &&
+        dataISO(parto.casal.dtEncerramento) === dataAntiga
+      ) {
+        await tx.casal.update({
+          where: { id: parto.casal.id },
+          data: { dtEncerramento: paraData(dados.dtPartoReal), dtManutencao: new Date() },
+        })
+      }
+    }
+
+    if (trocados.length + anulados.length > 0 || novos !== null) {
+      await lancarOcorrencia(tx, {
+        tipo: 'correcao',
+        dtFato: dados.dtPartoReal,
+        idUsuario,
+        idParto,
+        motivo: dados.motivo,
+        trocaDeSexo: troca === null ? undefined : { ids: trocados.map((animal) => animal.id), para: troca.para },
+        anulados: anulados.map((animal) => animal.id),
+        novos: novos === null ? undefined : { ...novos, ...plano.novos },
       })
     }
 
@@ -138,178 +317,86 @@ export async function corrigirNascimento(
       descricao: `Correcao do ${parto.ordem}o parto: ${dados.motivo}`,
       dados: {
         motivo: dados.motivo,
-        antes: { dtPartoReal: dataAntiga, nascidoM: parto.nascidoM, nascidoF: parto.nascidoF },
-        depois: {
-          dtPartoReal: dados.dtPartoReal,
-          nascidoM: dados.nascidoM,
-          nascidoF: dados.nascidoF,
-        },
+        antes: { dtPartoReal: dataAntiga, nascidoM: nascidos.m, nascidoF: nascidos.f },
+        depois: { dtPartoReal: dados.dtPartoReal, nascidoM: dados.nascidoM, nascidoF: dados.nascidoF },
       },
     })
+
+    // a caixa que so tinha registros anulados fica vazia
+    for (const idCaixa of new Set(anulados.map((animal) => animal.idCaixa))) {
+      await liberarSeVazia(tx, idCaixa, hojeISO(), 'baixa', idUsuario)
+    }
+
+    return faltasDosPedidos(tx, pedidosTocados(anulados))
   })
 
-  return {
-    parto: await cicloFicha(idParto),
-    alerta: alertaDeCompromisso(novaContagem, parto.compromissos),
-  }
+  return { parto: await cicloFicha(idParto), faltas }
 }
 
-export async function corrigirSelecao(
-  idParto: number,
-  dados: ComMotivo<Selecao>,
-  idUsuario: number,
-) {
-  const parto = await partoParaCorrigir(idParto)
+// ------------------------------------------------------------ desmame
 
-  if (
-    parto.dtSelecao === null ||
-    parto.dtPartoReal === null ||
-    parto.nascidoM === null ||
-    parto.nascidoF === null
-  ) {
-    throw erroDeRegra('SEQUENCIA_INVALIDA', 'A eutanasia deste parto ainda nao foi registrada.')
-  }
-
-  exigirOrdem('dtSelecao', dados.dtSelecao, {
-    depoisDe: [{ evento: 'do parto', data: parto.dtPartoReal }],
-    antesDe: [{ evento: 'do desmame', data: parto.dtDesmameReal }],
-  })
-
-  const vivosM = parto.nascidoM - dados.eutanasiadoM
-  const vivosF = parto.nascidoF - dados.eutanasiadoF
-
-  if (vivosM < 0 || vivosF < 0) {
-    throw contagemInvalida(
-      'eutanasiado',
-      { m: vivosM < 0, f: vivosF < 0 },
-      `Nao pode passar do nascido (${parto.nascidoM} M, ${parto.nascidoF} F).`,
-    )
-  }
-
-  const abaixoDoDesmame = {
-    m: vivosM < (parto.desmamadoM ?? 0),
-    f: vivosF < (parto.desmamadoF ?? 0),
-  }
-
-  if (abaixoDoDesmame.m || abaixoDoDesmame.f) {
-    throw contagemInvalida(
-      'eutanasiado',
-      abaixoDoDesmame,
-      'Com essa eutanasia sobrariam menos animais do que os ja desmamados.',
-    )
-  }
-
-  const selecaoAntiga = dataISO(parto.dtSelecao)
-  const novaContagem = {
-    ...contagemDo(parto),
-    eutanasiadoM: dados.eutanasiadoM,
-    eutanasiadoF: dados.eutanasiadoF,
-  }
-
-  await prisma.$transaction(async (tx) => {
-    await tx.parto.update({
-      where: { id: idParto },
-      data: {
-        dtSelecao: paraData(dados.dtSelecao),
-        eutanasiadoM: dados.eutanasiadoM,
-        eutanasiadoF: dados.eutanasiadoF,
-      },
-    })
-
-    await registrarHistorico(tx, {
-      idUsuario,
-      entidade: 'parto',
-      idEntidade: idParto,
-      acao: 'correcao_selecao',
-      descricao: `Correcao da eutanasia do ${parto.ordem}o parto: ${dados.motivo}`,
-      dados: {
-        motivo: dados.motivo,
-        antes: {
-          dtSelecao: selecaoAntiga,
-          eutanasiadoM: parto.eutanasiadoM,
-          eutanasiadoF: parto.eutanasiadoF,
-        },
-        depois: {
-          dtSelecao: dados.dtSelecao,
-          eutanasiadoM: dados.eutanasiadoM,
-          eutanasiadoF: dados.eutanasiadoF,
-        },
-      },
-    })
-  })
-
-  return {
-    parto: await cicloFicha(idParto),
-    alerta: alertaDeCompromisso(novaContagem, parto.compromissos),
-  }
-}
-
+/**
+ * PATCH /api/partos/:id/desmame - corrige so a data do desmame. Ela fica depois do parto e da
+ * ultima selecao, e nunca depois de uma mudanca de caixa ou entrega dos animais do parto. A baixa
+ * 'nao chegou ao desmame' acompanha a data. A contagem se corrige anulando essa baixa ou lancando
+ * outra
+ */
 export async function corrigirDesmame(
   idParto: number,
-  dados: ComMotivo<Desmame>,
+  dados: ComMotivo<{ dtDesmameReal: string }>,
   idUsuario: number,
 ) {
-  const parto = await partoParaCorrigir(idParto)
-
-  if (
-    parto.dtDesmameReal === null ||
-    parto.dtPartoReal === null ||
-    parto.nascidoM === null ||
-    parto.nascidoF === null
-  ) {
-    throw erroDeRegra('SEQUENCIA_INVALIDA', 'O desmame deste parto ainda nao foi registrado.')
-  }
-
-  exigirOrdem('dtDesmameReal', dados.dtDesmameReal, {
-    depoisDe: [
-      { evento: 'do parto', data: parto.dtPartoReal },
-      { evento: 'da eutanasia', data: parto.dtSelecao },
-    ],
-  })
-
-  const vivosM = parto.nascidoM - (parto.eutanasiadoM ?? 0)
-  const vivosF = parto.nascidoF - (parto.eutanasiadoF ?? 0)
-  const desmamePassou = { m: dados.desmamadoM > vivosM, f: dados.desmamadoF > vivosF }
-
-  if (desmamePassou.m || desmamePassou.f) {
-    throw contagemInvalida(
-      'desmamado',
-      desmamePassou,
-      `Nao pode passar do nascido menos a eutanasia (${vivosM} M, ${vivosF} F).`,
-    )
-  }
-
-  // o que ja saiu da caixa do casal (entregue ou na caixa de estoque) aconteceu: o desmame nao
-  // fica abaixo disso
-  const { entregue } = separarEntregues(parto.compromissos)
-  const estoque = noEstoque(parto)
-  const saiu = { m: entregue.m + estoque.m, f: entregue.f + estoque.f }
-  const abaixo = { m: dados.desmamadoM < saiu.m, f: dados.desmamadoF < saiu.f }
-
-  if (abaixo.m || abaixo.f) {
-    throw contagemInvalida(
-      'desmamado',
-      abaixo,
-      `Nao pode ficar abaixo do que ja saiu da caixa do casal, entregue ou no estoque (${saiu.m} M, ${saiu.f} F).`,
-    )
-  }
-
-  const desmameAntigo = dataISO(parto.dtDesmameReal)
-  const novaContagem = {
-    ...contagemDo(parto),
-    desmamadoM: dados.desmamadoM,
-    desmamadoF: dados.desmamadoF,
-  }
-
   await prisma.$transaction(async (tx) => {
+    const parto = await travarELerParto(tx, idParto)
+
+    if (parto.dtDesmameReal === null || parto.dtPartoReal === null) {
+      throw erroDeRegra('SEQUENCIA_INVALIDA', 'O desmame deste parto ainda nao foi registrado.')
+    }
+
+    const daBaixa = (motivo: string, ordem: 'asc' | 'desc') =>
+      tx.ocorrencia.findFirst({
+        where: { tipo: 'baixa', idParto, motivo, anulacao: { is: null } },
+        orderBy: { dtFato: ordem },
+        select: { id: true, dtFato: true, animais: { select: { idAnimal: true } } },
+      })
+
+    const [ultimaSelecao, naoChegaram, saida] = await Promise.all([
+      daBaixa(MOTIVO_SELECAO, 'desc'),
+      daBaixa(MOTIVO_NAO_CHEGOU_AO_DESMAME, 'asc'),
+      primeiroFato(tx, idParto, ['mudanca', 'entrega']),
+    ])
+
+    exigirOrdem('dtDesmameReal', dados.dtDesmameReal, {
+      depoisDe: [
+        { evento: 'do parto', data: parto.dtPartoReal },
+        { evento: 'da ultima eutanasia de selecao', data: ultimaSelecao?.dtFato },
+      ],
+      antesDe: [{ evento: rotuloDoFato(saida), data: saida?.dtFato }],
+    })
+
+    const antes = dataISO(parto.dtDesmameReal)
+    if (dados.dtDesmameReal === antes) return
+
     await tx.parto.update({
       where: { id: idParto },
-      data: {
-        dtDesmameReal: paraData(dados.dtDesmameReal),
-        desmamadoM: dados.desmamadoM,
-        desmamadoF: dados.desmamadoF,
-      },
+      data: { dtDesmameReal: paraData(dados.dtDesmameReal), dtManutencao: new Date() },
     })
+
+    if (naoChegaram !== null) {
+      await tx.ocorrencia.update({
+        where: { id: naoChegaram.id },
+        data: { dtFato: paraData(dados.dtDesmameReal) },
+      })
+
+      await lancarOcorrencia(tx, {
+        tipo: 'correcao',
+        dtFato: dados.dtDesmameReal,
+        idUsuario,
+        idParto,
+        motivo: dados.motivo,
+        novaSaida: { ids: naoChegaram.animais.map((ligacao) => ligacao.idAnimal), dtSaida: dados.dtDesmameReal },
+      })
+    }
 
     await registrarHistorico(tx, {
       idUsuario,
@@ -319,22 +406,11 @@ export async function corrigirDesmame(
       descricao: `Correcao do desmame do ${parto.ordem}o parto: ${dados.motivo}`,
       dados: {
         motivo: dados.motivo,
-        antes: {
-          dtDesmameReal: desmameAntigo,
-          desmamadoM: parto.desmamadoM,
-          desmamadoF: parto.desmamadoF,
-        },
-        depois: {
-          dtDesmameReal: dados.dtDesmameReal,
-          desmamadoM: dados.desmamadoM,
-          desmamadoF: dados.desmamadoF,
-        },
+        antes: { dtDesmameReal: antes },
+        depois: { dtDesmameReal: dados.dtDesmameReal },
       },
     })
   })
 
-  return {
-    parto: await cicloFicha(idParto),
-    alerta: alertaDeCompromisso(novaContagem, parto.compromissos),
-  }
+  return { parto: await cicloFicha(idParto) }
 }

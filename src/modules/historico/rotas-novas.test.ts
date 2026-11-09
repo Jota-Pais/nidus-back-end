@@ -40,14 +40,15 @@ describe('o pesquisador nao opera a colonia', () => {
         .patch('/api/partos/1/nascimento')
         .send({ dtPartoReal: '2026-10-01', nascidoM: 1, nascidoF: 1, motivo: 'x' }),
       request(pesquisador)
-        .patch('/api/partos/1/selecao')
-        .send({ dtSelecao: '2026-10-01', eutanasiadoM: 0, eutanasiadoF: 0, motivo: 'x' }),
+        .patch('/api/partos/1/acasalamento')
+        .send({ dtAcasalamento: '2026-10-01', motivo: 'x' }),
       request(pesquisador)
         .patch('/api/partos/1/desmame')
-        .send({ dtDesmameReal: '2026-10-01', desmamadoM: 0, desmamadoF: 0, motivo: 'x' }),
+        .send({ dtDesmameReal: '2026-10-01', motivo: 'x' }),
+      request(pesquisador).post('/api/ocorrencias/1/anulacao').send({ motivo: 'x' }),
     ])
 
-    expect(respostas.map((resposta) => resposta.status)).toEqual([403, 403, 403, 403])
+    expect(respostas.map((resposta) => resposta.status)).toEqual([403, 403, 403, 403, 403])
   })
 
   it('nao le a colonia: estoque, busca, kanban, estantes, caixas, projetos nem historico', async () => {

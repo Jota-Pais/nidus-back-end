@@ -1,6 +1,7 @@
 // A ficha da caixa: dados da caixa, o casal, os partos (1 a 5) e o historico
 
-import { casalFicha, cicloFicha } from '../reproducao/reproducao.service.ts'
+import { cicloFicha } from '../reproducao/cicloFicha.ts'
+import { casalFicha } from '../reproducao/reproducao.service.ts'
 import { naoEncontrado } from '../../shared/erros.ts'
 import { codigoDaPosicao } from './endereco.ts'
 import { animaisNaCaixaDoCasal, fichaDoEstoque, sexoParaVirarEstoque } from './estoque.service.ts'

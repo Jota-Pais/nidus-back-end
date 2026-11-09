@@ -5,7 +5,7 @@ import { criarApp } from '../../app.ts'
 import { hojeISO } from '../../shared/traducao.ts'
 import type { Perfil } from '../../shared/traducao.ts'
 import { somarDias } from './cadeiaTemporal.ts'
-import { casalNovo, desmame } from './reproducao.routes.ts'
+import { casalNovo, correcaoDoDesmame, correcaoDoNascimento, desmame, selecao } from './reproducao.routes.ts'
 
 // Autorizacao e validacao de forma - o mesmo recorte de
 // 'infra.routes.test.ts'. Sucesso com dado real (as regras
@@ -175,9 +175,11 @@ describe('validacao de entrada - nada se registra no futuro', () => {
       [
         'patch',
         '/api/partos/1/desmame',
-        { dtDesmameReal: amanha, desmamadoM: 4, desmamadoF: 5, motivo: 'Erro' },
+        { dtDesmameReal: amanha, motivo: 'Erro' },
         'dtDesmameReal',
       ],
+      ['patch', '/api/partos/1/acasalamento', { dtAcasalamento: amanha, motivo: 'Erro' }, 'dtAcasalamento'],
+      ['post', '/api/partos/1/sem-ninhada', { dtSemNinhada: amanha, motivo: 'Nao pariu' }, 'dtSemNinhada'],
     ] as const
 
     // a validacao barra antes do servico: nada chega ao banco
@@ -192,5 +194,56 @@ describe('validacao de entrada - nada se registra no futuro', () => {
     expect(
       desmame.safeParse({ dtDesmameReal: hojeISO(), desmamadoM: 4, desmamadoF: 5 }).success,
     ).toBe(true)
+  })
+})
+
+describe('validacao de entrada - modelo por rato', () => {
+  it('a rodada de selecao tem ao menos um animal, e o pedido dos reservados e opcional', () => {
+    expect(selecao.safeParse({ dtSelecao: '2026-05-25', eutanasiadoM: 0, eutanasiadoF: 0 }).success).toBe(false)
+    expect(
+      selecao.safeParse({ dtSelecao: '2026-05-25', eutanasiadoM: 1, eutanasiadoF: 0, idPedido: 3 }).success,
+    ).toBe(true)
+  })
+
+  it('a correcao do desmame e so a data: a contagem se corrige pelas baixas', () => {
+    const resultado = correcaoDoDesmame.safeParse({
+      dtDesmameReal: '2026-06-16',
+      desmamadoM: 4,
+      desmamadoF: 5,
+      motivo: 'data errada',
+    })
+
+    expect(resultado.data).toEqual({ dtDesmameReal: '2026-06-16', motivo: 'data errada' })
+  })
+
+  it('a correcao do nascimento aceita a caixa dos animais a mais', () => {
+    const resultado = correcaoDoNascimento.safeParse({
+      dtPartoReal: '2026-05-25',
+      nascidoM: 6,
+      nascidoF: 5,
+      motivo: 'faltou um',
+      idCaixa: 7,
+    })
+
+    expect(resultado.success).toBe(true)
+  })
+
+  it('a correcao sem motivo volta 400 no campo do motivo', async () => {
+    const resposta = await request(app('tecnico'))
+      .patch('/api/partos/1/acasalamento')
+      .send({ dtAcasalamento: '2026-05-02', motivo: '' })
+
+    expect(resposta.status).toBe(400)
+    expect(Object.keys(resposta.body.erro.campos)).toContain('motivo')
+  })
+
+  it('as rotas do modelo por caixa sairam: passagem por parto, destinos e correcao da selecao', async () => {
+    const tecnico = request(app('tecnico'))
+
+    expect((await tecnico.post('/api/partos/1/estoque').send({})).status).toBe(404)
+    expect((await request(app('tecnico')).get('/api/partos/1/destinos-do-estoque')).status).toBe(404)
+    expect(
+      (await request(app('tecnico')).patch('/api/partos/1/selecao').send({ dtSelecao: '2026-05-25' })).status,
+    ).toBe(404)
   })
 })
