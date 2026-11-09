@@ -151,7 +151,7 @@ describe('lancarOcorrencia: a unica porta de escrita nos animais', () => {
       motivo: 'contagem errada',
       trocaDeSexo: { ids: [1], para: 'M' },
       anulados: [2],
-      novos: { idCaixa: 6, dtMovimento: '2026-10-23', m: 1, f: 0 },
+      novos: { idCaixa: 6, m: 1, f: 0, chegam: false },
       novaSaida: { ids: [3], dtSaida: '2026-10-24' },
     })
 
@@ -160,9 +160,24 @@ describe('lancarOcorrencia: a unica porta de escrita nos animais', () => {
       { where: { situacao: 'vivo', idParto: 9, id: { in: [2] } }, data: { situacao: 'anulado' } },
       { where: { situacao: 'morto', idParto: 9, id: { in: [3] } }, data: { dtSaida: d('2026-10-24') } },
     ])
-    expect(banco.criados).toEqual([{ idParto: 9, sexo: 'M', idCaixa: 6, dtMovimento: d('2026-10-23') }])
+    // os a mais estao onde nasceram: sem chegada
+    expect(banco.criados).toEqual([{ idParto: 9, sexo: 'M', idCaixa: 6, dtMovimento: null }])
     expect(lancado.ids).toEqual([1, 2, 3, 100])
     expect(banco.ocorrencia).toMatchObject({ tipo: 'correcao', motivo: 'contagem errada', idCaixaDestino: 6 })
+  })
+
+  it('correcao: os a mais que chegam numa caixa de estoque chegam na data do fato', async () => {
+    await lancarOcorrencia(tx as never, {
+      tipo: 'correcao',
+      dtFato: '2026-10-23',
+      idUsuario: 4,
+      idParto: 9,
+      motivo: 'contagem errada',
+      novos: { idCaixa: 6, m: 0, f: 1, chegam: true },
+    })
+
+    expect(banco.criados).toEqual([{ idParto: 9, sexo: 'F', idCaixa: 6, dtMovimento: d('2026-10-23') }])
+    expect(banco.ocorrencia).toMatchObject({ tipo: 'correcao', dtFato: d('2026-10-23'), idCaixaDestino: 6 })
   })
 
   it('anulacao: o morto volta a viver; os soltos perdem a reserva; na caixa liberada, muda de caixa', async () => {

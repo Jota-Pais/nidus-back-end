@@ -13,7 +13,7 @@ import { travarPedidos } from '../colonia/travas.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
 import { PARA_O_AVISO, avisarPesquisador } from './aviso.ts'
-import { RECUSAVEIS, statusDo } from './pedido.ts'
+import { RECUSAVEIS, descreverQuantidade, statusDo } from './pedido.ts'
 import type { StatusDoPedido } from './pedido.ts'
 import { soltarReservados } from './reserva.service.ts'
 
@@ -175,7 +175,7 @@ export async function criarPedido(dados: PedidoNovo, usuario: UsuarioDaSessao, a
       entidade: 'pedido',
       idEntidade: pedido.id,
       acao: ACAO_CRIACAO,
-      descricao: `Pedido de ${dados.machos} M, ${dados.femeas} F e ${dados.qualquer} de qualquer sexo de ${linhagem.nome} para ${dados.dataEntrega}`,
+      descricao: `Pedido de ${descreverQuantidade({ m: dados.machos, f: dados.femeas, qualquer: dados.qualquer })} de ${linhagem.nome} para ${dados.dataEntrega}`,
       dados: { ...dados },
     })
 

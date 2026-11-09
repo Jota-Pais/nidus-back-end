@@ -56,16 +56,16 @@ describe('descricao da correcao, que a ficha mostra como evento', () => {
     expect(
       descricaoDaCorrecao(
         'Correcao do 2o parto',
-        [dePara('20/09/2026', '18/09/2026', 'nascimento'), dePara('2 M e 2 F', '3 M e 2 F', 'contagem')],
+        [dePara('20/09/2026', '18/09/2026', 'nascimento'), dePara('2 machos e 2 femeas', '3 machos e 2 femeas', 'contagem')],
         'contagem errada',
       ),
-    ).toBe('Correcao do 2o parto (nascimento de 20/09/2026 para 18/09/2026; contagem de 2 M e 2 F para 3 M e 2 F): contagem errada')
+    ).toBe('Correcao do 2o parto (nascimento de 20/09/2026 para 18/09/2026; contagem de 2 machos e 2 femeas para 3 machos e 2 femeas): contagem errada')
   })
 
   it('o que nao mudou fica de fora', () => {
     expect(
-      descricaoDaCorrecao('Correcao do 1o parto', [dePara('20/09/2026', '20/09/2026', 'nascimento'), dePara('5 M e 5 F', '4 M e 5 F', 'contagem')], 'x'),
-    ).toBe('Correcao do 1o parto (contagem de 5 M e 5 F para 4 M e 5 F): x')
+      descricaoDaCorrecao('Correcao do 1o parto', [dePara('20/09/2026', '20/09/2026', 'nascimento'), dePara('5 machos e 5 femeas', '4 machos e 5 femeas', 'contagem')], 'x'),
+    ).toBe('Correcao do 1o parto (contagem de 5 machos e 5 femeas para 4 machos e 5 femeas): x')
     expect(descricaoDaCorrecao('Correcao do acasalamento do 1o parto', [dePara('01/09/2026', '01/09/2026')], 'x')).toBe(
       'Correcao do acasalamento do 1o parto: x',
     )

@@ -479,7 +479,14 @@ describe('pedido novo', () => {
     const { id } = await criarPedido(novo, pesquisadora, new Date('2026-11-08T12:00:00.000Z'))
 
     expect(banco.pedidos.get(id)).toMatchObject({ status: 'enviado', idEspecie: 1, idLinhagem: 3, qtdM: 2, qtdF: 1 })
-    expect(banco.historicos).toEqual([expect.objectContaining({ entidade: 'pedido', idEntidade: id, acao: 'criacao' })])
+    expect(banco.historicos).toEqual([
+      expect.objectContaining({
+        entidade: 'pedido',
+        idEntidade: id,
+        acao: 'criacao',
+        descricao: 'Pedido de 2 machos e 1 femea de Wistar para 2026-12-01',
+      }),
+    ])
   })
 
   it('recusa linhagem inativa e entrega no passado, no campo', async () => {

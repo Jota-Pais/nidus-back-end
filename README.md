@@ -190,6 +190,14 @@ entrada de cada rota, Vitest + supertest. Deploy na Render.
 `prisma` e `@prisma/client` estão pregados na mesma versão exata, sem `^`. Suba os
 dois juntos ou nenhum.
 
+O `pg` fica na 8, a que o `@prisma/adapter-pg` 7 pede. O nosso código faz uma
+consulta de cada vez dentro da transação (a suíte de banco barra o `Promise.all`),
+mas o próprio Prisma ainda manda juntas, na mesma conexão, as consultas das relações
+aninhadas de um `include` ou `select`. O pg 8 as enfileira e avisa ("Calling
+client.query() when the client is already executing a query ... removed in
+pg@9.0"); o pg 9 vai recusar. Não suba o `pg` para a 9 antes de o adapter do Prisma
+enfileirar essas consultas.
+
 ## Estrutura
 
 ```

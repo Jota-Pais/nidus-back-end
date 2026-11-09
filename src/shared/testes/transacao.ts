@@ -11,7 +11,9 @@
 //
 // A transacao do teste e uma conexao so, como a transacao interativa de cada servico. Por isso:
 // - dentro do $transaction de um servico, duas consultas ao mesmo tempo (um Promise.all) falham o
-//   teste: o driver as enfileira hoje, e o pg 9 deixa de aceitar;
+//   teste: o driver as enfileira hoje, e o pg 9 deixa de aceitar. A vigia so ve as chamadas do
+//   servico: as consultas das relacoes aninhadas que o proprio Prisma manda juntas passam (sao o
+//   aviso de deprecacao do pg que a suite imprime), e por isso o pg fica na 8 (README, Stack);
 // - fora dele, onde o servico usa o Prisma de verdade (um pool, uma conexao por consulta), as
 //   consultas vao uma de cada vez, em fila, como se cada uma tivesse a sua conexao.
 //

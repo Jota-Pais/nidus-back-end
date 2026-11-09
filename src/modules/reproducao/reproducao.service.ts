@@ -19,7 +19,14 @@ import { escolherAnimais, exigirDepoisDaChegada, pedidosTocados } from '../colon
 import type { Escolhido } from '../colonia/escolha.ts'
 import { caixaLiberada, liberarSeVazia, partoPendente } from '../colonia/liberacao.ts'
 import { lancarOcorrencia } from '../colonia/ocorrencia.ts'
-import { MOTIVO_NAO_CHEGOU_AO_DESMAME, MOTIVO_SELECAO, SEXOS, contarPorSexo, doSexo } from '../colonia/tipos.ts'
+import {
+  MOTIVO_NAO_CHEGOU_AO_DESMAME,
+  MOTIVO_SELECAO,
+  SEXOS,
+  contarPorSexo,
+  doSexo,
+  quantosAnimais,
+} from '../colonia/tipos.ts'
 import type { PorSexo } from '../colonia/tipos.ts'
 import { travarCaixas, travarCasal, travarParto } from '../colonia/travas.ts'
 import { cicloFicha } from './cicloFicha.ts'
@@ -109,18 +116,19 @@ export function recusaDaCaixaOcupada(ninhadas: NinhadaNaCaixa[], para: string) {
   const [primeira] = ninhadas
   if (primeira === undefined) return null
 
-  const animais = `${primeira.m} M e ${primeira.f} F`
+  const animais = quantosAnimais(primeira)
+  const doParto = `do ${primeira.ordem}o parto do casal ${primeira.casal}`
 
   if (!primeira.desmamado) {
     return erroDeRegra(
       'CAIXA_COM_ANIMAIS',
-      `A ninhada do ${primeira.ordem}o parto do casal ${primeira.casal} ainda mama nesta caixa (${animais}). Registre o desmame e passe os animais para o estoque antes de ${para}.`,
+      `A ninhada ${doParto} ainda mama nesta caixa (${animais}). Registre o desmame e passe os animais para o estoque antes de ${para}.`,
     )
   }
 
   return erroDeRegra(
     'CAIXA_COM_ANIMAIS',
-    `A caixa ainda tem ${animais} desmamados do ${primeira.ordem}o parto do casal ${primeira.casal}. Passe-os para o estoque, ou registre a baixa, antes de ${para}.`,
+    `A caixa ainda tem a ninhada desmamada ${doParto} (${animais}). Passe os animais para o estoque, ou registre a baixa, antes de ${para}.`,
   )
 }
 
@@ -553,7 +561,7 @@ export async function registrarSelecao(idParto: number, dados: Selecao, idUsuari
       throw contagemInvalida(
         'eutanasiado',
         passou,
-        `Nao pode passar dos vivos deste parto na caixa do casal (${vivos.m} M, ${vivos.f} F).`,
+        `Nao pode passar dos vivos deste parto na caixa do casal (${quantosAnimais(vivos)}).`,
       )
     }
 
@@ -615,7 +623,7 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
       throw contagemInvalida(
         'desmamado',
         acima,
-        `Nao pode passar dos vivos deste parto na caixa do casal no dia do desmame (${vivos.m} M, ${vivos.f} F). Se nasceram mais, corrija o nascimento.`,
+        `Nao pode passar dos vivos deste parto na caixa do casal no dia do desmame (${quantosAnimais(vivos)}). Se nasceram mais, corrija o nascimento.`,
       )
     }
 
@@ -625,7 +633,7 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
       throw contagemInvalida(
         'desmamado',
         abaixo,
-        `${morreramDepois.m} M e ${morreramDepois.f} F deste parto morreram depois desta data: chegaram ao desmame e contam nele.`,
+        `Quem morreu depois desta data chegou ao desmame e conta nele: ${quantosAnimais(morreramDepois)} deste parto.`,
       )
     }
 
@@ -652,7 +660,7 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
       entidade: 'parto',
       idEntidade: idParto,
       acao: 'desmame',
-      descricao: `Desmame do ${parto.ordem}o parto em ${dados.dtDesmameReal}: ${dados.desmamadoM} M e ${dados.desmamadoF} F`,
+      descricao: `Desmame do ${parto.ordem}o parto em ${dados.dtDesmameReal}: ${quantosAnimais({ m: dados.desmamadoM, f: dados.desmamadoF })}`,
       dados: { dtDesmameReal: dados.dtDesmameReal, desmamadoM: dados.desmamadoM, desmamadoF: dados.desmamadoF },
     })
 

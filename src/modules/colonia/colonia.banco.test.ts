@@ -501,8 +501,45 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
 
     const ficha = await montarFicha(idCaixa)
     expect(ficha.eventos.find((e) => e.tipo === 'correcao')?.descricao).toBe(
-      `Correcao do 1o parto (nascimento de ${dataLegivel(NASCIMENTO)} para ${dataLegivel(daqui(-51))}; contagem de 2 M e 2 F para 3 M e 2 F): contagem errada`,
+      `Correcao do 1o parto (nascimento de ${dataLegivel(NASCIMENTO)} para ${dataLegivel(daqui(-51))}; contagem de 2 machos e 2 femeas para 3 machos e 2 femeas): contagem errada`,
     )
+  })
+
+  it('o animal a mais da correcao chega na caixa de estoque com a ninhada, e a caixa continua existindo so desde entao', async () => {
+    const { idCaixa, idParto } = await casalComNinhada({ linha: 1, coluna: 1 }, { m: 3, f: 0 })
+    const { caixas } = await registrarMudanca(
+      idCaixa,
+      { dtFato: daqui(-20), machos: { qtd: 2, destino: { posicao: posicao(1, 2) } } },
+      tecnico,
+    )
+    const estoque = caixas[0]?.idCaixa ?? 0
+
+    // nasceu 1 macho a mais, e a ninhada ja esta na F1B: ele chega la com ela, 30 dias depois do parto
+    await corrigirNascimento(
+      idParto,
+      { dtPartoReal: NASCIMENTO, nascidoM: 4, nascidoF: 0, idCaixa: estoque, motivo: 'contagem errada' },
+      tecnico,
+    )
+    expect(await vivosPorCaixa()).toEqual({ F1A: { m: 1, f: 0 }, F1B: { m: 3, f: 0 } })
+    const correcoes = await tx().$queryRawUnsafe<{ dt: string; destino: number }[]>(
+      `SELECT to_char(dt_fato, 'YYYY-MM-DD') AS dt, id_caixa_destino AS destino FROM colonia.ocorrencia WHERE tipo = 'correcao' AND id_parto = $1`,
+      idParto,
+    )
+    expect(correcoes).toEqual([{ dt: daqui(-20), destino: estoque }])
+
+    // a F1B continua so existindo desde a mudanca que a criou: o macho que ficou nao chega nela antes
+    await expect(
+      registrarMudanca(idCaixa, { dtFato: daqui(-22), machos: { qtd: 1, destino: { idCaixa: estoque } } }, tecnico),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        status: 400,
+        extras: { campos: { dtFato: `Nao pode ser antes da chegada dos primeiros animais na caixa F1B (${dataLegivel(daqui(-20))}).` } },
+      }),
+    )
+
+    // e o historico da caixa conta a correcao no dia em que o macho chegou nela
+    const { historico } = await listarHistorico({ entidade: 'caixa', idEntidade: estoque, limite: 50 })
+    expect(historico.find((linha) => linha.acao === 'correcao')?.dados).toEqual({ dtFato: daqui(-20), motivo: 'contagem errada' })
   })
 
   it('a correcao do acasalamento muda a data e a ficha diz de quanto para quanto', async () => {

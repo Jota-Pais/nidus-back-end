@@ -17,7 +17,14 @@ import { escolherAnimais, pedidosTocados } from '../colonia/escolha.ts'
 import type { Escolhido } from '../colonia/escolha.ts'
 import { liberarSeVazia } from '../colonia/liberacao.ts'
 import { lancarOcorrencia } from '../colonia/ocorrencia.ts'
-import { MOTIVO_NAO_CHEGOU_AO_DESMAME, SEXOS, contarPorSexo, doSexo, quantosDoSexo } from '../colonia/tipos.ts'
+import {
+  MOTIVO_NAO_CHEGOU_AO_DESMAME,
+  SEXOS,
+  contarPorSexo,
+  doSexo,
+  quantosAnimais,
+  quantosDoSexo,
+} from '../colonia/tipos.ts'
 import type { PorSexo, Sexo } from '../colonia/tipos.ts'
 import { travarCaixas } from '../colonia/travas.ts'
 import { cicloFicha } from './cicloFicha.ts'
@@ -47,8 +54,6 @@ export function descricaoDaCorrecao(titulo: string, mudancas: (string | null)[],
 
   return `${titulo}${mudou.length === 0 ? '' : ` (${mudou.join('; ')})`}: ${motivo}`
 }
-
-const contagem = (n: PorSexo) => `${n.m} M e ${n.f} F`
 
 // ------------------------------------------------------------ acasalamento
 
@@ -169,14 +174,15 @@ async function chegadaDaNinhada(tx: Transacao, idParto: number, idCaixa: number)
  * sexo so: os a mais dos dois sexos, com a ninhada ja separada, entram um sexo por vez.
  *
  * Os a mais chegam na caixa de estoque com a ninhada: no dia em que os animais do parto chegaram
- * nela (chegadaDaNinhada) ou, sem nenhum dela ali, no desmame. A caixa tem de ja existir nesse dia
+ * nela (chegadaDaNinhada) ou, sem nenhum dela ali, no desmame. A caixa tem de ja existir nesse dia.
+ * 'chegada' e null quando os a mais estao onde nasceram
  */
 async function destinoDosNovos(
   tx: Transacao,
   parto: PartoTravado,
   idCaixa: number | undefined,
   novos: PorSexo,
-): Promise<{ idCaixa: number; dtMovimento: string | null }> {
+): Promise<{ idCaixa: number; chegada: string | null }> {
   const caixaDoCasal = parto.casal.caixa
   const alvo = idCaixa ?? parto.casal.idCaixa
   const naDoCasal = alvo === parto.casal.idCaixa
@@ -198,7 +204,7 @@ async function destinoDosNovos(
       )
     }
 
-    return { idCaixa: alvo, dtMovimento: null }
+    return { idCaixa: alvo, chegada: null }
   }
 
   if (parto.dtDesmameReal === null) {
@@ -225,7 +231,7 @@ async function destinoDosNovos(
       deQue: 'do nascimento',
     })
 
-    return { idCaixa: alvo, dtMovimento: null }
+    return { idCaixa: alvo, chegada: null }
   }
 
   const daNinhada = await chegadaDaNinhada(tx, parto.id, alvo)
@@ -237,7 +243,7 @@ async function destinoDosNovos(
     deQue: daNinhada === null ? 'do desmame' : 'da chegada da ninhada nela',
   })
 
-  return { idCaixa: alvo, dtMovimento: chegada }
+  return { idCaixa: alvo, chegada }
 }
 
 export type CorrecaoDoNascimento = ComMotivo<Nascimento> & {
@@ -290,7 +296,7 @@ export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNasci
       throw contagemInvalida(
         'nascido',
         passou,
-        `Os mortos e os entregues continuam contando: o nascido nao fica abaixo de ${nascidos.m - vivos.m} M e ${nascidos.f - vivos.f} F.`,
+        `Os mortos e os entregues continuam contando: o nascido nao fica abaixo de ${quantosAnimais({ m: nascidos.m - vivos.m, f: nascidos.f - vivos.f })}.`,
       )
     }
 
@@ -370,16 +376,31 @@ export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNasci
       }
     }
 
-    if (trocados.length + anulados.length > 0 || novos !== null) {
+    // A correcao tem a data em que os animais passam a ser como ela diz: o nascimento, para a troca
+    // de sexo, o registro anulado e os a mais que nascem na caixa do casal; a chegada, para os a
+    // mais numa caixa de estoque, que entram nela com a ninhada. Datas diferentes, ocorrencias
+    // diferentes: a trilha conta a caixa de estoque desde a primeira chegada nela
+    // (exigirEstoqueQueRecebe), e uma correcao datada do nascimento a faria existir antes disso
+    const correcao = { tipo: 'correcao', idUsuario, idParto, motivo: dados.motivo } as const
+    // os a mais que ficam onde nasceram, sem chegada, vao com a troca de sexo e a anulacao
+    const ondeNasceram =
+      novos !== null && novos.chegada === null ? { idCaixa: novos.idCaixa, ...plano.novos, chegam: false } : undefined
+
+    if (trocados.length + anulados.length > 0 || ondeNasceram !== undefined) {
       await lancarOcorrencia(tx, {
-        tipo: 'correcao',
+        ...correcao,
         dtFato: dados.dtPartoReal,
-        idUsuario,
-        idParto,
-        motivo: dados.motivo,
         trocaDeSexo: troca === null ? undefined : { ids: trocados.map((animal) => animal.id), para: troca.para },
         anulados: anulados.map((animal) => animal.id),
-        novos: novos === null ? undefined : { ...novos, ...plano.novos },
+        novos: ondeNasceram,
+      })
+    }
+
+    if (novos !== null && novos.chegada !== null) {
+      await lancarOcorrencia(tx, {
+        ...correcao,
+        dtFato: novos.chegada,
+        novos: { idCaixa: novos.idCaixa, ...plano.novos, chegam: true },
       })
     }
 
@@ -392,7 +413,7 @@ export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNasci
         `Correcao do ${parto.ordem}o parto`,
         [
           dePara(dataLegivel(dataAntiga), dataLegivel(dados.dtPartoReal), 'nascimento'),
-          dePara(contagem(nascidos), contagem({ m: dados.nascidoM, f: dados.nascidoF }), 'contagem'),
+          dePara(quantosAnimais(nascidos), quantosAnimais({ m: dados.nascidoM, f: dados.nascidoF }), 'contagem'),
         ],
         dados.motivo,
       ),

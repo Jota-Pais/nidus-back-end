@@ -58,7 +58,8 @@ type Entrega = Comum & { tipo: 'entrega'; idPedido: number; ids: number[] }
 /**
  * A correcao da ficha de um parto que muda animais: troca de sexo de vivos livres, anulacao do
  * registro de animal que nao existiu, animais a mais que nao foram registrados e a data de saida
- * de mortos que acompanha a data corrigida
+ * de mortos que acompanha a data corrigida. Os a mais entram em 'novos.idCaixa', o destino da
+ * ocorrencia
  */
 type Correcao = Comum & {
   tipo: 'correcao'
@@ -66,7 +67,11 @@ type Correcao = Comum & {
   motivo: string
   trocaDeSexo?: { ids: number[]; para: Sexo } | undefined
   anulados?: number[] | undefined
-  novos?: { idCaixa: number; dtMovimento: string | null; m: number; f: number } | undefined
+  /**
+   * 'chegam': os a mais entram numa caixa de estoque na data do fato, que e a da chegada deles
+   * nela; sem, estao na caixa onde nasceram, sem chegada
+   */
+  novos?: { idCaixa: number; m: number; f: number; chegam: boolean } | undefined
   novaSaida?: { ids: number[]; dtSaida: string } | undefined
 }
 
@@ -214,7 +219,9 @@ async function aplicar(tx: Transacao, lancamento: Lancamento): Promise<number[]>
       }
 
       const criados =
-        novos === undefined ? [] : await criar(tx, lancamento.idParto, novos.idCaixa, novos.dtMovimento, novos)
+        novos === undefined
+          ? []
+          : await criar(tx, lancamento.idParto, novos.idCaixa, novos.chegam ? lancamento.dtFato : null, novos)
 
       return [...new Set([...trocados, ...anulados, ...comSaidaNova, ...criados])]
     }
