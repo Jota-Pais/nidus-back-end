@@ -135,6 +135,16 @@ describe('a candidata e um lugar: a caixa e a data de nascimento', () => {
     )
   })
 
+  it('o lugar so serve com todos os partos dele desmamados na entrega, como a reserva confere', async () => {
+    livres(6, 1, 30, 3, 0)
+    banco.partos.push({ id: 2, ordem: 2, dtPartoReal: nascidoHa(30), dtDesmameReal: new Date('2027-01-02T00:00:00.000Z'), casal: { identificacao: 'CD' } })
+    banco.linhas.push({ idCaixa: 6, idParto: 2, sexo: 'M', _count: { _all: 2 } })
+
+    const busca = await buscarAtendimento({ ...pedido, idadeMin: 21, idadeMax: 40 }, agora)
+
+    expect(busca.candidatas).toEqual([])
+  })
+
   it('a ninhada que ainda mama entra como previsao, se desmamar ate a entrega; senao fica de fora', async () => {
     livres(1, 1, 30, 4, 4, { desmamado: false })
     livres(2, 3, 10, 4, 4, { desmamado: false })

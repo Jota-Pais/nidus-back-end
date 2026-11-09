@@ -51,7 +51,7 @@ O que mora aqui:
   (`POST /api/caixas/:id/estoque`). A caixa que esvazia é liberada com a data e o
   motivo do fato. A coluna do Kanban não é gravada: sai do que a caixa tem
   (`colunaDaCaixa`), e a de estoque esvaziada pela entrega fica 7 dias em Enviado
-- **Solicitações** - o pedido do pesquisador, com o protocolo CEUA dele, sem
+- **Pedidos** - o pedido do pesquisador, com o protocolo CEUA dele, sem
   depender de projeto cadastrado: machos, fêmeas e animais de qualquer sexo, com
   idade exata ou faixa de idade
 - **Busca de atendimento** - dado um pedido, de onde sairiam os animais: os vivos
@@ -60,8 +60,8 @@ O que mora aqui:
   entrega. Dentro de cada grupo, na faixa de idade, primeiro o que está dentro da faixa pedida e
   depois o que só entra pela tolerância, cada parte do mais velho para o mais
   novo; na idade exata, a mais próxima. O que faltar vira casais novos a formar
-- **Alocação** - cada caixa aceita vira compromisso, e a soma dos compromissos de
-  um parto nunca passa do que ele tem
+- **Reserva e entrega** - a reserva fica no animal: cada rato reservado aponta
+  para o pedido, e a entrega leva exatamente esses ratos, das caixas onde estão
 
 Os parâmetros biológicos (gestação, aleitamento, intervalo, máximo de 5 partos,
 4 machos e 4 fêmeas esperados por casal, tolerância de idade) são constantes em
@@ -77,7 +77,7 @@ para o banco: nenhum trigger repete esses números. Os pares genéticos ficam no
   últimos são a data do registro (DDMMAA), até hoje. O pedido e o cadastro do
   projeto usam a mesma regra (`src/modules/demanda/protocolo.ts`): o que o
   gestor cadastra, o pesquisador consegue pedir
-- **Pedido** (`POST /api/solicitacoes`) - o pesquisador digita o nome e o
+- **Pedido** (`POST /api/pedidos`) - o pesquisador digita o nome e o
   protocolo CEUA; o e-mail é o da conta. O protocolo vale
   pelo formato: o pedido guarda o número digitado e não depende de projeto
   cadastrado, e a equipe do biotério confere com a CEUA ao analisar. Quando o
@@ -100,6 +100,28 @@ para o banco: nenhum trigger repete esses números. Os pares genéticos ficam no
 - **Casais a formar** - `max(⌈dm/4⌉, ⌈df/4⌉, ⌈(dm + df + dq)/8⌉)`, com os 4 machos
   e 4 fêmeas esperados por casal. O acasalamento novo só atende entrega a partir
   de hoje + 23 dias de gestação + `idadeMin`
+
+O status do pedido é a palavra, no banco e na API: `enviado` (aguarda a análise),
+`aprovado` (aceito, aguardando os animais), `reservado`, `entregue` ou `recusado`.
+Entregue e recusado são finais. Cada passo é uma rota em `/api/pedidos/:id`, só
+de quem opera a colônia:
+
+| Rota | O que faz |
+|---|---|
+| `POST /aprovacao` | `enviado` → `aprovado`. Não reserva nada, e quem pediu recebe o e-mail |
+| `POST /alocacao` | `{ itens: [{ idCaixa, dtNascimento, machos, femeas }] }`, os lugares que a busca sugeriu. No `aprovado`, os itens cobrem o pedido inteiro (`409 PEDIDO_INCOMPLETO`), o "qualquer" vindo como macho ou fêmea, e o pedido passa a `reservado`. No `reservado` em falta, completa só até cobrir (`409 PEDIDO_EXCEDIDO`). Os animais são quaisquer vivos livres do lugar, travados com `FOR UPDATE SKIP LOCKED`: quem reserva ao mesmo tempo pega outros, e se faltarem é `409 SEM_ANIMAIS`. A idade e o desmame são conferidos na data desejada, com a regra da busca |
+| `POST /devolucao` | Desfaz a reserva, com falta ou sem: os vivos voltam a ficar livres onde estão e o pedido volta a `aprovado` |
+| `POST /recusa` | `{ motivo }`. Vale para `enviado`, `aprovado` e `reservado`; o reservado solta os animais antes |
+| `GET /retirada` | De que caixas tirar os reservados: onde eles estão de fato, por caixa, sexo e nascimento |
+| `POST /entrega` | `{ dtEntrega }`, nunca no futuro nem antes do pedido. Só o `reservado` sem falta. Cada animal precisa do desmame registrado (`409 NAO_DESMAMADO`) e da idade, na data real, dentro da faixa aceita, com a mesma tolerância da busca (`409 IDADE_FORA_DA_FAIXA`). A caixa que esvaziou é liberada com a data da entrega e fica 7 dias em Enviado |
+
+A reserva confere só o que ela mesma reserva: os animais que marca e o teto do
+próprio pedido. Quando um reservado morre, a falta é desse pedido (`reservaEmFalta`
+na lista) e não trava a reserva de outro pedido na mesma ninhada ou caixa. O
+pedido `enviado` sem resposta em 14 dias é recusado sozinho, sem usuário, antes de
+cada `GET /api/pedidos`. Aprovação e recusa ficam em `auditoria.historico`; reserva,
+reserva desfeita e entrega são fatos dos animais e ficam na trilha de ocorrências.
+A tela Histórico lê as duas fontes juntas, e cada fato aparece uma vez.
 
 ## Começar
 
@@ -160,7 +182,7 @@ src/
     infra/             salas, estantes, grade, kanban, ficha e a mudanca de animais entre caixas
     reproducao/        casais e partos
     colonia/           os animais: escolha, baixa, anulacao, liberacao da caixa e a trilha
-    demanda/           projetos CEUA, solicitações e alocação
+    demanda/           projetos CEUA e pedidos: aprovação, reserva, entrega e recusa
     motor/             busca de atendimento
     catalogo/          espécies, linhagens e pares genéticos
     login/             sessão, primeiro acesso e senha esquecida
@@ -170,8 +192,11 @@ src/
 
 Validação é `parse` do Zod direto na rota: `ZodError` vira `400 VALIDACAO`.
 Regra de negócio violada sai como 409 pelo `erroDeRegra` de `shared/erros.ts`, no
-envelope `{ "erro": { "codigo", "mensagem" } }`. O `char(1)` do banco nunca cruza
-a rede: o banco guarda `R`, a API responde `livres` (`shared/traducao.ts`).
+envelope `{ "erro": { "codigo", "mensagem" } }`. Os domínios do modelo por rato
+guardam a palavra (`pedido.status`, `animal.situacao`, `ocorrencia.tipo`,
+`caixa.tipo`). Onde o banco ainda guarda uma letra, como o perfil (`P`, `T`, `G`) e
+a face da estante, ela não cruza a rede: a API responde a palavra
+(`shared/traducao.ts`).
 
 Mudança de schema passa pelo responsável pelo banco. `prisma migrate dev` pode
 recriar o schema quando o histórico diverge, e o banco é o de produção.
@@ -295,8 +320,9 @@ NIDUS_API=https://nidus-cpmr-api.onrender.com NIDUS_COOKIE=<valor do cookie nidu
 
 O script só faz `GET` e não grava nada. Sem `NIDUS_COOKIE` ele mede apenas a `/saude`.
 O cookie sai do navegador logado (DevTools, Application, Cookies, `nidus_sessao`).
-Variáveis opcionais: `NIDUS_REPETICOES` (30), `NIDUS_SIMULTANEAS` (5) e
-`NIDUS_LIMITE_P95_MS` (1000). Termina com código 1 se alguma rota passar do limite
+Variáveis opcionais: `NIDUS_REPETICOES` (30), `NIDUS_SIMULTANEAS` (5),
+`NIDUS_LIMITE_P95_MS` (1000) e `NIDUS_LINHAGEM` (3, a Wistar da carga inicial: a
+linhagem da busca). Termina com código 1 se alguma rota passar do limite
 ou der erro.
 
 ## Backup e restauração

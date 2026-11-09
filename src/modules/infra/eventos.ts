@@ -8,7 +8,7 @@
 
 import { prisma } from '../../shared/prisma.ts'
 import { dataISO, hojeISO } from '../../shared/traducao.ts'
-import { MOTIVO_NAO_CHEGOU_AO_DESMAME, MOTIVO_SELECAO, contarPorSexo } from '../colonia/tipos.ts'
+import { descreverOcorrencia, selecaoDaDescricao } from '../colonia/descricao.ts'
 import type { PorSexo } from '../colonia/tipos.ts'
 import { NOME_DO_SISTEMA } from '../historico/historico.service.ts'
 
@@ -87,77 +87,15 @@ function lerOcorrencias(idCaixa: number) {
       ],
     },
     orderBy: { id: 'asc' },
-    select: {
-      id: true,
-      tipo: true,
-      dtFato: true,
-      dtRegistro: true,
-      idCaixaOrigem: true,
-      idCaixaDestino: true,
-      idPedido: true,
-      motivo: true,
-      usuario: { select: { nome: true } },
-      parto: { select: { ordem: true, casal: { select: { identificacao: true } } } },
-      caixaOrigem: { select: { codigo: true } },
-      caixaDestino: { select: { codigo: true } },
-      anulacao: { select: { id: true } },
-      animais: { select: { animal: { select: { sexo: true, idCaixa: true } } } },
-    },
+    select: { ...selecaoDaDescricao, dtFato: true, dtRegistro: true, usuario: { select: { nome: true } } },
   })
-}
-
-function doParto(ocorrencia: OcorrenciaLida): string {
-  const { parto } = ocorrencia
-  return parto === null ? '' : ` do ${parto.ordem}o parto do casal ${parto.casal.identificacao.trim()}`
-}
-
-function descricaoDaBaixa(ocorrencia: OcorrenciaLida, qtd: PorSexo): string {
-  const anulada = ocorrencia.anulacao === null ? '' : ' (anulada)'
-
-  if (ocorrencia.motivo === MOTIVO_SELECAO) return `Eutanasia de selecao${doParto(ocorrencia)}: ${animais(qtd)}.${anulada}`
-  if (ocorrencia.motivo === MOTIVO_NAO_CHEGOU_AO_DESMAME) {
-    return `${animais(qtd)}${doParto(ocorrencia)} nao chegaram ao desmame.${anulada}`
-  }
-
-  return `Baixa de ${animais(qtd)}${ocorrencia.motivo === null ? '' : `: ${ocorrencia.motivo}`}.${anulada}`
-}
-
-function descricaoDaOcorrencia(ocorrencia: OcorrenciaLida, idCaixa: number): string {
-  const daqui = ocorrencia.animais.map((ligacao) => ligacao.animal)
-  const qtd = contarPorSexo(ocorrencia.tipo === 'entrega' ? daqui.filter((animal) => animal.idCaixa === idCaixa) : daqui)
-  const origem = ocorrencia.caixaOrigem?.codigo ?? ''
-  const destino = ocorrencia.caixaDestino?.codigo ?? ''
-
-  switch (ocorrencia.tipo) {
-    case 'nascimento':
-      return `Nascimento${doParto(ocorrencia)}: ${animais(qtd)}.`
-    case 'baixa':
-      return descricaoDaBaixa(ocorrencia, qtd)
-    case 'mudanca':
-      return ocorrencia.idCaixaOrigem === idCaixa
-        ? `${animais(qtd)} mudaram para a caixa ${destino}.`
-        : `${animais(qtd)} chegaram da caixa ${origem}.`
-    case 'anulacao': {
-      const onde =
-        ocorrencia.idCaixaDestino === null
-          ? ''
-          : ocorrencia.idCaixaOrigem === idCaixa
-            ? ` na caixa ${destino}`
-            : `, vindos da caixa ${origem}`
-      return `Baixa anulada: ${animais(qtd)} voltaram a viver${onde}. Motivo: ${ocorrencia.motivo ?? ''}`
-    }
-    case 'entrega':
-      return `${animais(qtd)} entregues ao pedido #${ocorrencia.idPedido}.`
-    default:
-      return `${ocorrencia.tipo}: ${animais(qtd)}.`
-  }
 }
 
 function eventoDaOcorrencia(ocorrencia: OcorrenciaLida, idCaixa: number): Evento {
   return evento(
     dataISO(ocorrencia.dtFato),
     ocorrencia.tipo,
-    descricaoDaOcorrencia(ocorrencia, idCaixa),
+    descreverOcorrencia(ocorrencia, idCaixa),
     ocorrencia.usuario?.nome ?? NOME_DO_SISTEMA,
     ocorrencia.dtRegistro,
     { id: ocorrencia.id, anulavel: ocorrencia.tipo === 'baixa' && ocorrencia.anulacao === null },

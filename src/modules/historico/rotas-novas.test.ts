@@ -32,10 +32,10 @@ describe('so o gestor administra', () => {
 })
 
 describe('o pesquisador nao opera a colonia', () => {
-  it('nao recusa solicitacao nem corrige evento', async () => {
+  it('nao recusa pedido nem corrige evento', async () => {
     const pesquisador = app('pesquisador')
     const respostas = await Promise.all([
-      request(pesquisador).post('/api/solicitacoes/1/recusa').send({ motivo: 'x' }),
+      request(pesquisador).post('/api/pedidos/1/recusa').send({ motivo: 'x' }),
       request(pesquisador)
         .patch('/api/partos/1/nascimento')
         .send({ dtPartoReal: '2026-10-01', nascidoM: 1, nascidoF: 1, motivo: 'x' }),
@@ -52,7 +52,7 @@ describe('o pesquisador nao opera a colonia', () => {
   })
 
   it('nao le a colonia: estoque, busca, kanban, estantes, caixas, projetos nem historico', async () => {
-    // ele so ve o proprio pedido (GET /api/solicitacoes) e o catalogo do formulario
+    // ele so ve o proprio pedido (GET /api/pedidos) e o catalogo do formulario
     const pesquisador = app('pesquisador')
     const respostas = await Promise.all([
       request(pesquisador).get('/api/estoque').query({ especie: 'rato' }),
@@ -74,7 +74,7 @@ describe('o pesquisador nao opera a colonia', () => {
 describe('forma da entrada', () => {
   it('recusa sem motivo e correcao sem motivo sao VALIDACAO', async () => {
     const tecnico = app('tecnico')
-    const recusa = await request(tecnico).post('/api/solicitacoes/1/recusa').send({ motivo: ' ' })
+    const recusa = await request(tecnico).post('/api/pedidos/1/recusa').send({ motivo: ' ' })
     const correcao = await request(tecnico)
       .patch('/api/partos/1/nascimento')
       .send({ dtPartoReal: '2026-10-01', nascidoM: 1, nascidoF: 1 })

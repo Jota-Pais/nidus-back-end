@@ -6,7 +6,7 @@ import { hojeISO } from '../../shared/traducao.ts'
 import type { Perfil } from '../../shared/traducao.ts'
 import { filtroDaBusca } from '../motor/motor.routes.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
-import { projetoNovo, solicitacaoNova } from './demanda.routes.ts'
+import { alocacao, entrega, pedidoNovo, projetoNovo } from './demanda.routes.ts'
 
 // Autorizacao e forma da entrada. Nenhum teste aqui chega ao banco
 
@@ -33,7 +33,7 @@ const pedido = {
 
 /** os erros de campo de um corpo recusado, como a API manda em VALIDACAO */
 async function camposRecusados(corpo: object) {
-  const resposta = await request(app('pesquisador')).post('/api/solicitacoes').send(corpo)
+  const resposta = await request(app('pesquisador')).post('/api/pedidos').send(corpo)
 
   expect(resposta.status).toBe(400)
   expect(resposta.body.erro.codigo).toBe('VALIDACAO')
@@ -41,9 +41,9 @@ async function camposRecusados(corpo: object) {
 }
 
 describe('autorizacao', () => {
-  it('sem sessao nao lista nem cria solicitacao', async () => {
-    expect((await request(app()).get('/api/solicitacoes')).status).toBe(401)
-    expect((await request(app()).post('/api/solicitacoes').send(pedido)).status).toBe(401)
+  it('sem sessao nao lista nem cria pedido', async () => {
+    expect((await request(app()).get('/api/pedidos')).status).toBe(401)
+    expect((await request(app()).post('/api/pedidos').send(pedido)).status).toBe(401)
   })
 
   it('o pesquisador nao usa a busca de atendimento nem aloca caixa', async () => {
@@ -51,29 +51,29 @@ describe('autorizacao', () => {
       .get('/api/busca')
       .query({ especie: 'rato', machos: 1, femeas: 1, qualquer: 0, idadeMin: 28, idadeMax: 28 })
     const alocacao = await request(app('pesquisador'))
-      .post('/api/solicitacoes/1/alocacao')
-      .send({ itens: [{ idParto: 1, machos: 1, femeas: 0 }] })
+      .post('/api/pedidos/1/alocacao')
+      .send({ itens: [{ idCaixa: 1, dtNascimento: '2026-09-01', machos: 1, femeas: 0 }] })
 
     expect(busca.status).toBe(403)
     expect(alocacao.status).toBe(403)
   })
 
   it('o pesquisador nao aprova pedido nem desfaz reserva', async () => {
-    const aprovacao = await request(app('pesquisador')).post('/api/solicitacoes/1/aprovacao')
-    const devolucao = await request(app('pesquisador')).post('/api/solicitacoes/1/devolucao')
+    const aprovacao = await request(app('pesquisador')).post('/api/pedidos/1/aprovacao')
+    const devolucao = await request(app('pesquisador')).post('/api/pedidos/1/devolucao')
 
     expect(aprovacao.status).toBe(403)
     expect(devolucao.status).toBe(403)
   })
 
-  it('so o pesquisador cria solicitacao', async () => {
-    expect((await request(app('tecnico')).post('/api/solicitacoes').send(pedido)).status).toBe(403)
-    expect((await request(app('gestor')).post('/api/solicitacoes').send(pedido)).status).toBe(403)
+  it('so o pesquisador cria pedido', async () => {
+    expect((await request(app('tecnico')).post('/api/pedidos').send(pedido)).status).toBe(403)
+    expect((await request(app('gestor')).post('/api/pedidos').send(pedido)).status).toBe(403)
   })
 
   it('o pesquisador nao registra entrega', async () => {
     const resposta = await request(app('pesquisador'))
-      .post('/api/solicitacoes/1/entrega')
+      .post('/api/pedidos/1/entrega')
       .send({ dtEntrega: '2026-10-30' })
 
     expect(resposta.status).toBe(403)
@@ -114,13 +114,13 @@ describe('forma do projeto', () => {
   })
 })
 
-describe('forma da solicitacao', () => {
+describe('forma do pedido', () => {
   it('aceita o pedido completo', () => {
-    expect(solicitacaoNova.safeParse(pedido).success).toBe(true)
+    expect(pedidoNovo.safeParse(pedido).success).toBe(true)
   })
 
   it('aceita faixa de idade e pedido so de qualquer sexo', () => {
-    const faixa = solicitacaoNova.safeParse({ ...pedido, machos: 0, femeas: 0, qualquer: 10, idadeMin: 21, idadeMax: 40 })
+    const faixa = pedidoNovo.safeParse({ ...pedido, machos: 0, femeas: 0, qualquer: 10, idadeMin: 21, idadeMax: 40 })
 
     expect(faixa.success).toBe(true)
     expect(faixa.data).toMatchObject({ qualquer: 10, idadeMin: 21, idadeMax: 40 })
@@ -152,7 +152,7 @@ describe('forma da solicitacao', () => {
   })
 
   it('a entrega pode ser hoje', () => {
-    expect(solicitacaoNova.safeParse({ ...pedido, dataEntrega: hojeISO() }).success).toBe(true)
+    expect(pedidoNovo.safeParse({ ...pedido, dataEntrega: hojeISO() }).success).toBe(true)
   })
 
   describe('hoje e o dia de Brasilia, nao o de UTC', () => {
@@ -165,8 +165,8 @@ describe('forma da solicitacao', () => {
       vi.useFakeTimers({ toFake: ['Date'] })
       vi.setSystemTime(new Date('2026-10-31T02:30:00.000Z'))
 
-      expect(solicitacaoNova.safeParse({ ...pedido, dataEntrega: '2026-10-30' }).success).toBe(true)
-      expect(solicitacaoNova.safeParse({ ...pedido, dataEntrega: '2026-10-29' }).success).toBe(false)
+      expect(pedidoNovo.safeParse({ ...pedido, dataEntrega: '2026-10-30' }).success).toBe(true)
+      expect(pedidoNovo.safeParse({ ...pedido, dataEntrega: '2026-10-29' }).success).toBe(false)
     })
 
     it('depois da meia-noite de Brasilia, o dia anterior ja passou', () => {
@@ -174,8 +174,8 @@ describe('forma da solicitacao', () => {
       vi.useFakeTimers({ toFake: ['Date'] })
       vi.setSystemTime(new Date('2026-10-31T03:30:00.000Z'))
 
-      expect(solicitacaoNova.safeParse({ ...pedido, dataEntrega: '2026-10-31' }).success).toBe(true)
-      expect(solicitacaoNova.safeParse({ ...pedido, dataEntrega: '2026-10-30' }).success).toBe(false)
+      expect(pedidoNovo.safeParse({ ...pedido, dataEntrega: '2026-10-31' }).success).toBe(true)
+      expect(pedidoNovo.safeParse({ ...pedido, dataEntrega: '2026-10-30' }).success).toBe(false)
     })
   })
 
@@ -189,29 +189,29 @@ describe('forma da solicitacao', () => {
     const campos = await camposRecusados({ ...pedido, protocoloCeua: '23080.001234/2026-11' })
 
     expect(campos.protocoloCeua).toBe('Digito verificador errado. Confira o numero do processo.')
-    expect(solicitacaoNova.safeParse({ ...pedido, protocoloCeua: '3106240920' }).success).toBe(true)
+    expect(pedidoNovo.safeParse({ ...pedido, protocoloCeua: '3106240920' }).success).toBe(true)
   })
 
   it('o nome e obrigatorio e vai ate 120 caracteres, sem contar os espacos das pontas', () => {
-    expect(solicitacaoNova.safeParse({ ...pedido, nomePesquisador: '   ' }).success).toBe(false)
-    expect(solicitacaoNova.safeParse({ ...pedido, nomePesquisador: 'a'.repeat(121) }).success).toBe(false)
-    expect(solicitacaoNova.parse({ ...pedido, nomePesquisador: `  ${'a'.repeat(120)}  ` }).nomePesquisador).toHaveLength(120)
+    expect(pedidoNovo.safeParse({ ...pedido, nomePesquisador: '   ' }).success).toBe(false)
+    expect(pedidoNovo.safeParse({ ...pedido, nomePesquisador: 'a'.repeat(121) }).success).toBe(false)
+    expect(pedidoNovo.parse({ ...pedido, nomePesquisador: `  ${'a'.repeat(120)}  ` }).nomePesquisador).toHaveLength(120)
   })
 
   it('recusa idade fora de 21 a 300 dias e mais de 9999 animais', () => {
-    expect(solicitacaoNova.safeParse({ ...pedido, idadeMin: 20, idadeMax: 28 }).success).toBe(false)
-    expect(solicitacaoNova.safeParse({ ...pedido, idadeMin: 28, idadeMax: 301 }).success).toBe(false)
-    expect(solicitacaoNova.safeParse({ ...pedido, idadeMin: 301, idadeMax: 301 }).success).toBe(false)
-    expect(solicitacaoNova.safeParse({ ...pedido, qualquer: 10_000 }).success).toBe(false)
-    expect(solicitacaoNova.safeParse({ ...pedido, machos: 9999, femeas: 9999, qualquer: 9999, idadeMin: 300, idadeMax: 300 }).success).toBe(true)
+    expect(pedidoNovo.safeParse({ ...pedido, idadeMin: 20, idadeMax: 28 }).success).toBe(false)
+    expect(pedidoNovo.safeParse({ ...pedido, idadeMin: 28, idadeMax: 301 }).success).toBe(false)
+    expect(pedidoNovo.safeParse({ ...pedido, idadeMin: 301, idadeMax: 301 }).success).toBe(false)
+    expect(pedidoNovo.safeParse({ ...pedido, qualquer: 10_000 }).success).toBe(false)
+    expect(pedidoNovo.safeParse({ ...pedido, machos: 9999, femeas: 9999, qualquer: 9999, idadeMin: 300, idadeMax: 300 }).success).toBe(true)
   })
 
   it('observacoes vazias, ausentes ou null viram null, e passam de 500 caracteres e VALIDACAO', () => {
-    expect(solicitacaoNova.parse(pedido).observacoes).toBeNull()
-    expect(solicitacaoNova.parse({ ...pedido, observacoes: null }).observacoes).toBeNull()
-    expect(solicitacaoNova.parse({ ...pedido, observacoes: '   ' }).observacoes).toBeNull()
-    expect(solicitacaoNova.parse({ ...pedido, observacoes: ' Machos do mesmo parto. ' }).observacoes).toBe('Machos do mesmo parto.')
-    expect(solicitacaoNova.safeParse({ ...pedido, observacoes: 'a'.repeat(501) }).success).toBe(false)
+    expect(pedidoNovo.parse(pedido).observacoes).toBeNull()
+    expect(pedidoNovo.parse({ ...pedido, observacoes: null }).observacoes).toBeNull()
+    expect(pedidoNovo.parse({ ...pedido, observacoes: '   ' }).observacoes).toBeNull()
+    expect(pedidoNovo.parse({ ...pedido, observacoes: ' Machos do mesmo parto. ' }).observacoes).toBe('Machos do mesmo parto.')
+    expect(pedidoNovo.safeParse({ ...pedido, observacoes: 'a'.repeat(501) }).success).toBe(false)
   })
 
   it('o corpo antigo, com idProjeto e idade, e VALIDACAO', async () => {
@@ -230,20 +230,48 @@ describe('forma da solicitacao', () => {
     )
   })
 
+})
+
+describe('forma da reserva e da entrega', () => {
+  const item = { idCaixa: 2, dtNascimento: '2026-09-01', machos: 3, femeas: 0 }
+
+  it('a reserva fala do lugar: a caixa e a data de nascimento, com machos e femeas', () => {
+    expect(alocacao.safeParse({ itens: [item, { ...item, idCaixa: 3, machos: 0, femeas: 2 }] }).success).toBe(true)
+  })
+
   it('alocacao sem item e VALIDACAO', async () => {
-    const resposta = await request(app('tecnico')).post('/api/solicitacoes/1/alocacao').send({ itens: [] })
+    const resposta = await request(app('tecnico')).post('/api/pedidos/1/alocacao').send({ itens: [] })
 
     expect(resposta.status).toBe(400)
     expect(resposta.body.erro.codigo).toBe('VALIDACAO')
   })
 
+  it('o item sem animal, sem data ou no corpo antigo (idParto) e VALIDACAO no campo', async () => {
+    const semAnimal = alocacao.safeParse({ itens: [{ ...item, machos: 0 }] })
+    expect(semAnimal.error?.issues[0]).toMatchObject({ path: ['itens', 0, 'machos'], message: 'Escolha ao menos um animal deste lugar.' })
+
+    expect(alocacao.safeParse({ itens: [{ ...item, dtNascimento: '01/09/2026' }] }).success).toBe(false)
+    expect(alocacao.safeParse({ itens: [{ idParto: 1, machos: 1, femeas: 0 }] }).success).toBe(false)
+  })
+
   it('entrega sem data valida e VALIDACAO', async () => {
     const resposta = await request(app('tecnico'))
-      .post('/api/solicitacoes/1/entrega')
+      .post('/api/pedidos/1/entrega')
       .send({ dtEntrega: '30/10/2026' })
 
     expect(resposta.status).toBe(400)
     expect(resposta.body.erro.codigo).toBe('VALIDACAO')
+  })
+
+  it('a entrega e de algo que ja aconteceu: no futuro e VALIDACAO no campo', async () => {
+    const amanha = somarDias(hojeISO(), 1)
+
+    expect(entrega.safeParse({ dtEntrega: hojeISO() }).success).toBe(true)
+
+    const resposta = await request(app('tecnico')).post('/api/pedidos/1/entrega').send({ dtEntrega: amanha })
+
+    expect(resposta.status).toBe(400)
+    expect(resposta.body.erro.campos.dtEntrega).toBe('A data nao pode ser depois de hoje.')
   })
 })
 

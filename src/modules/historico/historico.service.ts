@@ -1,15 +1,24 @@
+// O historico de alteracoes: quem fez o que e quando. Mora em dois lugares, e a tela Historico le os
+// dois juntos, por data do registro: o fato dos animais (nascimento, baixa, mudanca, reserva,
+// entrega...) na trilha de ocorrencias (colonia.ocorrencia), e o resto (pedido, casal, datas,
+// posicao, cadastros) em auditoria.historico. Cada fato aparece uma vez
+
 import type { Prisma } from '@prisma/client'
 import { prisma } from '../../shared/prisma.ts'
+import { dataISO } from '../../shared/traducao.ts'
+import { descreverOcorrencia, selecaoDaDescricao } from '../colonia/descricao.ts'
 
 type BancoComHistorico = Pick<Prisma.TransactionClient, 'historico'>
 
 /** Nome mostrado em "Quem" quando nao ha pessoa por tras da acao */
 export const NOME_DO_SISTEMA = 'Sistema'
 
+export type Entidade = 'caixa' | 'casal' | 'parto' | 'pedido' | 'usuario' | 'projeto' | 'linhagem' | 'sala' | 'estante'
+
 export type Alteracao = {
   /** null so quando foi o proprio sistema. Obrigatorio para nenhuma acao ficar sem dono por esquecimento */
   idUsuario: number | null
-  entidade: 'caixa' | 'casal' | 'parto' | 'solicitacao' | 'usuario' | 'projeto' | 'linhagem' | 'sala' | 'estante'
+  entidade: Entidade
   idEntidade: number
   acao: string
   descricao: string
@@ -36,37 +45,199 @@ export type FiltroDoHistorico = {
   limite: number
 }
 
-export async function listarHistorico(filtro: FiltroDoHistorico) {
+/** Uma linha da tela: do historico ou da trilha. O id e o da linha na tabela de onde ela veio */
+export type LinhaDoHistorico = {
+  fonte: 'historico' | 'trilha'
+  id: number
+  /** quando foi registrado, ISO */
+  dataHora: string
+  usuario: string
+  entidade: string
+  idEntidade: number
+  acao: string
+  descricao: string
+  dados: unknown
+}
+
+/**
+ * Os fatos dos animais que o historico guardou antes do modelo por rato e que a conversao para ele
+ * virou ocorrencia da trilha. Aparecem pela trilha, para nao repetir; o codigo de hoje nao grava
+ * mais estas acoes no historico
+ */
+export const ACOES_QUE_FORAM_PARA_A_TRILHA: { entidade: string; acao: string }[] = [
+  { entidade: 'parto', acao: 'nascimento' },
+  { entidade: 'parto', acao: 'selecao' },
+  { entidade: 'caixa', acao: 'estoque' },
+  { entidade: 'pedido', acao: 'alocacao' },
+  { entidade: 'pedido', acao: 'entrega' },
+]
+
+/** Quem busca por "Sistema" acha o que o sistema fez, como na coluna Quem */
+const buscaOSistema = (busca: string) => NOME_DO_SISTEMA.toLowerCase().includes(busca.toLowerCase())
+
+// ------------------------------------------------------------ auditoria.historico
+
+async function doHistorico(filtro: FiltroDoHistorico): Promise<LinhaDoHistorico[]> {
   const registros = await prisma.historico.findMany({
     where: {
       ...(filtro.entidade === undefined ? {} : { entidade: filtro.entidade }),
       ...(filtro.idEntidade === undefined ? {} : { idEntidade: filtro.idEntidade }),
+      NOT: { OR: ACOES_QUE_FORAM_PARA_A_TRILHA },
       ...(filtro.busca === undefined
         ? {}
         : {
             OR: [
               { descricao: { contains: filtro.busca, mode: 'insensitive' as const } },
               { usuario: { nome: { contains: filtro.busca, mode: 'insensitive' as const } } },
-              // quem busca por "Sistema" acha o que o sistema fez, como na coluna Quem
-              ...(NOME_DO_SISTEMA.toLowerCase().includes(filtro.busca.toLowerCase()) ? [{ idUsuario: null }] : []),
+              ...(buscaOSistema(filtro.busca) ? [{ idUsuario: null }] : []),
             ],
           }),
     },
-    orderBy: { id: 'desc' },
+    orderBy: [{ dtHora: 'desc' }, { id: 'desc' }],
     take: filtro.limite,
     include: { usuario: { select: { nome: true } } },
   })
 
+  return registros.map((registro) => ({
+    fonte: 'historico',
+    id: registro.id,
+    dataHora: registro.dtHora.toISOString(),
+    usuario: registro.usuario?.nome ?? NOME_DO_SISTEMA,
+    entidade: registro.entidade,
+    idEntidade: registro.idEntidade,
+    acao: registro.acao,
+    descricao: registro.descricao,
+    dados: registro.dados,
+  }))
+}
+
+// ------------------------------------------------------------ a trilha
+
+/**
+ * De quem e a ocorrencia na tela: o pedido da reserva e da entrega, o parto do nascimento e da
+ * correcao, e a caixa onde aconteceu a baixa, a mudanca e a anulacao
+ */
+export function entidadeDaOcorrencia(ocorrencia: {
+  tipo: string
+  idPedido: number | null
+  idParto: number | null
+  idCaixaOrigem: number | null
+  idCaixaDestino: number | null
+}): { entidade: Entidade; idEntidade: number } {
+  if (ocorrencia.idPedido !== null) return { entidade: 'pedido', idEntidade: ocorrencia.idPedido }
+  if ((ocorrencia.tipo === 'nascimento' || ocorrencia.tipo === 'correcao') && ocorrencia.idParto !== null) {
+    return { entidade: 'parto', idEntidade: ocorrencia.idParto }
+  }
+  return { entidade: 'caixa', idEntidade: ocorrencia.idCaixaOrigem ?? ocorrencia.idCaixaDestino ?? 0 }
+}
+
+/**
+ * As ocorrencias que dizem respeito ao filtro: a reserva e a entrega sao do pedido; o nascimento,
+ * a selecao e as correcoes, do parto; tudo o que tem caixa de origem ou de destino, dessa caixa.
+ * Null quando a entidade nao tem fato de animal (conta, projeto...)
+ */
+export function ondeNaTrilha(filtro: Pick<FiltroDoHistorico, 'entidade' | 'idEntidade'>): Prisma.OcorrenciaWhereInput | null {
+  const { entidade, idEntidade } = filtro
+  const valor = idEntidade ?? { not: null }
+
+  switch (entidade) {
+    case undefined:
+      return idEntidade === undefined
+        ? {}
+        : { OR: [{ idPedido: idEntidade }, { idParto: idEntidade }, { idCaixaOrigem: idEntidade }, { idCaixaDestino: idEntidade }] }
+    case 'pedido':
+      return { idPedido: valor }
+    case 'parto':
+      return { idParto: valor }
+    case 'caixa':
+      return { OR: [{ idCaixaOrigem: valor }, { idCaixaDestino: valor }] }
+    default:
+      return null
+  }
+}
+
+const selecaoDaLinha = {
+  ...selecaoDaDescricao,
+  idParto: true,
+  dtFato: true,
+  dtRegistro: true,
+  usuario: { select: { nome: true } },
+} satisfies Prisma.OcorrenciaSelect
+
+type OcorrenciaDaLinha = Prisma.OcorrenciaGetPayload<{ select: typeof selecaoDaLinha }>
+
+function linhaDaOcorrencia(ocorrencia: OcorrenciaDaLinha): LinhaDoHistorico {
+  const dtFato = dataISO(ocorrencia.dtFato)
+
   return {
-    historico: registros.map((registro) => ({
-      id: registro.id,
-      dataHora: registro.dtHora.toISOString(),
-      usuario: registro.usuario?.nome ?? NOME_DO_SISTEMA,
-      entidade: registro.entidade,
-      idEntidade: registro.idEntidade,
-      acao: registro.acao,
-      descricao: registro.descricao,
-      dados: registro.dados,
-    })),
+    fonte: 'trilha',
+    id: ocorrencia.id,
+    dataHora: ocorrencia.dtRegistro.toISOString(),
+    usuario: ocorrencia.usuario?.nome ?? NOME_DO_SISTEMA,
+    ...entidadeDaOcorrencia(ocorrencia),
+    acao: ocorrencia.tipo,
+    // o registro pode ser de outro dia: o texto diz quando o fato aconteceu
+    descricao: `Em ${dtFato}: ${descreverOcorrencia(ocorrencia)}`,
+    dados: { dtFato, motivo: ocorrencia.motivo },
+  }
+}
+
+/** Quantas ocorrencias a busca por texto le de cada vez */
+const PAGINA_DA_BUSCA = 200
+
+/**
+ * As ocorrencias mais recentes do filtro. O texto da ocorrencia e montado aqui, entao a busca por
+ * texto le a trilha em paginas, do registro mais novo para o mais velho, ate achar 'limite'
+ */
+async function daTrilha(filtro: FiltroDoHistorico): Promise<LinhaDoHistorico[]> {
+  const onde = ondeNaTrilha(filtro)
+  if (onde === null) return []
+
+  const ordem: Prisma.OcorrenciaOrderByWithRelationInput[] = [{ dtRegistro: 'desc' }, { id: 'desc' }]
+  const { busca } = filtro
+
+  if (busca === undefined) {
+    const lidas = await prisma.ocorrencia.findMany({ where: onde, orderBy: ordem, take: filtro.limite, select: selecaoDaLinha })
+    return lidas.map(linhaDaOcorrencia)
+  }
+
+  const procurado = busca.toLowerCase()
+  const achou = (linha: LinhaDoHistorico) =>
+    linha.descricao.toLowerCase().includes(procurado) ||
+    linha.usuario.toLowerCase().includes(procurado)
+
+  const achadas: LinhaDoHistorico[] = []
+  let depoisDe: number | undefined
+
+  while (achadas.length < filtro.limite) {
+    const pagina = await prisma.ocorrencia.findMany({
+      where: onde,
+      orderBy: ordem,
+      take: PAGINA_DA_BUSCA,
+      ...(depoisDe === undefined ? {} : { cursor: { id: depoisDe }, skip: 1 }),
+      select: selecaoDaLinha,
+    })
+
+    achadas.push(...pagina.map(linhaDaOcorrencia).filter(achou))
+
+    const ultima = pagina.at(-1)
+    if (ultima === undefined || pagina.length < PAGINA_DA_BUSCA) break
+    depoisDe = ultima.id
+  }
+
+  return achadas.slice(0, filtro.limite)
+}
+
+/**
+ * GET /api/historico - as 'limite' linhas mais recentes do filtro, do historico e da trilha juntos,
+ * pela data do registro
+ */
+export async function listarHistorico(filtro: FiltroDoHistorico) {
+  const [doHistoricoLidas, daTrilhaLidas] = await Promise.all([doHistorico(filtro), daTrilha(filtro)])
+
+  return {
+    historico: [...doHistoricoLidas, ...daTrilhaLidas]
+      .sort((a, b) => b.dataHora.localeCompare(a.dataHora) || (a.fonte === b.fonte ? b.id - a.id : 0))
+      .slice(0, filtro.limite),
   }
 }

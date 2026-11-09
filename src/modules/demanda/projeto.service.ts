@@ -1,7 +1,9 @@
-import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
+// Os projetos aprovados na CEUA e as linhagens do catalogo, que so o gestor cadastra
+
+import { campoInvalido, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { prisma } from '../../shared/prisma.ts'
-import { dataISO, paraData } from '../../shared/traducao.ts'
+import { dataISO, hojeISO, paraData } from '../../shared/traducao.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
 
 export const SITUACAO_DO_PROJETO = { V: 'vigente', N: 'vencido', S: 'suspenso' } as const
@@ -23,10 +25,29 @@ export type DadosDoProjeto = {
   situacao: SituacaoDoProjeto
 }
 
-function campoInvalido(campo: string, mensagem: string) {
-  return new ErroDeAplicacao(400, 'VALIDACAO', 'Confira os campos destacados.', {
-    campos: { [campo]: mensagem },
+/** GET /api/projetos - o pesquisador so ve os proprios; tecnico e gestor veem todos */
+export async function listarProjetos(usuario: UsuarioDaSessao, agora: Date = new Date()) {
+  const hoje = hojeISO(agora)
+  const projetos = await prisma.projeto.findMany({
+    where: usuario.perfil === 'pesquisador' ? { idUsuarioResponsavel: usuario.id } : {},
+    orderBy: { numero: 'asc' },
+    include: { usuarioResponsavel: { select: { nome: true } } },
   })
+
+  return {
+    projetos: projetos.map((projeto) => ({
+      id: projeto.id,
+      numero: projeto.numero,
+      vigente: projeto.situacao === 'V' && dataISO(projeto.dtVigenciaFim) >= hoje,
+      titulo: projeto.titulo,
+      idUsuarioResponsavel: projeto.idUsuarioResponsavel,
+      responsavel: projeto.usuarioResponsavel.nome,
+      dtVigenciaInicio: dataISO(projeto.dtVigenciaInicio),
+      dtVigenciaFim: dataISO(projeto.dtVigenciaFim),
+      cotaAutorizada: projeto.cotaAutorizada,
+      situacao: SITUACAO_DO_PROJETO[projeto.situacao as keyof typeof SITUACAO_DO_PROJETO],
+    })),
+  }
 }
 
 async function conferir(dados: DadosDoProjeto, idProjeto?: number) {

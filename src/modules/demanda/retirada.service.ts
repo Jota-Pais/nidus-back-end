@@ -21,7 +21,7 @@ export type LugarDaRetirada = {
 }
 
 /**
- * GET /api/solicitacoes/:id/retirada - os vivos reservados para o pedido, agrupados por caixa,
+ * GET /api/pedidos/:id/retirada - os vivos reservados para o pedido, agrupados por caixa,
  * sexo e data de nascimento, na ordem da estante
  */
 export async function retiradaDoPedido(idPedido: number) {

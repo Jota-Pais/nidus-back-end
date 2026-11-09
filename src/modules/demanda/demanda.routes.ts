@@ -6,25 +6,16 @@ import {
   usuarioDaRequisicao,
 } from '../../shared/middlewares/autorizacao.ts'
 import { hojeISO } from '../../shared/traducao.ts'
-import {
-  alocarSolicitacao,
-  aprovarSolicitacao,
-  criarSolicitacao,
-  listarProjetos,
-  listarSolicitacoes,
-  recusarSemResposta,
-  recusarSolicitacao,
-  registrarEntrega,
-} from './demanda.service.ts'
-import { retiradaDoPedido } from '../infra/retirada.service.ts'
-import { desfazerReserva } from './devolucao.service.ts'
-import { SITUACAO_DO_PROJETO, alterarProjeto, criarProjeto } from './projeto.service.ts'
+import { dataDoFato, idNaRota, idNoCorpo } from '../../shared/validacao.ts'
+import { registrarEntrega } from './entrega.service.ts'
+import { aprovarPedido, criarPedido, listarPedidos, recusarPedido, recusarSemResposta } from './pedido.service.ts'
+import { SITUACAO_DO_PROJETO, alterarProjeto, criarProjeto, listarProjetos } from './projeto.service.ts'
 import { numeroCeua } from './protocolo.ts'
+import { desfazerReserva, reservarAnimais } from './reserva.service.ts'
+import { retiradaDoPedido } from './retirada.service.ts'
 
 export const projetoRoutes = Router()
-export const solicitacaoRoutes = Router()
-
-const idNaRota = z.object({ id: z.coerce.number().int().positive().max(2147483647) })
+export const pedidoRoutes = Router()
 
 /** So o gestor lista: o pesquisador digita o protocolo e nao ve o dos outros */
 projetoRoutes.get('/', exigirPerfil('gestor'), async (req, res) => {
@@ -34,7 +25,7 @@ projetoRoutes.get('/', exigirPerfil('gestor'), async (req, res) => {
 export const projetoNovo = z.object({
   numero: numeroCeua,
   titulo: z.string().trim().min(1).max(255),
-  idUsuarioResponsavel: z.number().int().positive().max(2147483647),
+  idUsuarioResponsavel: idNoCorpo,
   dtVigenciaInicio: z.iso.date('Data invalida. Use aaaa-mm-dd.'),
   dtVigenciaFim: z.iso.date('Data invalida. Use aaaa-mm-dd.'),
   cotaAutorizada: z.number().int().min(0).max(2147483647),
@@ -54,11 +45,12 @@ projetoRoutes.put('/:id', exigirPerfil('gestor'), async (req, res) => {
   res.json(await alterarProjeto(id, dados, usuarioDaRequisicao(req)))
 })
 
-solicitacaoRoutes.get('/', exigirPerfil(), async (req, res) => {
+/** GET /api/pedidos - antes de listar, recusa os pedidos que ficaram sem resposta */
+pedidoRoutes.get('/', exigirPerfil(), async (req, res) => {
   await recusarSemResposta().catch((erro: unknown) => {
     console.error('[pedido] a recusa dos pedidos sem resposta falhou:', erro)
   })
-  res.json(await listarSolicitacoes(usuarioDaRequisicao(req)))
+  res.json(await listarPedidos(usuarioDaRequisicao(req)))
 })
 
 // Os tetos protegem as colunas SMALLINT do banco. 300 dias e o teto do formulario do cliente
@@ -71,8 +63,8 @@ const animais = z
   .min(0, 'O numero de animais nao pode ser negativo.')
   .max(MAXIMO_DE_ANIMAIS, `No maximo ${MAXIMO_DE_ANIMAIS} animais.`)
 
-/** corpo de POST /api/solicitacoes - o formulario "Solicitar animais". O e-mail vem da sessao */
-export const solicitacaoNova = z
+/** corpo de POST /api/pedidos - o formulario "Solicitar animais". O e-mail vem da sessao */
+export const pedidoNovo = z
   .object({
     nomePesquisador: z
       .string()
@@ -81,7 +73,7 @@ export const solicitacaoNova = z
       .max(120, 'O nome passa de 120 caracteres.'),
     /** so o formato: o pedido nao depende de projeto cadastrado */
     protocoloCeua: numeroCeua,
-    idLinhagem: z.number().int().positive().max(2147483647),
+    idLinhagem: idNoCorpo,
     machos: animais,
     femeas: animais,
     qualquer: animais,
@@ -117,44 +109,57 @@ export const solicitacaoNova = z
     error: 'A data de entrega ja passou.',
   })
 
-solicitacaoRoutes.post('/', exigirPerfil('pesquisador'), async (req, res) => {
-  const dados = solicitacaoNova.parse(req.body)
+pedidoRoutes.post('/', exigirPerfil('pesquisador'), async (req, res) => {
+  const dados = pedidoNovo.parse(req.body)
 
-  res.status(201).json(await criarSolicitacao(dados, usuarioDaRequisicao(req)))
+  res.status(201).json(await criarPedido(dados, usuarioDaRequisicao(req)))
 })
 
-/** POST /api/solicitacoes/:id/aprovacao - a equipe aceita fazer o pedido; reserva depois */
-solicitacaoRoutes.post('/:id/aprovacao', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+/** POST /api/pedidos/:id/aprovacao - a equipe aceita fazer o pedido; reserva depois */
+pedidoRoutes.post('/:id/aprovacao', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
 
-  res.json(await aprovarSolicitacao(id, usuarioDaRequisicao(req)))
+  res.json(await aprovarPedido(id, usuarioDaRequisicao(req)))
 })
 
-const alocacao = z.object({
+/**
+ * Corpo de POST /api/pedidos/:id/alocacao: os lugares da busca (a caixa e a data de nascimento) e
+ * quantos machos e femeas sair de cada um. O "qualquer" do pedido vem como macho ou femea
+ */
+export const alocacao = z.object({
   itens: z
     .array(
-      z.object({
-        idParto: z.number().int().positive().max(2147483647),
-        machos: animais,
-        femeas: animais,
-      }),
+      z
+        .object({
+          idCaixa: idNoCorpo,
+          dtNascimento: z.iso.date('Data invalida. Use aaaa-mm-dd.'),
+          machos: animais,
+          femeas: animais,
+        })
+        .refine((item) => item.machos + item.femeas > 0, {
+          path: ['machos'],
+          error: 'Escolha ao menos um animal deste lugar.',
+        }),
     )
-    .min(1, 'Escolha ao menos uma caixa.'),
+    .min(1, 'Escolha ao menos uma caixa.')
+    .max(100, 'No maximo 100 lugares numa reserva.'),
 })
 
-/** POST /api/solicitacoes/:id/alocacao - so quem opera a colonia reserva os animais do pedido aprovado */
-solicitacaoRoutes.post('/:id/alocacao', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+/**
+ * POST /api/pedidos/:id/alocacao - so quem opera a colonia reserva: o pedido aprovado inteiro, ou
+ * o que falta no reservado em falta
+ */
+pedidoRoutes.post('/:id/alocacao', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
   const { itens } = alocacao.parse(req.body)
 
-  res.json(await alocarSolicitacao(id, itens, usuarioDaRequisicao(req)))
+  res.json(await reservarAnimais(id, itens, usuarioDaRequisicao(req)))
 })
 
-const entrega = z.object({
-  dtEntrega: z.iso.date('Data invalida. Use aaaa-mm-dd.'),
-})
+/** Corpo de POST /api/pedidos/:id/entrega: o dia em que os animais sairam, nunca no futuro */
+export const entrega = z.object({ dtEntrega: dataDoFato })
 
-solicitacaoRoutes.post('/:id/entrega', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+pedidoRoutes.post('/:id/entrega', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
   const { dtEntrega } = entrega.parse(req.body)
 
@@ -165,22 +170,23 @@ const recusa = z.object({
   motivo: z.string().trim().min(1, 'Diga o motivo da recusa.').max(200),
 })
 
-solicitacaoRoutes.post('/:id/recusa', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+/** POST /api/pedidos/:id/recusa - o pedido reservado tambem: os animais voltam a ficar livres */
+pedidoRoutes.post('/:id/recusa', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
   const { motivo } = recusa.parse(req.body)
 
-  res.json(await recusarSolicitacao(id, motivo, usuarioDaRequisicao(req).id))
+  res.json(await recusarPedido(id, motivo, usuarioDaRequisicao(req).id))
 })
 
-/** POST /api/solicitacoes/:id/devolucao - desfaz a reserva em falta; o pedido continua aprovado */
-solicitacaoRoutes.post('/:id/devolucao', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+/** POST /api/pedidos/:id/devolucao - desfaz a reserva, com falta ou sem; o pedido volta a aprovado */
+pedidoRoutes.post('/:id/devolucao', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
 
   res.json(await desfazerReserva(id, usuarioDaRequisicao(req)))
 })
 
-/** GET /api/solicitacoes/:id/retirada - de qual caixa tirar os animais do pedido na entrega */
-solicitacaoRoutes.get('/:id/retirada', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+/** GET /api/pedidos/:id/retirada - de que caixas tirar os animais do pedido na entrega */
+pedidoRoutes.get('/:id/retirada', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
 
   res.json(await retiradaDoPedido(id))

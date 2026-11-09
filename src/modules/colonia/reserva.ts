@@ -30,18 +30,20 @@ export function temFalta(falta: FaltaDaReserva): boolean {
 }
 
 /**
- * Se mais um animal do sexo cabe no pedido: M <= qtdM + qualquer, F <= qtdF + qualquer e
- * M + F <= o total pedido. O teto que o trigger do animal cobra
+ * Se os animais passam do pedido: o teto e M <= qtdM + qualquer, F <= qtdF + qualquer e M + F <= o
+ * total pedido. O teto que o trigger do animal cobra
  */
-export function cabeNaReserva(pedido: Pedido, tem: PorSexo, sexo: Sexo): boolean {
-  const m = tem.m + (sexo === 'M' ? 1 : 0)
-  const f = tem.f + (sexo === 'F' ? 1 : 0)
-
+export function passaDoPedido(pedido: Pedido, tem: PorSexo): boolean {
   return (
-    m <= pedido.qtdM + pedido.qtdQualquer &&
-    f <= pedido.qtdF + pedido.qtdQualquer &&
-    m + f <= pedido.qtdM + pedido.qtdF + pedido.qtdQualquer
+    tem.m > pedido.qtdM + pedido.qtdQualquer ||
+    tem.f > pedido.qtdF + pedido.qtdQualquer ||
+    tem.m + tem.f > pedido.qtdM + pedido.qtdF + pedido.qtdQualquer
   )
+}
+
+/** Se mais um animal do sexo cabe no pedido, sem passar do teto (passaDoPedido) */
+export function cabeNaReserva(pedido: Pedido, tem: PorSexo, sexo: Sexo): boolean {
+  return !passaDoPedido(pedido, somarUm(tem, sexo))
 }
 
 /** Um pedido como a anulacao o le: o status, o que pede e o que ja pesa nele */

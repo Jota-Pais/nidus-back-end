@@ -1,9 +1,11 @@
 // Motor de busca de atendimento (spec do cliente, secao 6.1): o plantel primeiro, ordenado
 // pela idade, e o acasalamento novo como ultima alternativa. Aqui so a regra, sem banco -
-// quem le o banco e 'motor.service.ts'
+// quem le o banco e 'motor.service.ts'. A regra de quando um animal serve ao pedido numa data
+// (porQueNaoServe) e a mesma na busca, na reserva e na entrega
 
-import { ESPERADOS_POR_CASAL, FAIXAS_IDADE } from '../../shared/parametros.ts'
+import { ALEITAMENTO_DIAS, ESPERADOS_POR_CASAL, FAIXAS_IDADE } from '../../shared/parametros.ts'
 import type { PorSexo } from '../colonia/tipos.ts'
+import { diasEntre, somarDias } from '../reproducao/cadeiaTemporal.ts'
 
 /** De onde vem o animal: ja desmamado ou ja nascido */
 export type Origem = 'de_fato' | 'previsao'
@@ -35,6 +37,37 @@ export function faixaAceita(idade: number): { min: number; max: number } {
  */
 export function faixaDoPedido(idade: IdadePedida): { min: number; max: number } {
   return { min: faixaAceita(idade.min).min, max: faixaAceita(idade.max).max }
+}
+
+/** O dia em que o animal ja esta desmamado: o desmame real ou, sem ele, nascimento + aleitamento */
+export function dataDoDesmame(dtNascimento: string, dtDesmameReal: string | null): string {
+  return dtDesmameReal ?? somarDias(dtNascimento, ALEITAMENTO_DIAS)
+}
+
+/** Animais da mesma idade, vistos pela regra da data: quando nasceram e quando estao desmamados */
+export type Ninhada = {
+  /** 'aaaa-mm-dd' */
+  dtNascimento: string
+  /** 'aaaa-mm-dd': o desmame real, ou o previsto (dataDoDesmame) */
+  dtDesmame: string
+}
+
+/** Por que os animais nao servem ao pedido na data: a idade fora da faixa ou ainda mamando */
+export type NaoServe =
+  | { motivo: 'idade'; idade: number; faixa: { min: number; max: number } }
+  | { motivo: 'desmame'; dtDesmame: string }
+
+/**
+ * Se os animais servem ao pedido na data: a idade nesse dia dentro da faixa aceita (faixaDoPedido,
+ * com a tolerancia) e ja desmamados ate ele. Null quando servem. A busca e a reserva conferem na
+ * data desejada do pedido; a entrega, na data real
+ */
+export function porQueNaoServe(ninhada: Ninhada, faixa: { min: number; max: number }, data: string): NaoServe | null {
+  const idade = diasEntre(ninhada.dtNascimento, data)
+
+  if (idade < faixa.min || idade > faixa.max) return { motivo: 'idade', idade, faixa }
+  if (ninhada.dtDesmame > data) return { motivo: 'desmame', dtDesmame: ninhada.dtDesmame }
+  return null
 }
 
 /** Um lugar de onde sair animais: a caixa e a data de nascimento, com os vivos livres dela */

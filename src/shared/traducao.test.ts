@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   codigoDaEspecie,
   dataISO,
-  estadoCaixa,
   exigirCodigo,
   face,
   hojeISO,
@@ -12,9 +11,9 @@ import {
 
 // Cada dicionario e uma tabela de equivalencia. O que pode dar
 // errado aqui e silencioso e caro: um termo diferente do que o front espera
-// nao quebra build nenhum dos dois lados - so aparece como tela vazia
+// nao quebra build nenhum dos dois lados - so aparece como tela vazia. So os dominios que
+// continuam letra no banco: os novos guardam a palavra e nao passam por aqui
 const dicionarios = [
-  { nome: 'estadoCaixa', dic: estadoCaixa, codigos: ['R', 'T', 'E', 'X'] },
   { nome: 'perfil', dic: perfil, codigos: ['P', 'T', 'G'] },
   { nome: 'face', dic: face, codigos: ['1', '2'] },
 ]
@@ -30,8 +29,7 @@ describe('traducao do char(1)', () => {
 
   it('usa exatamente os termos que o front espera', () => {
     // Renomear qualquer um destes quebra o front sem quebrar build. Estao escritos a mao
-    // de proposito: e a copia que o teste compara. As colunas seguem a ordem do kanban
-    expect(estadoCaixa.termos).toEqual(['livres', 'estoque', 'reserva', 'enviado'])
+    // de proposito: e a copia que o teste compara
     expect(perfil.termos).toEqual(['pesquisador', 'tecnico', 'gestor'])
     expect(face.termos).toEqual(['frontal', 'traseira'])
   })
@@ -39,16 +37,16 @@ describe('traducao do char(1)', () => {
   it('trata codigo fora do dominio como bug, nao como entrada invalida', () => {
     // O CHECK de dominio da migration das invariantes nao deveria deixar entrar. Se
     // entrou, quero stack no log do servidor - nao 404 disfarcado.
-    expect(() => estadoCaixa.paraApi('Z')).toThrow(/fora do dominio/)
+    expect(() => perfil.paraApi('Z')).toThrow(/fora do dominio/)
   })
 
   it('devolve undefined para termo de API desconhecido', () => {
-    expect(estadoCaixa.paraBanco('em_ferias')).toBeUndefined()
+    expect(perfil.paraBanco('administrador')).toBeUndefined()
   })
 
   it('exigirCodigo vira 404 no envelope de erro da API', () => {
-    expect(exigirCodigo(estadoCaixa, 'livres', 'Estado')).toBe('R')
-    expect(() => exigirCodigo(estadoCaixa, 'em_ferias', 'Estado')).toThrowError(
+    expect(exigirCodigo(perfil, 'tecnico', 'Perfil')).toBe('T')
+    expect(() => exigirCodigo(perfil, 'administrador', 'Perfil')).toThrowError(
       expect.objectContaining({ status: 404, codigo: 'NAO_ENCONTRADO' }),
     )
   })

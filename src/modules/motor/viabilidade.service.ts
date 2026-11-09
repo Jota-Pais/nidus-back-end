@@ -9,7 +9,7 @@ import { buscarAtendimento } from './motor.service.ts'
 
 export type Viabilidade = { viavel: boolean; motivo: string | null }
 
-/** o que a viabilidade le do corpo de POST /api/solicitacoes */
+/** o que a viabilidade le do corpo de POST /api/pedidos */
 export type PedidoDeViabilidade = {
   idLinhagem: number
   machos: number
@@ -42,7 +42,7 @@ export function resumirBusca(busca: {
   return { viavel: false, motivo: DATA_PROXIMA_DEMAIS }
 }
 
-/** POST /api/solicitacoes/viabilidade */
+/** POST /api/pedidos/viabilidade */
 export async function avaliarViabilidade(
   pedido: PedidoDeViabilidade,
   agora: Date = new Date(),

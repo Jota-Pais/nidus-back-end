@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { criarApp } from './app.ts'
 import { env } from './env.ts'
-import { recusarSemResposta } from './modules/demanda/demanda.service.ts'
+import { recusarSemResposta } from './modules/demanda/pedido.service.ts'
 import { prisma } from './shared/prisma.ts'
 
 // ../package.json resolve tanto em src/ (dev) quanto em dist/ (build).

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { casaisParaODeficit, faixaAceita, faixaDoPedido, ordenar, sugerirAlocacao } from './motor.ts'
+import {
+  casaisParaODeficit,
+  dataDoDesmame,
+  faixaAceita,
+  faixaDoPedido,
+  ordenar,
+  porQueNaoServe,
+  sugerirAlocacao,
+} from './motor.ts'
 import type { Candidata } from './motor.ts'
 
 describe('faixa de idade aceita', () => {
@@ -35,6 +43,35 @@ const candidata = (id: number, origem: Candidata['origem'], idade: number, m: nu
 })
 
 const exata = (idade: number) => ({ min: idade, max: idade })
+
+describe('quando os animais servem ao pedido numa data', () => {
+  // o pedido de 21 a 40 dias aceita de 20 a 44
+  const faixa = faixaDoPedido({ min: 21, max: 40 })
+
+  it('o desmame e o real, ou o nascimento mais o aleitamento enquanto nao ha', () => {
+    expect(dataDoDesmame('2026-10-01', '2026-10-20')).toBe('2026-10-20')
+    expect(dataDoDesmame('2026-10-01', null)).toBe('2026-10-23')
+  })
+
+  it('servem com a idade na faixa aceita e ja desmamados no dia; as pontas e o mesmo dia valem', () => {
+    const ninhada = { dtNascimento: '2026-10-01', dtDesmame: '2026-10-23' }
+
+    expect(porQueNaoServe(ninhada, faixa, '2026-10-23')).toBeNull()
+    expect(porQueNaoServe(ninhada, faixa, '2026-11-14')).toBeNull()
+  })
+
+  it('fora da faixa diz a idade no dia; ainda mamando diz quando desmama', () => {
+    expect(porQueNaoServe({ dtNascimento: '2026-10-01', dtDesmame: '2026-10-23' }, faixa, '2026-11-15')).toEqual({
+      motivo: 'idade',
+      idade: 45,
+      faixa: { min: 20, max: 44 },
+    })
+    expect(porQueNaoServe({ dtNascimento: '2026-10-01', dtDesmame: '2026-10-25' }, faixa, '2026-10-24')).toEqual({
+      motivo: 'desmame',
+      dtDesmame: '2026-10-25',
+    })
+  })
+})
 
 describe('ordem das candidatas', () => {
   it('de fato antes de previsao', () => {

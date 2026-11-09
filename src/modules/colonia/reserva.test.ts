@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cabeNaReserva, faltaDaReserva, soltosNaAnulacao, temFalta } from './reserva.ts'
+import { cabeNaReserva, faltaDaReserva, passaDoPedido, soltosNaAnulacao, temFalta } from './reserva.ts'
 import type { SituacaoDoPedido } from './reserva.ts'
 
 const pedido = { qtdM: 2, qtdF: 1, qtdQualquer: 2 }
@@ -23,6 +23,14 @@ describe('falta da reserva', () => {
 })
 
 describe('teto da reserva, o mesmo do trigger do animal', () => {
+  it('passa do pedido o sexo acima de qtd mais o qualquer, ou o total acima do pedido', () => {
+    expect(passaDoPedido(pedido, { m: 4, f: 1 })).toBe(false)
+    expect(passaDoPedido(pedido, { m: 5, f: 0 })).toBe(true)
+    expect(passaDoPedido(pedido, { m: 0, f: 4 })).toBe(true)
+    expect(passaDoPedido(pedido, { m: 3, f: 3 })).toBe(true)
+    expect(passaDoPedido(pedido, { m: 0, f: 0 })).toBe(false)
+  })
+
   it('cabe ate qtd do sexo mais o qualquer, sem passar do total', () => {
     expect(cabeNaReserva(pedido, { m: 3, f: 1 }, 'M')).toBe(true)
     expect(cabeNaReserva(pedido, { m: 4, f: 0 }, 'M')).toBe(false)

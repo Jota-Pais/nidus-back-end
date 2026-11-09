@@ -1,6 +1,7 @@
 // A busca de atendimento lida do banco: os vivos livres da linhagem, agrupados pelo lugar de onde
 // sairiam (a caixa e a data de nascimento: dentro da caixa, so a idade distingue os ratos). So
-// entram os que, na data da entrega, estao na faixa de idade aceita e ja desmamaram
+// entram os lugares que, na data da entrega, servem ao pedido pela regra de motor.porQueNaoServe,
+// a mesma que a reserva confere
 
 import {
   ALEITAMENTO_DIAS,
@@ -13,7 +14,14 @@ import { dataISO, hojeISO } from '../../shared/traducao.ts'
 import type { PorSexo } from '../colonia/tipos.ts'
 import { idDaEspecie } from '../infra/infra.service.ts'
 import { diasEntre, somarDias } from '../reproducao/cadeiaTemporal.ts'
-import { casaisParaODeficit, faixaDoPedido, ordenar, sugerirAlocacao } from './motor.ts'
+import {
+  casaisParaODeficit,
+  dataDoDesmame,
+  faixaDoPedido,
+  ordenar,
+  porQueNaoServe,
+  sugerirAlocacao,
+} from './motor.ts'
 import type { Origem } from './motor.ts'
 
 export type PedidoDeBusca = {
@@ -30,11 +38,6 @@ export type PedidoDeBusca = {
   dataEntrega?: string | undefined
 }
 
-/** O dia em que o animal ja esta desmamado: o desmame real ou, sem ele, nascimento + aleitamento */
-export function dataDoDesmame(nascimento: string, dtDesmameReal: Date | null): string {
-  return dtDesmameReal ? dataISO(dtDesmameReal) : somarDias(nascimento, ALEITAMENTO_DIAS)
-}
-
 /** Os vivos livres de um parto numa caixa, como a busca os le */
 export type LivresDoParto = {
   idCaixa: number
@@ -45,7 +48,8 @@ export type LivresDoParto = {
   casal: string
   /** 'aaaa-mm-dd' */
   dtNascimento: string
-  dtDesmameReal: Date | null
+  /** 'aaaa-mm-dd', ou null enquanto o desmame nao foi registrado */
+  dtDesmameReal: string | null
   livres: PorSexo
 }
 
@@ -62,49 +66,54 @@ export type CandidataDaBusca = {
   partos: { ordem: number; casal: string }[]
 }
 
+type Lugar = CandidataDaBusca & { dtDesmame: string }
+
 /**
- * Os lugares que atendem a data: livres de partos na faixa de idade aceita e ja desmamados ate a
- * entrega (o desmame real, ou o previsto). Os partos do mesmo dia na mesma caixa viram um lugar
- * so. A origem e 'de_fato' quando todos ja desmamaram de verdade; senao, 'previsao'
+ * Os lugares que atendem a data. Primeiro junta os livres por lugar (os partos do mesmo dia na
+ * mesma caixa viram um so, e o lugar so esta desmamado quando todos estao); depois fica so com os
+ * que servem ao pedido na data (porQueNaoServe). A origem e 'de_fato' quando todos ja desmamaram
+ * de verdade; senao, 'previsao'
  */
 export function lugaresDaBusca(
   livres: LivresDoParto[],
   faixa: { min: number; max: number },
   referencia: string,
 ): CandidataDaBusca[] {
-  const porLugar = new Map<string, CandidataDaBusca>()
+  const porLugar = new Map<string, Lugar>()
 
   for (const doParto of livres) {
-    const idadeNaEntrega = diasEntre(doParto.dtNascimento, referencia)
-    if (idadeNaEntrega < faixa.min || idadeNaEntrega > faixa.max) continue
-    if (dataDoDesmame(doParto.dtNascimento, doParto.dtDesmameReal) > referencia) continue
-
     const chave = `${doParto.idCaixa}:${doParto.dtNascimento}`
-    const lugar: CandidataDaBusca = porLugar.get(chave) ?? {
+    const desmame = dataDoDesmame(doParto.dtNascimento, doParto.dtDesmameReal)
+    const lugar: Lugar = porLugar.get(chave) ?? {
       idCaixa: doParto.idCaixa,
       codigo: doParto.codigo,
       numeroVisivel: doParto.numeroVisivel,
       tipo: doParto.tipo,
       dtNascimento: doParto.dtNascimento,
-      idadeNaEntrega,
+      idadeNaEntrega: diasEntre(doParto.dtNascimento, referencia),
       origem: 'de_fato',
       livres: { m: 0, f: 0 },
       partos: [],
+      dtDesmame: desmame,
     }
 
     lugar.livres = { m: lugar.livres.m + doParto.livres.m, f: lugar.livres.f + doParto.livres.f }
     if (doParto.dtDesmameReal === null) lugar.origem = 'previsao'
+    if (desmame > lugar.dtDesmame) lugar.dtDesmame = desmame
     lugar.partos.push({ ordem: doParto.ordem, casal: doParto.casal })
     porLugar.set(chave, lugar)
   }
 
   // uma ordem fixa antes de ordenar: a estante e a caixa, para o empate sair sempre igual
-  return [...porLugar.values()].sort(
-    (a, b) =>
-      a.numeroVisivel.localeCompare(b.numeroVisivel) ||
-      a.codigo.localeCompare(b.codigo) ||
-      a.dtNascimento.localeCompare(b.dtNascimento),
-  )
+  return [...porLugar.values()]
+    .filter((lugar) => porQueNaoServe(lugar, faixa, referencia) === null)
+    .map(({ dtDesmame: _dtDesmame, ...candidata }) => candidata)
+    .sort(
+      (a, b) =>
+        a.numeroVisivel.localeCompare(b.numeroVisivel) ||
+        a.codigo.localeCompare(b.codigo) ||
+        a.dtNascimento.localeCompare(b.dtNascimento),
+    )
 }
 
 /** Os vivos livres da linhagem na especie, por caixa e parto */
@@ -143,7 +152,7 @@ async function lerLivres(idEspecie: number, idLinhagem: number): Promise<LivresD
       ordem: parto.ordem,
       casal: parto.casal.identificacao.trim(),
       dtNascimento: dataISO(parto.dtPartoReal),
-      dtDesmameReal: parto.dtDesmameReal,
+      dtDesmameReal: parto.dtDesmameReal === null ? null : dataISO(parto.dtDesmameReal),
       livres: { m: 0, f: 0 },
     }
 

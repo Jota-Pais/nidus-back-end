@@ -1,4 +1,6 @@
-// O 'char(1)' do banco NUNCA cruza a rede.
+// O 'char(1)' do banco NUNCA cruza a rede. Os dominios novos ou reescritos ja guardam a palavra
+// (caixa.tipo, pedido.status, animal.situacao, ocorrencia.tipo): a traducao fica so onde o
+// dominio continua letra, como o perfil e a face.
 
 import { naoEncontrado } from './erros.ts'
 
@@ -30,31 +32,6 @@ function dicionario<Codigo extends string, Termo extends string>(
   }
 }
 
-/**
- * infra.caixa.estado - as 4 colunas do kanban, com os nomes e na ordem da spec do cliente
- * (secao 1.9), sem a Pre-reserva: o animal esta reservado ou nao, e a caixa do casal com reserva
- * fica em Livres, mostrando quantos reservados tem. A ordem aqui e a ordem das colunas na tela.
- */
-export const estadoCaixa = dicionario({
-  R: 'livres',
-  E: 'estoque',
-  T: 'reserva',
-  X: 'enviado',
-} as const)
-
-/** demanda.solicitacao.status */
-export const statusSolicitacao = dicionario({
-  RA: 'rascunho',
-  EN: 'enviada',
-  AN: 'em_analise',
-  AP: 'aprovada',
-  RE: 'recusada',
-  AJ: 'ajustada',
-  AT: 'em_atendimento',
-  CO: 'concluida',
-  CA: 'cancelada',
-} as const)
-
 /** login.usuario.perfil - os tres perfis de acesso. */
 export const perfil = dicionario({
   P: 'pesquisador',
@@ -68,7 +45,6 @@ export const face = dicionario({
   '2': 'traseira',
 } as const)
 
-export type EstadoCaixa = (typeof estadoCaixa.termos)[number]
 export type Perfil = (typeof perfil.termos)[number]
 
 /** Codigo da especie usado em rota e filtro (rato | camundongo) */

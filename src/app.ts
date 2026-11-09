@@ -3,7 +3,7 @@ import cors from 'cors'
 import express, { type Express, type RequestHandler } from 'express'
 import { catalogoRoutes } from './modules/catalogo/catalogo.routes.ts'
 import { baixaRoutes, ocorrenciaRoutes } from './modules/colonia/colonia.routes.ts'
-import { projetoRoutes, solicitacaoRoutes } from './modules/demanda/demanda.routes.ts'
+import { pedidoRoutes, projetoRoutes } from './modules/demanda/demanda.routes.ts'
 import { caixaRoutes, quadroRoutes } from './modules/infra/caixa.routes.ts'
 import { historicoRoutes } from './modules/historico/historico.routes.ts'
 import { estanteRoutes } from './modules/infra/infra.routes.ts'
@@ -70,9 +70,9 @@ export function criarApp({
   app.use('/api/caixas', baixaRoutes)
   app.use('/api/ocorrencias', ocorrenciaRoutes)
   app.use('/api/projetos', projetoRoutes)
-  // antes das solicitacoes, para o '/viabilidade' nao cair numa rota de id
-  app.use('/api/solicitacoes/viabilidade', viabilidadeRoutes)
-  app.use('/api/solicitacoes', solicitacaoRoutes)
+  // antes dos pedidos, para o '/viabilidade' nao cair numa rota de id
+  app.use('/api/pedidos/viabilidade', viabilidadeRoutes)
+  app.use('/api/pedidos', pedidoRoutes)
   app.use('/api/busca', buscaRoutes)
   app.use('/api/historico', historicoRoutes)
   app.use('/api/estoque', estoqueRoutes)

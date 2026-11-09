@@ -195,6 +195,34 @@ export async function escolherAnimais(
   return escolhidos
 }
 
+/** Um vivo reservado de um pedido, com o que a entrega confere nele */
+export type Reservado = Escolhido & {
+  sexo: Sexo
+  idParto: number
+  /** o desmame registrado do parto; null enquanto a ninhada nao desmamou */
+  dtDesmameReal: Date | null
+  /** o codigo da caixa onde ele esta */
+  codigo: string
+}
+
+/**
+ * Todos os vivos reservados do pedido, travados (FOR UPDATE) e pela ordem de id. Sem pular os
+ * travados: quem desfaz, recusa ou entrega precisa de todos, entao espera quem os tem (uma baixa,
+ * uma mudanca) terminar e le o que ela gravou. Quem chama ja travou o pedido
+ */
+export function travarReservados(tx: Transacao, idPedido: number): Promise<Reservado[]> {
+  return tx.$queryRaw<Reservado[]>`
+    SELECT a."id", a."id_caixa" AS "idCaixa", a."id_pedido" AS "idPedido", a."dt_movimento" AS "dtMovimento",
+           a."sexo", a."id_parto" AS "idParto", p."dt_parto_real" AS "dtNascimento",
+           p."dt_desmame_real" AS "dtDesmameReal", c."codigo"
+      FROM "colonia"."animal" a
+      JOIN "reproducao"."parto" p ON p."id" = a."id_parto"
+      JOIN "infra"."caixa" c ON c."id" = a."id_caixa"
+     WHERE a."situacao" = 'vivo' AND a."id_pedido" = ${idPedido}
+     ORDER BY a."id"
+       FOR UPDATE OF a`
+}
+
 /** Os pedidos dos escolhidos que estavam reservados, sem repetir: os que podem ficar em falta */
 export function pedidosTocados(escolhidos: Pick<Escolhido, 'idPedido'>[]): number[] {
   return [...new Set(escolhidos.flatMap((animal) => (animal.idPedido === null ? [] : [animal.idPedido])))]

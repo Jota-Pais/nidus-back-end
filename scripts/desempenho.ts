@@ -3,14 +3,16 @@ const COOKIE = process.env.NIDUS_COOKIE
 const REPETICOES = Number(process.env.NIDUS_REPETICOES ?? 30)
 const SIMULTANEAS = Number(process.env.NIDUS_SIMULTANEAS ?? 5)
 const LIMITE_P95_MS = Number(process.env.NIDUS_LIMITE_P95_MS ?? 1000)
+/** a busca le os vivos de uma linhagem: 3 e a Wistar na carga inicial do banco */
+const LINHAGEM = Number(process.env.NIDUS_LINHAGEM ?? 3)
 
 const ROTAS = [
   '/saude',
   '/api/quadro?especie=rato',
   '/api/estantes',
-  '/api/solicitacoes',
+  '/api/pedidos',
   '/api/estoque?especie=rato',
-  '/api/busca?especie=rato&machos=4&femeas=4&idade=28',
+  `/api/busca?especie=rato&idLinhagem=${LINHAGEM}&machos=4&femeas=4&qualquer=0&idadeMin=28&idadeMax=28`,
 ]
 
 function percentil(tempos: number[], p: number): number {

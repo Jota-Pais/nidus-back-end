@@ -1,6 +1,13 @@
 import { Prisma } from '@prisma/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { escolherAnimais, exigirDepoisDaChegada, idadeDoGrupo, pedidoDosReservados, pedidosTocados } from './escolha.ts'
+import {
+  escolherAnimais,
+  exigirDepoisDaChegada,
+  idadeDoGrupo,
+  pedidoDosReservados,
+  pedidosTocados,
+  travarReservados,
+} from './escolha.ts'
 import type { Escolhido } from './escolha.ts'
 
 // O banco aqui so devolve, em ordem, as linhas de cada consulta, e guarda o SQL de cada uma
@@ -177,6 +184,22 @@ describe('a idade do grupo', () => {
         },
       }),
     )
+  })
+})
+
+describe('os reservados de um pedido', () => {
+  it('trava todos os vivos do pedido, pela ordem de id, esperando quem os tem em vez de pular', async () => {
+    respostas = [[{ ...animal(4, 7), sexo: 'M', idParto: 2, dtDesmameReal: null, codigo: 'F2A' }]]
+
+    const reservados = await travarReservados(tx as never, 7)
+
+    expect(reservados.map((a) => [a.id, a.codigo])).toEqual([[4, 'F2A']])
+    const [sql] = consultas
+    expect(sql?.text).toContain(`a."situacao" = 'vivo' AND a."id_pedido" = $`)
+    expect(sql?.text).toContain('ORDER BY a."id"')
+    expect(sql?.text).toContain('FOR UPDATE OF a')
+    expect(sql?.text).not.toContain('SKIP LOCKED')
+    expect(sql?.values).toEqual([7])
   })
 })
 

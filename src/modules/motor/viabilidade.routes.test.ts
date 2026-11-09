@@ -7,7 +7,7 @@ import type { Perfil } from '../../shared/traducao.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
 import { DATA_PROXIMA_DEMAIS } from './viabilidade.service.ts'
 
-// POST /api/solicitacoes/viabilidade com o banco de mentira e a colonia vazia: quem decide e a
+// POST /api/pedidos/viabilidade com o banco de mentira e a colonia vazia: quem decide e a
 // timeline reversa. As datas partem do dia de hoje, porque a rota valida a entrega contra hoje
 
 vi.mock('../../shared/prisma.ts', () => ({
@@ -27,9 +27,9 @@ const como = (perfil: Perfil): RequestHandler => (req, _res, next) => {
 const app = (perfil?: Perfil) =>
   criarApp(perfil === undefined ? {} : { autenticacao: como(perfil) })
 
-const ROTA = '/api/solicitacoes/viabilidade'
+const ROTA = '/api/pedidos/viabilidade'
 
-/** o mesmo corpo do POST /api/solicitacoes */
+/** o mesmo corpo do POST /api/pedidos */
 const pedido = {
   nomePesquisador: 'Ana Souza',
   protocoloCeua: '23080.001234/2026-74',
@@ -42,7 +42,7 @@ const pedido = {
   dataEntrega: somarDias(hojeISO(), 100),
 }
 
-describe('POST /api/solicitacoes/viabilidade', () => {
+describe('POST /api/pedidos/viabilidade', () => {
   it('sem sessao devolve 401', async () => {
     const resposta = await request(app()).post(ROTA).send(pedido)
 
