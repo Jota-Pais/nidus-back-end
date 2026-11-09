@@ -2,6 +2,7 @@ import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import express, { type Express, type RequestHandler } from 'express'
 import { catalogoRoutes } from './modules/catalogo/catalogo.routes.ts'
+import { baixaRoutes, ocorrenciaRoutes } from './modules/colonia/colonia.routes.ts'
 import { projetoRoutes, solicitacaoRoutes } from './modules/demanda/demanda.routes.ts'
 import { caixaRoutes, quadroRoutes } from './modules/infra/caixa.routes.ts'
 import { historicoRoutes } from './modules/historico/historico.routes.ts'
@@ -66,6 +67,8 @@ export function criarApp({
   app.use('/api/partos', partoRoutes)
   app.use('/api/quadro', quadroRoutes)
   app.use('/api/caixas', caixaRoutes)
+  app.use('/api/caixas', baixaRoutes)
+  app.use('/api/ocorrencias', ocorrenciaRoutes)
   app.use('/api/projetos', projetoRoutes)
   // antes das solicitacoes, para o '/viabilidade' nao cair numa rota de id
   app.use('/api/solicitacoes/viabilidade', viabilidadeRoutes)
