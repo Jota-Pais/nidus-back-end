@@ -7,8 +7,8 @@ import unitaria, { SUITES_DE_BANCO } from './vitest.config.ts'
 //
 //   DATABASE_URL_TESTE="postgresql://..." npm run test:banco
 //
-// Cada suite abre uma transacao e a desfaz no fim. Rodam uma de cada vez: o banco e um so, e a
-// latencia da Neon pede tempo de sobra.
+// Cada suite abre uma transacao e a desfaz no fim; a da reserva concorrente grava o proprio mundo e
+// o apaga no fim. Rodam uma de cada vez: o banco e um so, e a latencia da Neon pede tempo de sobra.
 
 export default defineConfig({
   test: {

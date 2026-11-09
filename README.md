@@ -164,7 +164,10 @@ arquivos `*.banco.test.ts` saem do `npm test` e entram no `npm run test:banco`
   anulação, encerrar, sem ninhada, virar estoque, correções), com o quadro, a
   grade, a ficha e o estoque lendo os mesmos animais;
 - `src/modules/demanda/pedido.banco.test.ts`: os serviços do pedido (reservar,
-  completar, desfazer, recusar, entregar).
+  completar, desfazer, recusar, entregar);
+- `src/modules/demanda/reserva-concorrente.banco.test.ts`: duas reservas ao mesmo
+  tempo, cada uma na sua conexão (os animais travados são pulados, o pedido
+  travado faz a segunda esperar).
 
 ```bash
 DATABASE_URL_TESTE="postgresql://...branch-de-teste..." npm run test:banco
@@ -173,7 +176,11 @@ DATABASE_URL_TESTE="postgresql://...branch-de-teste..." npm run test:banco
 Use um branch de teste da Neon ou um Postgres local, nunca a produção. Cada suíte
 cria os próprios dados numa transação e desfaz tudo no fim; só as sequências de id
 andam. Nas de serviço, o Prisma vira essa transação (`src/shared/testes/transacao.ts`,
-fora do build). Sem a variável, as suítes ficam de fora.
+fora do build), e duas consultas ao mesmo tempo dentro da transação de um serviço
+(um `Promise.all`) falham o teste: a transação é uma conexão só. A da reserva
+concorrente é a exceção: para as duas conexões verem os mesmos animais, ela grava
+os próprios dados, com nomes próprios, e os apaga no começo e no fim. Sem a
+variável, as suítes ficam de fora.
 
 ## Stack
 
