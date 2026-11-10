@@ -76,9 +76,16 @@ export const naoAutenticado = () =>
 export const semPermissao = () =>
   new ErroDeAplicacao(403, 'SEM_PERMISSAO', 'Seu perfil não tem acesso a esta operação.')
 
-/** 404 - inexistente ou fora do alcance do perfil */
-export const naoEncontrado = (oQue: string) =>
-  new ErroDeAplicacao(404, 'NAO_ENCONTRADO', `${oQue} não encontrado.`)
+/** As entidades que o 404 nomeia e que pedem "encontrada" */
+const FEMININAS = new Set(['Caixa', 'Espécie', 'Estante', 'Linhagem', 'Ocorrência', 'Sala'])
+
+/** 404 - inexistente ou fora do alcance do perfil. 'oQue' comeca pela entidade: 'Caixa 12' */
+export const naoEncontrado = (oQue: string) => {
+  const [entidade = ''] = oQue.split(' ')
+  const encontrado = FEMININAS.has(entidade) ? 'encontrada' : 'encontrado'
+
+  return new ErroDeAplicacao(404, 'NAO_ENCONTRADO', `${oQue} não ${encontrado}.`)
+}
 
 /**
  * 409 - regra de negocio violada. Na API todo 409 e regra: o front pode
