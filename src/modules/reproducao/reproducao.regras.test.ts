@@ -604,7 +604,7 @@ describe('nascimento', () => {
 
     await expect(
       registrarNascimento(2, { dtPartoReal: '2026-10-23', nascidoM: 5, nascidoF: 5 }, 4),
-    ).rejects.toEqual(expect.objectContaining({ codigo: 'CAIXA_COM_ANIMAIS', message: expect.stringContaining('ainda mama') }))
+    ).rejects.toEqual(expect.objectContaining({ codigo: 'CAIXA_COM_ANIMAIS', message: expect.stringContaining('ainda está em aleitamento') }))
     expect(doParto(2)).toEqual([])
   })
 

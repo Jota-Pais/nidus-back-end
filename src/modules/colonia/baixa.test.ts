@@ -492,7 +492,7 @@ describe('anulacao de baixa', () => {
       expect.objectContaining({
         status: 409,
         codigo: 'SEQUENCIA_INVALIDA',
-        message: expect.stringContaining('1 macho da baixa ainda mama'),
+        message: expect.stringContaining('1 macho da baixa ainda está em aleitamento'),
       }),
     )
   })

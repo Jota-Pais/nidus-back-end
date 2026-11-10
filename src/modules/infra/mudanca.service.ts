@@ -253,7 +253,7 @@ export function viradaParaEstoque(caixa: CaixaParaVirar): Virada {
   if (mamando !== undefined) {
     return recusa(
       'CAIXA_COM_ANIMAIS',
-      `A ninhada do ${mamando.ordem}º parto ainda mama nesta caixa: registre o desmame antes.`,
+      `A ninhada do ${mamando.ordem}º parto ainda está em aleitamento nesta caixa: registre o desmame antes.`,
     )
   }
 

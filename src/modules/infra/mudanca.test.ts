@@ -538,7 +538,7 @@ describe('virar caixa de estoque', () => {
     recusada(
       { ninhadas: [{ ordem: 2, casal: 'AB', idLinhagem: 3, desmamado: false, vivos: { m: 0, f: 4 } }] },
       'CAIXA_COM_ANIMAIS',
-      'ainda mama',
+      'ainda está em aleitamento',
     )
     recusada(
       { ninhadas: [{ ordem: 1, casal: 'AB', idLinhagem: 3, desmamado: true, vivos: { m: 1, f: 4 } }] },

@@ -218,7 +218,7 @@ async function caixaDaVolta(
   if (!animais.every((animal) => animal.desmamado)) {
     throw erroDeRegra(
       'SEQUENCIA_INVALIDA',
-      `${quantos} da baixa ainda ${noNumero(animais.length, 'mama', 'mamam')}, e a caixa ${origem.codigo} ${estado}: filhote que mama só fica com a mãe.`,
+      `${quantos} da baixa ainda ${noNumero(animais.length, 'está em aleitamento', 'estão em aleitamento')}, e a caixa ${origem.codigo} ${estado}: filhote em aleitamento só fica com a mãe.`,
     )
   }
 

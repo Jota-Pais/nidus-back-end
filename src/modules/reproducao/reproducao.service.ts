@@ -124,7 +124,7 @@ export function recusaDaCaixaOcupada(ninhadas: NinhadaNaCaixa[], para: string) {
   if (!primeira.desmamado) {
     return erroDeRegra(
       'CAIXA_COM_ANIMAIS',
-      `A ninhada ${doParto} ainda mama nesta caixa (${animais}). Registre o desmame e passe os animais para o estoque antes de ${para}.`,
+      `A ninhada ${doParto} ainda está em aleitamento nesta caixa (${animais}). Registre o desmame e passe os animais para o estoque antes de ${para}.`,
     )
   }
 

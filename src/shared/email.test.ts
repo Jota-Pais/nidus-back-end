@@ -276,7 +276,7 @@ describe('aviso do pedido decidido', () => {
     expect(corpo.textContent).toContain('Idade: de 21 a 28 dias')
     expect(corpo.textContent).toContain('Data de entrega: 01/12/2026')
     expect(corpo.textContent).toContain('Data do pedido: 05/11/2026')
-    expect(corpo.textContent).toContain('https://thenidus.vercel.app/solicitar')
+    expect(corpo.textContent).toContain('https://thenidus.vercel.app/pedidos')
     expect(corpo.textContent).not.toContain('Motivo')
   })
 
@@ -324,6 +324,6 @@ describe('aviso de animais reservados', () => {
     expect(corpo.textContent).toContain('Animais: 1 de qualquer sexo')
     expect(corpo.textContent).toContain('Idade: 28 dias')
     expect(corpo.textContent).toContain('Data do pedido: 05/11/2026')
-    expect(corpo.textContent).toContain('https://thenidus.vercel.app/solicitar')
+    expect(corpo.textContent).toContain('https://thenidus.vercel.app/pedidos')
   })
 })
