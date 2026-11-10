@@ -38,6 +38,9 @@ type Transacao = Prisma.TransactionClient
 
 export type ComMotivo<T> = T & { motivo: string }
 
+/** O acasalamento se edita direto, sem motivo; os outros fatos se corrigem com ele */
+export type MotivoOpcional<T> = T & { motivo?: string | undefined }
+
 /** '[o que] de antes para depois', ou null quando nao mudou */
 export function dePara(antes: string, depois: string, oQue?: string): string | null {
   if (antes === depois) return null
@@ -47,26 +50,31 @@ export function dePara(antes: string, depois: string, oQue?: string): string | n
 
 /**
  * A descricao da correcao no historico, que a ficha mostra como evento: o que mudou entre
- * parenteses e o motivo. 'Correcao do acasalamento do 2o parto (de 10/10/2026 para 08/10/2026):
- * digitado errado'
+ * parenteses e o motivo, quando tem. 'Correcao do acasalamento do 2o parto (de 10/10/2026 para
+ * 08/10/2026): digitado errado'
  */
-export function descricaoDaCorrecao(titulo: string, mudancas: (string | null)[], motivo: string): string {
+export function descricaoDaCorrecao(
+  titulo: string,
+  mudancas: (string | null)[],
+  motivo?: string | undefined,
+): string {
   const mudou = mudancas.filter((mudanca) => mudanca !== null)
 
-  return `${titulo}${mudou.length === 0 ? '' : ` (${mudou.join('; ')})`}: ${motivo}`
+  return `${titulo}${mudou.length === 0 ? '' : ` (${mudou.join('; ')})`}${motivo === undefined ? '' : `: ${motivo}`}`
 }
 
 // ------------------------------------------------------------ acasalamento
 
 /**
- * PATCH /api/partos/:id/acasalamento - corrige a data do acasalamento: o erro de digitacao e a
- * nova monta quando o acasalamento nao pegou, sem gastar um dos 5 partos. A data fica depois da
- * formacao e do parto anterior, e antes do nascimento, do fechamento sem ninhada e do
- * encerramento do casal
+ * PATCH /api/partos/:id/acasalamento - a data do acasalamento, editada direto na ficha, sem motivo:
+ * a que o sistema abriu (6 dias depois do parto anterior) ou outra, e a que vale e a ultima. Serve
+ * tambem para a nova monta quando o acasalamento nao pegou, sem gastar um dos 5 partos. A data fica
+ * depois da formacao e do parto anterior, e antes do nascimento, do fechamento sem ninhada e do
+ * encerramento do casal. Editada a mao, ela nao acompanha mais a correcao do nascimento anterior
  */
 export async function corrigirAcasalamento(
   idParto: number,
-  dados: ComMotivo<{ dtAcasalamento: string }>,
+  dados: MotivoOpcional<{ dtAcasalamento: string }>,
   idUsuario: number,
 ) {
   await prisma.$transaction(async (tx) => {
@@ -89,6 +97,7 @@ export async function corrigirAcasalamento(
     })
 
     const antes = dataISO(parto.dtAcasalamento)
+    if (antes === dados.dtAcasalamento) return
 
     await tx.parto.update({
       where: { id: idParto },
@@ -106,7 +115,7 @@ export async function corrigirAcasalamento(
         dados.motivo,
       ),
       dados: {
-        motivo: dados.motivo,
+        ...(dados.motivo === undefined ? {} : { motivo: dados.motivo }),
         antes: { dtAcasalamento: antes },
         depois: { dtAcasalamento: dados.dtAcasalamento },
       },

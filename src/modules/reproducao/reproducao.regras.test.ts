@@ -890,6 +890,26 @@ describe('correcao do acasalamento', () => {
     })
   })
 
+  it('sem motivo, a data editada passa a valer, e o historico diz de qual para qual', async () => {
+    const ciclo = await corrigirAcasalamento(1, { dtAcasalamento: '2026-09-03' }, 4)
+
+    expect(ciclo).toMatchObject({ dtAcasalamento: '2026-09-03', dtPartoPrevisto: '2026-09-26' })
+    expect(banco.historicos.at(-1)).toEqual({
+      idUsuario: 4,
+      entidade: 'parto',
+      idEntidade: 1,
+      acao: 'correcao_acasalamento',
+      descricao: 'Correção do acasalamento do 1º parto (de 01/09/2026 para 03/09/2026)',
+      dados: { antes: { dtAcasalamento: '2026-09-01' }, depois: { dtAcasalamento: '2026-09-03' } },
+    })
+  })
+
+  it('a mesma data nao grava nada', async () => {
+    await corrigirAcasalamento(1, { dtAcasalamento: '2026-09-01' }, 4)
+
+    expect(banco.historicos.some((h) => h.acao === 'correcao_acasalamento')).toBe(false)
+  })
+
   it('fica entre a formacao e o parto', async () => {
     await expect(corrigirAcasalamento(1, { dtAcasalamento: '2026-08-31', motivo: 'x' }, 4)).rejects.toEqual(
       noCampo('dtAcasalamento', 'formação'),
@@ -972,6 +992,18 @@ describe('correcao do nascimento', () => {
     await corrigirNascimento(1, correcao({ dtPartoReal: '2026-09-26' }), 4)
     expect(banco.partos.get(2)?.dtAcasalamento).toEqual(d('2026-09-29'))
     expect(banco.historicos.some((h) => h.acao === 'correcao_acasalamento')).toBe(false)
+  })
+
+  it('o acasalamento que o sistema abriu, editado a mao, nao acompanha mais a correcao do nascimento', async () => {
+    nascido()
+    // o sistema abriu o 2o parto 6 dias depois do 1o, em 30/09; alguem pos 28/09
+    parto({ id: 2, ordem: 2, dtAcasalamento: d('2026-09-30') })
+    await corrigirAcasalamento(2, { dtAcasalamento: '2026-09-28' }, 4)
+
+    await corrigirNascimento(1, correcao({ dtPartoReal: '2026-09-26' }), 4)
+
+    expect(banco.partos.get(1)?.dtPartoReal).toEqual(d('2026-09-26'))
+    expect(banco.partos.get(2)?.dtAcasalamento).toEqual(d('2026-09-28'))
   })
 
   it('o acasalamento que o sistema abriu acompanha a data nova, e o historico diz', async () => {

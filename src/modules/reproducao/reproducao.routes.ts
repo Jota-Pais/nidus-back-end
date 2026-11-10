@@ -161,8 +161,14 @@ partoRoutes.patch('/:id/desmame', exigirPerfil(...OPERA_A_COLONIA), async (req, 
   res.json(await corrigirDesmame(id, dados, usuarioDaRequisicao(req).id))
 })
 
-/** Corpo de PATCH /api/partos/:id/acasalamento */
-export const correcaoDoAcasalamento = z.object({ dtAcasalamento: dataDoFato, motivo: motivoDaCorrecao })
+/**
+ * Corpo de PATCH /api/partos/:id/acasalamento. A data do acasalamento se edita direto na ficha,
+ * sem motivo: ninguem ve o casal acasalar, e a data que vale e a ultima que alguem pos
+ */
+export const correcaoDoAcasalamento = z.object({
+  dtAcasalamento: dataDoFato,
+  motivo: motivoDaCorrecao.optional(),
+})
 
 partoRoutes.patch('/:id/acasalamento', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)

@@ -5,7 +5,14 @@ import { criarApp } from '../../app.ts'
 import { hojeISO } from '../../shared/traducao.ts'
 import type { Perfil } from '../../shared/traducao.ts'
 import { somarDias } from './cadeiaTemporal.ts'
-import { casalNovo, correcaoDoDesmame, correcaoDoNascimento, desmame, selecao } from './reproducao.routes.ts'
+import {
+  casalNovo,
+  correcaoDoAcasalamento,
+  correcaoDoDesmame,
+  correcaoDoNascimento,
+  desmame,
+  selecao,
+} from './reproducao.routes.ts'
 
 // Autorizacao e validacao de forma - o mesmo recorte de
 // 'infra.routes.test.ts'. Sucesso com dado real (as regras
@@ -235,11 +242,16 @@ describe('validacao de entrada - modelo por rato', () => {
 
   it('a correcao sem motivo volta 400 no campo do motivo', async () => {
     const resposta = await request(app('tecnico'))
-      .patch('/api/partos/1/acasalamento')
-      .send({ dtAcasalamento: '2026-05-02', motivo: '' })
+      .patch('/api/partos/1/desmame')
+      .send({ dtDesmameReal: '2026-05-02', motivo: '' })
 
     expect(resposta.status).toBe(400)
     expect(Object.keys(resposta.body.erro.campos)).toContain('motivo')
+  })
+
+  it('a data do acasalamento se edita sem motivo', () => {
+    expect(correcaoDoAcasalamento.safeParse({ dtAcasalamento: '2026-05-02' }).success).toBe(true)
+    expect(correcaoDoAcasalamento.safeParse({ dtAcasalamento: '2026-05-02', motivo: 'x' }).success).toBe(true)
   })
 
   it('as rotas do modelo por caixa sairam: passagem por parto, destinos e correcao da selecao', async () => {
