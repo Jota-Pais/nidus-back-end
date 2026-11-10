@@ -105,7 +105,7 @@ export function contarDoParto(dtDesmameReal: Date | null, animais: AnimalDoParto
 const iso = (data: Date | null) => (data === null ? null : dataISO(data))
 
 /**
- * O objeto parto da ficha, reaproveitado pelos eventos do parto e pela ficha da caixa. As datas
+ * O objeto parto da ficha, reaproveitado pela ficha da caixa. As datas
  * previstas sao calculadas da cadeia temporal
  */
 export async function cicloFicha(idParto: number) {

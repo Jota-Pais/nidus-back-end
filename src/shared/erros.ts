@@ -77,7 +77,7 @@ export const semPermissao = () =>
   new ErroDeAplicacao(403, 'SEM_PERMISSAO', 'Seu perfil não tem acesso a esta operação.')
 
 /** As entidades que o 404 nomeia e que pedem "encontrada" */
-const FEMININAS = new Set(['Caixa', 'Espécie', 'Estante', 'Linhagem', 'Ocorrência', 'Sala'])
+const FEMININAS = new Set(['Baixa', 'Caixa', 'Espécie', 'Estante', 'Linhagem', 'Sala'])
 
 /** 404 - inexistente ou fora do alcance do perfil. 'oQue' comeca pela entidade: 'Caixa 12' */
 export const naoEncontrado = (oQue: string) => {

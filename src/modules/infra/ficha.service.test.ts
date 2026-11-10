@@ -4,7 +4,7 @@ import { exigirDepoisDaChegada } from '../colonia/escolha.ts'
 import { montarFicha } from './ficha.service.ts'
 
 // A ficha junta o que outros modulos ja sabem contar: a ficha de cada parto (cicloFicha), a do
-// casal (casalFicha), os vivos da caixa (vivosNasCaixas) e os eventos (eventosDaCaixa). Aqui eles
+// casal (casalFicha), os vivos da caixa (vivosNasCaixas) e as baixas (baixasDaCaixa). Aqui eles
 // sao de mentira, e o teste confere como a ficha os junta
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
@@ -15,7 +15,6 @@ const banco = vi.hoisted(() => ({
   ciclos: new Map<number, Record<string, unknown>>(),
   casais: new Map<number, Record<string, unknown>>(),
   vivos: null as unknown,
-  desmamados: null as unknown,
   /** os vivos da caixa um a um: o pedido, a chegada e o nascimento */
   umAUm: [] as { idPedido: number | null; dtMovimento: Date | null; parto: { dtPartoReal: Date | null } }[],
 }))
@@ -38,11 +37,10 @@ vi.mock('../colonia/consultas.ts', async (original) => ({
   vivosNasCaixas: async (_banco: unknown, ids: number[]) => new Map(ids.map((id) => [id, banco.vivos])),
 }))
 
-vi.mock('./eventos.ts', () => ({
-  eventosDaCaixa: async (_idCaixa: number, desmamados: unknown) => {
-    banco.desmamados = desmamados
-    return [{ dataHora: '2026-10-01T00:00:00.000Z', tipo: 'nascimento', descricao: 'x', autor: 'Ana', idOcorrencia: 1, anulavel: false }]
-  },
+vi.mock('./baixasDaFicha.ts', () => ({
+  baixasDaCaixa: async () => [
+    { dataHora: '2026-10-01T00:00:00.000Z', tipo: 'baixa', descricao: 'x', autor: 'Ana', idOcorrencia: 1, anulavel: true, baixa: null },
+  ],
 }))
 
 const doParto = (idParto: number, dtNascimento: string, vivos: [number, number], reservados: [number, number] = [0, 0], campos: Partial<VivosDoParto> = {}): VivosDoParto => ({
@@ -118,11 +116,10 @@ beforeEach(() => {
     [1, { id: 1, identificacao: 'AB', linhagem: 'Wistar', idLinhagem: 3, ativo: false }],
   ])
   banco.vivos = naCaixa([doParto(20, '2026-09-01', [5, 5], [1, 0])])
-  banco.desmamados = null
 })
 
 describe('a ficha da caixa de casal', () => {
-  it('o casal da caixa com os partos, os casais de antes, a fase e os eventos', async () => {
+  it('o casal da caixa com os partos, os casais de antes, a fase e as baixas', async () => {
     const ficha = await montarFicha(7)
 
     expect(ficha).toMatchObject({
@@ -143,19 +140,8 @@ describe('a ficha da caixa de casal', () => {
       casal: { identificacao: 'CD' },
       partos: [{ id: 20 }, { id: 21 }],
       anteriores: [{ casal: { identificacao: 'AB' }, partos: [{ id: 10 }] }],
-      eventos: [expect.objectContaining({ tipo: 'nascimento', idOcorrencia: 1 })],
+      baixas: [expect.objectContaining({ tipo: 'baixa', idOcorrencia: 1 })],
     })
-  })
-
-  it('os eventos recebem as contagens do desmame de cada parto, contadas na ficha', async () => {
-    await montarFicha(7)
-
-    expect(banco.desmamados).toEqual(
-      new Map([
-        [20, { m: 5, f: 5 }],
-        [10, { m: 3, f: 4 }],
-      ]),
-    )
   })
 
   it('o casal encerrado com desmamados de um sexo so: a caixa pode virar de estoque com esse sexo', async () => {

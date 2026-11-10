@@ -270,10 +270,10 @@ export async function anularBaixa(
       },
     })
 
-    if (baixa === null) throw naoEncontrado('Ocorrência')
+    if (baixa === null) throw naoEncontrado('Baixa')
 
     if (baixa.tipo !== 'baixa' || baixa.idCaixaOrigem === null) {
-      throw erroDeRegra('SEQUENCIA_INVALIDA', 'Só a baixa se anula. As outras ocorrências se corrigem na ficha.')
+      throw erroDeRegra('SEQUENCIA_INVALIDA', 'Só a baixa se anula.')
     }
 
     if (baixa.anulacoes.length > 0) {

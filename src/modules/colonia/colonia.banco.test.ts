@@ -335,16 +335,13 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
       { destino: femeas, n: 1 },
     ])
 
-    // a ficha de cada caixa e o historico dizem para onde voltou cada sexo
-    const eventosDa = async (id: number) => (await montarFicha(id)).eventos.map((evento) => evento.descricao)
-    expect(await eventosDa(idCaixa)).toEqual(
-      expect.arrayContaining([
-        '1 macho e 1 fêmea do 1º parto do casal AB não chegaram ao desmame. (anulada)',
-        'Baixa anulada: 1 macho voltou para a caixa F1B. Motivo: contei errado',
-        'Baixa anulada: 1 fêmea voltou para a caixa F1C. Motivo: contei errado',
-      ]),
+    // a baixa anulada sai das baixas lancadas da ficha; o historico diz para onde voltou cada sexo
+    expect((await montarFicha(idCaixa)).baixas).toEqual([])
+    const descricoesDa = async (id: number) =>
+      (await listarHistorico({ entidade: 'caixa', idEntidade: id, limite: 50 })).historico.map((linha) => linha.descricao)
+    expect(await descricoesDa(machos ?? 0)).toEqual(
+      expect.arrayContaining([expect.stringContaining('Baixa da caixa F1A anulada: 1 macho voltou para esta caixa.')]),
     )
-    expect(await eventosDa(machos ?? 0)).toContain('Baixa da caixa F1A anulada: 1 macho voltou para esta caixa. Motivo: contei errado')
     const { historico } = await listarHistorico({ entidade: 'caixa', idEntidade: idCaixa, limite: 50 })
     expect(historico.map((linha) => linha.descricao)).toEqual(
       expect.arrayContaining([expect.stringContaining('Baixa da caixa F1A anulada: 1 fêmea voltou para a caixa F1C.')]),
@@ -467,15 +464,12 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
   })
 
   it('o nascimento abre o acasalamento seguinte 6 dias depois, e o encerramento antes dele o desfaz', async () => {
-    const { idCaixa, idCasal } = await casalComNinhada({ linha: 1, coluna: 1 }, { m: 1, f: 1 })
+    const { idCasal } = await casalComNinhada({ linha: 1, coluna: 1 }, { m: 1, f: 1 })
     const aberto = await tx().parto.findFirstOrThrow({ where: { idCasal, ordem: 2 } })
     expect(aberto).toMatchObject({ dtPartoReal: null, dtSemNinhada: null })
     expect(aberto.dtAcasalamento.toISOString().slice(0, 10)).toBe(daqui(-44))
-    const ficha = await montarFicha(idCaixa)
-    expect(ficha.eventos.find((e) => e.tipo === 'acasalamento' && e.descricao.includes('2º parto'))).toMatchObject({
-      autor: 'Sistema',
-      descricao: 'Acasalamento do 2º parto do casal AB, aberto sozinho 6 dias depois do parto anterior.',
-    })
+    const registro = await tx().historico.findFirstOrThrow({ where: { entidade: 'parto', idEntidade: aberto.id, acao: 'acasalamento' } })
+    expect(registro.dados).toMatchObject({ automatico: true })
 
     await encerrarCasal(idCasal, { dtEncerramento: daqui(-46), motivo: 'macho separado' }, tecnico)
     expect(await tx().parto.findFirst({ where: { idCasal, ordem: 2 } })).toBeNull()
@@ -518,7 +512,7 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
   })
 
   it('a correcao do nascimento poe o animal a mais na caixa do casal e diz o que mudou', async () => {
-    const { idCaixa, idParto } = await casalComNinhada({ linha: 1, coluna: 1 }, { m: 2, f: 2 }, false)
+    const { idParto } = await casalComNinhada({ linha: 1, coluna: 1 }, { m: 2, f: 2 }, false)
 
     const { parto } = await corrigirNascimento(
       idParto,
@@ -528,8 +522,8 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
     expect(parto).toMatchObject({ dtPartoReal: daqui(-51), nascidoM: 3, nascidoF: 2, vivos: { m: 3, f: 2 } })
     expect(await vivosPorCaixa()).toEqual({ F1A: { m: 3, f: 2 } })
 
-    const ficha = await montarFicha(idCaixa)
-    expect(ficha.eventos.find((e) => e.tipo === 'correcao')?.descricao).toBe(
+    const registro = await tx().historico.findFirstOrThrow({ where: { entidade: 'parto', idEntidade: idParto, acao: 'correcao_nascimento' } })
+    expect(registro.descricao).toBe(
       `Correção do 1º parto (nascimento de ${dataLegivel(NASCIMENTO)} para ${dataLegivel(daqui(-51))}; contagem de 2 machos e 2 fêmeas para 3 machos e 2 fêmeas): contagem errada`,
     )
   })
@@ -572,14 +566,14 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
   })
 
   it('a correcao do acasalamento muda a data e a ficha diz de quanto para quanto', async () => {
-    const { idCaixa, idCasal } = await casalComNinhada({ linha: 1, coluna: 1 }, { m: 1, f: 0 })
+    const { idCasal } = await casalComNinhada({ linha: 1, coluna: 1 }, { m: 1, f: 0 })
     const parto2 = await acasalamentoEm(idCasal, daqui(-30))
 
     expect(await corrigirAcasalamento(parto2.id, { dtAcasalamento: daqui(-32), motivo: 'digitado errado' }, tecnico)).toMatchObject({
       dtAcasalamento: daqui(-32),
     })
-    const ficha = await montarFicha(idCaixa)
-    expect(ficha.eventos.find((e) => e.tipo === 'correcao')?.descricao).toBe(
+    const registro = await tx().historico.findFirstOrThrow({ where: { entidade: 'parto', idEntidade: parto2.id, acao: 'correcao_acasalamento' } })
+    expect(registro.descricao).toBe(
       `Correção do acasalamento do 2º parto (de ${dataLegivel(daqui(-30))} para ${dataLegivel(daqui(-32))}): digitado errado`,
     )
   })

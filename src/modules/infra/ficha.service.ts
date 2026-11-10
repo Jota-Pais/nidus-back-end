@@ -1,6 +1,6 @@
 // A ficha da caixa (GET /api/caixas/:id). A de casal mostra o casal, os partos (1 a 5), os casais
-// que vieram antes e os eventos; a de estoque, os vivos por data de nascimento com as origens, os
-// pedidos com reservado nela, os eventos e os casais da caixa, se ela ja foi de casal. Tudo
+// que vieram antes e as baixas; a de estoque, os vivos por data de nascimento com as origens, os
+// pedidos com reservado nela, as baixas e os casais da caixa, se ela ja foi de casal. Tudo
 // contado nos animais: nenhum numero vem gravado
 
 import { naoEncontrado } from '../../shared/erros.ts'
@@ -9,11 +9,11 @@ import { codigoDaEspecie, dataISO } from '../../shared/traducao.ts'
 import { chegadaDosAnimais } from '../colonia/escolha.ts'
 import { semVivos, vivosNasCaixas } from '../colonia/consultas.ts'
 import { faseDaCaixa } from '../colonia/fase.ts'
-import type { MotivoDaLiberacao, PorSexo, Sexo } from '../colonia/tipos.ts'
+import type { MotivoDaLiberacao, Sexo } from '../colonia/tipos.ts'
 import { cicloFicha } from '../reproducao/cicloFicha.ts'
 import { casalFicha } from '../reproducao/reproducao.service.ts'
 import { gruposPorNascimento, partoPrevisto } from './card.ts'
-import { eventosDaCaixa } from './eventos.ts'
+import { baixasDaCaixa } from './baixasDaFicha.ts'
 import { viradaParaEstoque } from './mudanca.service.ts'
 
 /** Os partos do casal, do 1o ao ultimo, como a ficha mostra */
@@ -31,21 +31,6 @@ function casaisComPartos(idsCasal: number[]) {
       const [casal, partos] = await Promise.all([casalFicha(idCasal), partosDoCasal(idCasal)])
       return { casal, partos }
     }),
-  )
-}
-
-type CasalComPartos = Awaited<ReturnType<typeof casaisComPartos>>[number]
-
-/** As contagens do desmame de cada parto, que os eventos mostram */
-function desmamadosDosPartos(casais: CasalComPartos[]): Map<number, PorSexo> {
-  return new Map(
-    casais.flatMap(({ partos }) =>
-      partos.flatMap((parto) =>
-        parto.desmamadoM === null || parto.desmamadoF === null
-          ? []
-          : [[parto.id, { m: parto.desmamadoM, f: parto.desmamadoF }] as const],
-      ),
-    ),
   )
 }
 
@@ -123,7 +108,7 @@ export async function montarFicha(idCaixa: number) {
     casaisComPartos(caixa.casais.map((casal) => casal.id)),
   ])
   const naCaixa = vivos.get(idCaixa) ?? semVivos()
-  const eventos = await eventosDaCaixa(idCaixa, desmamadosDosPartos(casais))
+  const baixas = await baixasDaCaixa(idCaixa)
 
   const total = naCaixa.vivos.m + naCaixa.vivos.f
   const reservado = naCaixa.reservados.m + naCaixa.reservados.f
@@ -179,7 +164,7 @@ export async function montarFicha(idCaixa: number) {
       })),
       /** o que cada pedido tem reservado nesta caixa */
       pedidos: naCaixa.pedidos.map((pedido) => ({ idPedido: pedido.idPedido, qtd: pedido.m + pedido.f })),
-      eventos,
+      baixas,
       /** os casais da caixa, quando ela era de casal antes de virar de estoque */
       casaisAnteriores: casais,
     }
@@ -208,6 +193,6 @@ export async function montarFicha(idCaixa: number) {
     partos: atual?.partos ?? [],
     /** os casais que vieram antes do atual nesta caixa, com os partos deles */
     anteriores,
-    eventos,
+    baixas,
   }
 }

@@ -3,7 +3,7 @@ import { descreverOcorrencia } from './descricao.ts'
 import type { OcorrenciaDescrita } from './descricao.ts'
 
 // O texto de cada ocorrencia: sem ponto de vista na tela Historico, visto da caixa na ficha (o
-// eventos.test.ts confere a ficha inteira). A quantidade concorda com o numero, e o sexo sem
+// baixasDaFicha.test.ts confere as baixas da ficha). A quantidade concorda com o numero, e o sexo sem
 // animal nao aparece
 
 const animais = (m: number, f: number, idCaixa = 2) => [

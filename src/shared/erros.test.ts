@@ -5,7 +5,7 @@ import { naoEncontrado } from './erros.ts'
 describe('naoEncontrado', () => {
   it('concorda com a entidade', () => {
     expect(naoEncontrado('Pedido').message).toBe('Pedido não encontrado.')
-    expect(naoEncontrado('Ocorrência').message).toBe('Ocorrência não encontrada.')
+    expect(naoEncontrado('Baixa').message).toBe('Baixa não encontrada.')
     expect(naoEncontrado('Caixa 12').message).toBe('Caixa 12 não encontrada.')
   })
 
