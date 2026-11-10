@@ -110,7 +110,7 @@ describe('forma do projeto', () => {
       .send({ ...projeto, numero: '23080.001234/2026-11' })
 
     expect(resposta.status).toBe(400)
-    expect(resposta.body.erro.campos.numero).toBe('Digito verificador errado. Confira o numero do processo.')
+    expect(resposta.body.erro.campos.numero).toBe('Dígito verificador errado. Confira o número do processo.')
   })
 })
 
@@ -129,26 +129,26 @@ describe('forma do pedido', () => {
   it('soma zero e VALIDACAO no campo machos', async () => {
     const campos = await camposRecusados({ ...pedido, machos: 0, femeas: 0, qualquer: 0 })
 
-    expect(campos.machos).toBe('Peca ao menos um animal.')
+    expect(campos.machos).toBe('Peça ao menos um animal.')
   })
 
   it('numero de animais negativo ou quebrado e VALIDACAO com mensagem em portugues', async () => {
     const campos = await camposRecusados({ ...pedido, femeas: -1, qualquer: 2.5 })
 
-    expect(campos.femeas).toBe('O numero de animais nao pode ser negativo.')
-    expect(campos.qualquer).toBe('Use um numero inteiro de animais.')
+    expect(campos.femeas).toBe('O número de animais não pode ser negativo.')
+    expect(campos.qualquer).toBe('Use um número inteiro de animais.')
   })
 
   it('idade maxima menor que a minima e VALIDACAO no campo idadeMax', async () => {
     const campos = await camposRecusados({ ...pedido, idadeMin: 30, idadeMax: 25 })
 
-    expect(campos.idadeMax).toBe('A idade maxima nao pode ser menor que a minima.')
+    expect(campos.idadeMax).toBe('A idade máxima não pode ser menor que a mínima.')
   })
 
   it('data de entrega no passado e VALIDACAO no campo dataEntrega', async () => {
     const campos = await camposRecusados({ ...pedido, dataEntrega: somarDias(hojeISO(), -1) })
 
-    expect(campos.dataEntrega).toBe('A data de entrega ja passou.')
+    expect(campos.dataEntrega).toBe('A data de entrega já passou.')
   })
 
   it('a entrega pode ser hoje', () => {
@@ -188,7 +188,7 @@ describe('forma do pedido', () => {
   it('protocolo com verificador errado e VALIDACAO, e o numero do Sistema CEUA passa', async () => {
     const campos = await camposRecusados({ ...pedido, protocoloCeua: '23080.001234/2026-11' })
 
-    expect(campos.protocoloCeua).toBe('Digito verificador errado. Confira o numero do processo.')
+    expect(campos.protocoloCeua).toBe('Dígito verificador errado. Confira o número do processo.')
     expect(pedidoNovo.safeParse({ ...pedido, protocoloCeua: '3106240920' }).success).toBe(true)
   })
 
@@ -271,7 +271,7 @@ describe('forma da reserva e da entrega', () => {
     const resposta = await request(app('tecnico')).post('/api/pedidos/1/entrega').send({ dtEntrega: amanha })
 
     expect(resposta.status).toBe(400)
-    expect(resposta.body.erro.campos.dtEntrega).toBe('A data nao pode ser depois de hoje.')
+    expect(resposta.body.erro.campos.dtEntrega).toBe('A data não pode ser depois de hoje.')
   })
 })
 

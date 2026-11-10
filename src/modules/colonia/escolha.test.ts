@@ -104,7 +104,7 @@ describe('escolha dentro do grupo', () => {
     respostas = [[animal(1)], []]
 
     await expect(escolherAnimais(tx as never, { idParto: 4, sexo: 'M' }, 3)).rejects.toEqual(
-      expect.objectContaining({ codigo: 'SEM_ANIMAIS', message: expect.stringContaining('so ha 1') }),
+      expect.objectContaining({ codigo: 'SEM_ANIMAIS', message: expect.stringContaining('só há 1') }),
     )
   })
 
@@ -156,8 +156,8 @@ describe('escolha dentro do grupo', () => {
     ).rejects.toEqual(
       expect.objectContaining({
         codigo: 'SEM_ANIMAIS',
-        message: 'Os livres nao bastam, e o pedido #9 nao tem machos reservados nesta caixa e idade.',
-        extras: { campos: { 'itens.0.idPedido': expect.stringContaining('os que ha sao dos pedidos #7') } },
+        message: 'Os livres não bastam, e o pedido #9 não tem machos reservados nesta caixa e idade.',
+        extras: { campos: { 'itens.0.idPedido': expect.stringContaining('os que há são dos pedidos #7') } },
       }),
     )
   })
@@ -168,13 +168,13 @@ describe('escolha dentro do grupo', () => {
     await expect(escolherAnimais(tx as never, { idCaixa: 3, sexo: 'F' }, 2)).rejects.toEqual(
       expect.objectContaining({
         codigo: 'SEM_ANIMAIS',
-        message: 'Pediu 2 femeas, mas so ha 1 nesta caixa e idade para esta operacao.',
+        message: 'Pediu 2 fêmeas, mas só há 1 nesta caixa e idade para esta operação.',
       }),
     )
 
     respostas = [[], []]
     await expect(escolherAnimais(tx as never, { idParto: 4, sexo: 'M' }, 1)).rejects.toEqual(
-      expect.objectContaining({ message: 'Nao ha machos vivos deste parto para esta operacao.' }),
+      expect.objectContaining({ message: 'Não há machos vivos deste parto para esta operação.' }),
     )
   })
 
@@ -221,7 +221,7 @@ describe('a idade do grupo', () => {
         extras: {
           campos: {
             'femeas.dtNascimento':
-              'A caixa tem femeas de mais de uma idade: diga a data de nascimento (01/09/2026, 01/10/2026).',
+              'A caixa tem fêmeas de mais de uma idade: diga a data de nascimento (01/09/2026, 01/10/2026).',
           },
         },
       }),
@@ -255,14 +255,14 @@ describe('de qual pedido saem os reservados', () => {
       expect.objectContaining({
         status: 409,
         codigo: 'SEM_ANIMAIS',
-        message: 'Os livres nao bastam, e o pedido #9 nao tem machos reservados nesta caixa e idade.',
+        message: 'Os livres não bastam, e o pedido #9 não tem machos reservados nesta caixa e idade.',
         extras: {
-          campos: { 'machos.idPedido': 'O pedido #9 nao tem machos reservados nesta caixa e idade; os que ha sao dos pedidos #7.' },
+          campos: { 'machos.idPedido': 'O pedido #9 não tem machos reservados nesta caixa e idade; os que há são dos pedidos #7.' },
         },
       }),
     )
     expect(() => pedidoDosReservados([], 9)).toThrow(
-      expect.objectContaining({ extras: { campos: { idPedido: 'O pedido #9 nao tem reservados neste grupo.' } } }),
+      expect.objectContaining({ extras: { campos: { idPedido: 'O pedido #9 não tem reservados neste grupo.' } } }),
     )
   })
 
@@ -283,7 +283,7 @@ describe('a data da saida contra a dos escolhidos', () => {
     expect(() => exigirDepoisDaChegada('dtFato', '2026-10-25', [animal(2), chegou])).not.toThrow()
     expect(() => exigirDepoisDaChegada('dtFato', '2026-10-24', [chegou])).toThrow(
       expect.objectContaining({
-        extras: { campos: { dtFato: 'Nao pode ser antes da chegada dos animais na caixa (25/10/2026).' } },
+        extras: { campos: { dtFato: 'Não pode ser antes da chegada dos animais na caixa (25/10/2026).' } },
       }),
     )
     expect(() => exigirDepoisDaChegada('dtFato', '2026-09-30', [animal(2)])).toThrow(

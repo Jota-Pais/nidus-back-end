@@ -17,10 +17,10 @@ type CaixaQueRecebe = { ativa: boolean; tipo: string; sexo: string | null; idLin
  * outro sexo ou de outra linhagem. A caixa de estoque guarda um sexo e uma linhagem so
  */
 export function recusaDoEstoque(caixa: CaixaQueRecebe, quem: QuemEntra): string | null {
-  if (!caixa.ativa) return 'Esta caixa ja foi liberada.'
-  if (caixa.tipo !== 'estoque') return 'Fora da caixa do casal, os animais so ficam numa caixa de estoque.'
-  if (caixa.sexo !== quem.sexo) return 'Esta caixa de estoque e do outro sexo.'
-  if (caixa.idLinhagem !== quem.idLinhagem) return 'Esta caixa de estoque e de outra linhagem.'
+  if (!caixa.ativa) return 'Esta caixa já foi liberada.'
+  if (caixa.tipo !== 'estoque') return 'Fora da caixa do casal, os animais só ficam numa caixa de estoque.'
+  if (caixa.sexo !== quem.sexo) return 'Esta caixa de estoque é do outro sexo.'
+  if (caixa.idLinhagem !== quem.idLinhagem) return 'Esta caixa de estoque é de outra linhagem.'
   return null
 }
 
@@ -51,7 +51,7 @@ export async function exigirEstoqueQueRecebe(
     select: { codigo: true, ativa: true, tipo: true, sexo: true, idLinhagem: true },
   })
 
-  if (caixa === null) throw campoInvalido(campo, 'Esta caixa nao existe.')
+  if (caixa === null) throw campoInvalido(campo, 'Esta caixa não existe.')
 
   const recusa = recusaDoEstoque(caixa, quem)
   if (recusa !== null) throw campoInvalido(campo, recusa)
@@ -67,7 +67,7 @@ export async function exigirEstoqueQueRecebe(
   } else if (desde !== null && chegada.data < desde) {
     throw campoInvalido(
       chegada.campo,
-      `A caixa ${caixa.codigo} so recebeu os primeiros animais em ${dataLegivel(desde)}, depois ${chegada.deQue} (${dataLegivel(chegada.data)}), quando estes animais chegariam nela.`,
+      `A caixa ${caixa.codigo} só recebeu os primeiros animais em ${dataLegivel(desde)}, depois ${chegada.deQue} (${dataLegivel(chegada.data)}), quando estes animais chegariam nela.`,
     )
   }
 

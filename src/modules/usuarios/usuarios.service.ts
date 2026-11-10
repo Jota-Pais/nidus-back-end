@@ -44,7 +44,7 @@ export async function criarUsuario(dados: NovoUsuario, gestor: UsuarioDaSessao) 
   })
 
   if (existente !== null) {
-    throw erroDeRegra('EMAIL_EM_USO', `Ja existe uma conta com o e-mail ${email}.`)
+    throw erroDeRegra('EMAIL_EM_USO', `Já existe uma conta com o e-mail ${email}.`)
   }
 
   const criado = await prisma.$transaction(async (tx) => {
@@ -96,7 +96,7 @@ export async function alterarUsuario(
   const usuario = await prisma.usuario.findUnique({ where: { id } })
 
   if (usuario === null) {
-    throw naoEncontrado('Usuario')
+    throw naoEncontrado('Usuário')
   }
 
   const perfilAntes = dicPerfil.paraApi(usuario.perfil)
@@ -106,7 +106,7 @@ export async function alterarUsuario(
   if (id === gestor.id && (mudaPerfil || dados.ativo === false)) {
     throw erroDeRegra(
       'ALTERACAO_PROPRIA',
-      'Voce nao pode mudar o proprio perfil nem desativar a propria conta.',
+      'Você não pode mudar o próprio perfil nem desativar a própria conta.',
     )
   }
 
@@ -153,12 +153,12 @@ export async function enviarRedefinicaoDeSenha(id: number, gestor: UsuarioDaSess
   const usuario = await prisma.usuario.findUnique({ where: { id } })
 
   if (usuario === null) {
-    throw naoEncontrado('Usuario')
+    throw naoEncontrado('Usuário')
   }
 
   // A conta inativa nao recebe codigo: pedirCodigo responderia igual, mas o e-mail nao sairia
   if (!usuario.ativo) {
-    throw erroDeRegra('CONTA_INATIVA', 'A conta esta desativada. Reative-a antes de enviar o codigo.')
+    throw erroDeRegra('CONTA_INATIVA', 'A conta está desativada. Reative-a antes de enviar o código.')
   }
 
   const { validadeEmMinutos } = await pedirCodigo(usuario.email)
@@ -168,7 +168,7 @@ export async function enviarRedefinicaoDeSenha(id: number, gestor: UsuarioDaSess
     entidade: 'usuario',
     idEntidade: id,
     acao: 'redefinicao_senha',
-    descricao: `Codigo para redefinir a senha de ${usuario.nome} enviado por e-mail`,
+    descricao: `Código para redefinir a senha de ${usuario.nome} enviado por e-mail`,
   })
 
   return { email: usuario.email, validadeEmMinutos }

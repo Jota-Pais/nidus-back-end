@@ -77,8 +77,8 @@ export async function corrigirAcasalamento(
 
     exigirOrdem('dtAcasalamento', dados.dtAcasalamento, {
       depoisDe: [
-        { evento: 'da formacao do casal', data: parto.casal.dtFormacao },
-        { evento: `do ${anterior?.ordem}o parto`, data: anterior?.dtPartoReal },
+        { evento: 'da formação do casal', data: parto.casal.dtFormacao },
+        { evento: `do ${anterior?.ordem}º parto`, data: anterior?.dtPartoReal },
       ],
       antesDe: [
         { evento: 'do parto', data: parto.dtPartoReal },
@@ -100,7 +100,7 @@ export async function corrigirAcasalamento(
       idEntidade: idParto,
       acao: 'correcao_acasalamento',
       descricao: descricaoDaCorrecao(
-        `Correcao do acasalamento do ${parto.ordem}o parto`,
+        `Correção do acasalamento do ${parto.ordem}º parto`,
         [dePara(dataLegivel(antes), dataLegivel(dados.dtAcasalamento))],
         dados.motivo,
       ),
@@ -190,7 +190,7 @@ async function destinoDosNovos(
   if (naDoCasal && !caixaDoCasal.ativa) {
     throw campoInvalido(
       'idCaixa',
-      `A caixa ${caixaDoCasal.codigo} do casal ja foi liberada: diga em qual caixa de estoque entram os animais a mais.`,
+      `A caixa ${caixaDoCasal.codigo} do casal já foi liberada: diga em qual caixa de estoque entram os animais a mais.`,
     )
   }
 
@@ -200,7 +200,7 @@ async function destinoDosNovos(
     if (outra !== undefined) {
       throw campoInvalido(
         'idCaixa',
-        `A caixa ${caixaDoCasal.codigo} do casal tem agora a ninhada do ${outra.ordem}o parto: diga em qual caixa de estoque entram os animais a mais.`,
+        `A caixa ${caixaDoCasal.codigo} do casal tem agora a ninhada do ${outra.ordem}º parto: diga em qual caixa de estoque entram os animais a mais.`,
       )
     }
 
@@ -217,7 +217,7 @@ async function destinoDosNovos(
   if (sexo === undefined || sexos.length > 1) {
     throw campoInvalido(
       'idCaixa',
-      'Machos e femeas ficam em caixas de estoque diferentes: corrija os a mais de um sexo de cada vez.',
+      'Machos e fêmeas ficam em caixas de estoque diferentes: corrija os a mais de um sexo de cada vez.',
     )
   }
 
@@ -264,7 +264,7 @@ export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNasci
     const parto = await travarELerParto(tx, idParto)
 
     if (parto.dtPartoReal === null) {
-      throw erroDeRegra('SEQUENCIA_INVALIDA', 'Este parto ainda nao foi registrado: registre antes de corrigir.')
+      throw erroDeRegra('SEQUENCIA_INVALIDA', 'Este parto ainda não foi registrado: registre antes de corrigir.')
     }
 
     // uma consulta de cada vez: a transacao e uma conexao so
@@ -278,7 +278,7 @@ export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNasci
       depoisDe: [{ evento: 'do acasalamento', data: parto.dtAcasalamento }],
       antesDe: [
         { evento: 'do desmame', data: parto.dtDesmameReal },
-        { evento: `do acasalamento do ${parto.ordem + 1}o parto`, data: seguinte?.dtAcasalamento },
+        { evento: `do acasalamento do ${parto.ordem + 1}º parto`, data: seguinte?.dtAcasalamento },
         { evento: rotuloDoFato(fato), data: fato?.dtFato },
       ],
     })
@@ -296,7 +296,7 @@ export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNasci
       throw contagemInvalida(
         'nascido',
         passou,
-        `Os mortos e os entregues continuam contando: o nascido nao fica abaixo de ${quantosAnimais({ m: nascidos.m - vivos.m, f: nascidos.f - vivos.f })}.`,
+        `Os mortos e os entregues continuam contando: o nascido não fica abaixo de ${quantosAnimais({ m: nascidos.m - vivos.m, f: nascidos.f - vivos.f })}.`,
       )
     }
 
@@ -317,7 +317,7 @@ export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNasci
       if (trocaveis < troca.qtd) {
         throw erroDeRegra(
           'SEQUENCIA_INVALIDA',
-          `So troca de sexo o animal vivo, livre e na caixa do casal (nunca numa caixa de estoque): a correcao troca ${quantosDoSexo(troca.qtd, troca.de)}, e so ha ${trocaveis} assim. Desfaca a reserva ou corrija de outro jeito.`,
+          `Só troca de sexo o animal vivo, livre e na caixa do casal (nunca numa caixa de estoque): a correção troca ${quantosDoSexo(troca.qtd, troca.de)}, e só há ${trocaveis} assim. Desfaça a reserva ou corrija de outro jeito.`,
         )
       }
     }
@@ -410,7 +410,7 @@ export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNasci
       idEntidade: idParto,
       acao: 'correcao_nascimento',
       descricao: descricaoDaCorrecao(
-        `Correcao do ${parto.ordem}o parto`,
+        `Correção do ${parto.ordem}º parto`,
         [
           dePara(dataLegivel(dataAntiga), dataLegivel(dados.dtPartoReal), 'nascimento'),
           dePara(quantosAnimais(nascidos), quantosAnimais({ m: dados.nascidoM, f: dados.nascidoF }), 'contagem'),
@@ -452,7 +452,7 @@ export async function corrigirDesmame(
     const parto = await travarELerParto(tx, idParto)
 
     if (parto.dtDesmameReal === null || parto.dtPartoReal === null) {
-      throw erroDeRegra('SEQUENCIA_INVALIDA', 'O desmame deste parto ainda nao foi registrado.')
+      throw erroDeRegra('SEQUENCIA_INVALIDA', 'O desmame deste parto ainda não foi registrado.')
     }
 
     await exigirDataDoDesmame(tx, parto, dados.dtDesmameReal)
@@ -489,7 +489,7 @@ export async function corrigirDesmame(
       idEntidade: idParto,
       acao: 'correcao_desmame',
       descricao: descricaoDaCorrecao(
-        `Correcao do desmame do ${parto.ordem}o parto`,
+        `Correção do desmame do ${parto.ordem}º parto`,
         [dePara(dataLegivel(antes), dataLegivel(dados.dtDesmameReal))],
         dados.motivo,
       ),

@@ -66,7 +66,7 @@ export function conferirReserva(pedido: Pedido, tem: PorSexo, novos: PorSexo, in
 
     throw erroDeRegra(
       'PEDIDO_INCOMPLETO',
-      `A reserva nao cobre o pedido: ${quantas === 1 ? 'falta' : 'faltam'} ${descreverQuantidade(falta)}. Sem animais, recuse com o motivo ou aguarde.`,
+      `A reserva não cobre o pedido: ${quantas === 1 ? 'falta' : 'faltam'} ${descreverQuantidade(falta)}. Sem animais, recuse com o motivo ou aguarde.`,
     )
   }
 }
@@ -81,12 +81,12 @@ export function exigirQueRecebeReserva(idPedido: number, status: StatusDoPedido,
 
   if (status === 'reservado') {
     // o caso comum: dois tecnicos, ou dois cliques em Reservar
-    throw erroDeRegra('PEDIDO_JA_RESERVADO', `Os animais do pedido #${idPedido} ja estao reservados.`)
+    throw erroDeRegra('PEDIDO_JA_RESERVADO', `Os animais do pedido #${idPedido} já estão reservados.`)
   }
 
   if (status === 'enviado') {
     throw erroDeRegra('SEQUENCIA_INVALIDA', 'Aprove o pedido antes de reservar os animais.')
   }
 
-  throw erroDeRegra('SEQUENCIA_INVALIDA', `O pedido #${idPedido} esta ${status} e nao recebe mais animais.`)
+  throw erroDeRegra('SEQUENCIA_INVALIDA', `O pedido #${idPedido} está ${status} e não recebe mais animais.`)
 }

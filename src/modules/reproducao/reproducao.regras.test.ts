@@ -486,7 +486,7 @@ describe('formar casal', () => {
     Object.assign(banco.casais.get(1) as Casal, { ativo: false, dtEncerramento: d('2026-10-20') })
 
     await expect(formarCasal({ ...novo, idCaixa: 1 }, 4)).rejects.toEqual(
-      expect.objectContaining({ codigo: 'CAIXA_COM_ANIMAIS', message: expect.stringContaining('a ninhada desmamada do 1o parto do casal AB (3 machos e 2 femeas)') }),
+      expect.objectContaining({ codigo: 'CAIXA_COM_ANIMAIS', message: expect.stringContaining('a ninhada desmamada do 1º parto do casal AB (3 machos e 2 fêmeas)') }),
     )
   })
 
@@ -517,7 +517,7 @@ describe('acasalamento', () => {
     nascido()
 
     await expect(registrarAcasalamento(1, { dtAcasalamento: '2026-09-23' }, 4)).rejects.toEqual(
-      noCampo('dtAcasalamento', 'Nao pode ser antes do 1o parto (24/09/2026).'),
+      noCampo('dtAcasalamento', 'Não pode ser antes do 1º parto (24/09/2026).'),
     )
   })
 
@@ -589,7 +589,7 @@ describe('nascimento', () => {
   it('nao pode ser antes do acasalamento', async () => {
     await expect(
       registrarNascimento(1, { dtPartoReal: '2026-08-31', nascidoM: 5, nascidoF: 5 }, 4),
-    ).rejects.toEqual(noCampo('dtPartoReal', 'Nao pode ser antes do acasalamento (01/09/2026).'))
+    ).rejects.toEqual(noCampo('dtPartoReal', 'Não pode ser antes do acasalamento (01/09/2026).'))
   })
 
   it('parto ja nascido ou fechado sem ninhada nao nasce de novo', async () => {
@@ -628,7 +628,7 @@ describe('selecao (baixa restrita ao parto, antes do desmame)', () => {
 
     await expect(
       registrarSelecao(1, { dtSelecao: '2026-09-26', eutanasiadoM: 3, eutanasiadoF: 1 }, 4),
-    ).rejects.toEqual(noCampo('eutanasiadoM', 'na caixa do casal (2 machos e 5 femeas).'))
+    ).rejects.toEqual(noCampo('eutanasiadoM', 'na caixa do casal (2 machos e 5 fêmeas).'))
     expect(banco.ocorrencias).toEqual([])
   })
 
@@ -689,7 +689,7 @@ describe('desmame', () => {
     expect(ciclo).toMatchObject({ dtDesmameReal: '2026-10-16', desmamadoM: 4, desmamadoF: 3 })
     expect(banco.historicos.at(-1)).toMatchObject({
       acao: 'desmame',
-      descricao: 'Desmame do 1o parto em 2026-10-16: 4 machos e 3 femeas',
+      descricao: 'Desmame do 1º parto em 2026-10-16: 4 machos e 3 fêmeas',
     })
   })
 
@@ -716,7 +716,7 @@ describe('desmame', () => {
 
     await expect(
       registrarDesmame(1, { dtDesmameReal: '2026-09-30', desmamadoM: 2, desmamadoF: 3 }, 4),
-    ).rejects.toEqual(noCampo('dtDesmameReal', 'ultima eutanasia de selecao'))
+    ).rejects.toEqual(noCampo('dtDesmameReal', 'última eutanásia de seleção'))
   })
 
   it('registrado depois de uma morte na caixa com data posterior: o morto chegou ao desmame e conta nele', async () => {
@@ -757,7 +757,7 @@ describe('desmame', () => {
 
     await expect(
       registrarDesmame(1, { dtDesmameReal: '2026-10-21', desmamadoM: 3, desmamadoF: 3 }, 4),
-    ).rejects.toEqual(noCampo('desmamadoM', 'no dia do desmame (2 machos e 3 femeas).'))
+    ).rejects.toEqual(noCampo('desmamadoM', 'no dia do desmame (2 machos e 3 fêmeas).'))
   })
 
   it('desmame ja registrado se corrige, nao se registra de novo', async () => {
@@ -790,15 +790,15 @@ describe('encerramento e parto sem ninhada', () => {
     await encerrarCasal(1, { dtEncerramento: '2026-10-02', motivo: 'macho morreu' }, 4)
     expect(banco.liberadas).toEqual([])
 
-    const ciclo = await fecharSemNinhada(2, { dtSemNinhada: '2026-10-30', motivo: 'nao pariu' }, 4)
+    const ciclo = await fecharSemNinhada(2, { dtSemNinhada: '2026-10-30', motivo: 'não pariu' }, 4)
 
-    expect(ciclo).toMatchObject({ dtSemNinhada: '2026-10-30', motivoSemNinhada: 'nao pariu' })
+    expect(ciclo).toMatchObject({ dtSemNinhada: '2026-10-30', motivoSemNinhada: 'não pariu' })
     expect(banco.liberadas).toEqual([{ idCaixa: 1, dtFato: '2026-10-30', motivo: 'casal_encerrado' }])
   })
 
   it('o encerramento nao vem antes do ultimo acasalamento', async () => {
     await expect(encerrarCasal(1, { dtEncerramento: '2026-08-31', motivo: 'x' }, 4)).rejects.toEqual(
-      noCampo('dtEncerramento', 'formacao'),
+      noCampo('dtEncerramento', 'formação'),
     )
   })
 
@@ -833,14 +833,14 @@ describe('correcao do acasalamento', () => {
     expect(banco.historicos.at(-1)).toMatchObject({
       acao: 'correcao_acasalamento',
       // a ficha mostra o evento pela descricao: ela diz o que mudou
-      descricao: 'Correcao do acasalamento do 1o parto (de 01/09/2026 para 05/09/2026): nova monta',
+      descricao: 'Correção do acasalamento do 1º parto (de 01/09/2026 para 05/09/2026): nova monta',
       dados: { motivo: 'nova monta', antes: { dtAcasalamento: '2026-09-01' }, depois: { dtAcasalamento: '2026-09-05' } },
     })
   })
 
   it('fica entre a formacao e o parto', async () => {
     await expect(corrigirAcasalamento(1, { dtAcasalamento: '2026-08-31', motivo: 'x' }, 4)).rejects.toEqual(
-      noCampo('dtAcasalamento', 'formacao'),
+      noCampo('dtAcasalamento', 'formação'),
     )
 
     nascido()
@@ -884,7 +884,7 @@ describe('correcao do nascimento', () => {
     expect(banco.ocorrencias).toHaveLength(1)
     expect(banco.historicos.at(-1)).toMatchObject({
       acao: 'correcao_nascimento',
-      descricao: 'Correcao do 1o parto (nascimento de 24/09/2026 para 22/09/2026): contagem errada',
+      descricao: 'Correção do 1º parto (nascimento de 24/09/2026 para 22/09/2026): contagem errada',
       dados: expect.objectContaining({ antes: expect.objectContaining({ dtPartoReal: '2026-09-24' }) }),
     })
   })
@@ -913,7 +913,7 @@ describe('correcao do nascimento', () => {
     parto({ id: 2, ordem: 2, dtAcasalamento: d('2026-09-30') })
 
     await expect(corrigirNascimento(1, correcao({ dtPartoReal: '2026-10-01' }), 4)).rejects.toEqual(
-      noCampo('dtPartoReal', 'acasalamento do 2o parto'),
+      noCampo('dtPartoReal', 'acasalamento do 2º parto'),
     )
   })
 
@@ -934,7 +934,7 @@ describe('correcao do nascimento', () => {
     await expect(corrigirNascimento(1, correcao({ nascidoM: 6, nascidoF: 0 }), 4)).rejects.toEqual(
       expect.objectContaining({
         codigo: 'SEQUENCIA_INVALIDA',
-        message: expect.stringContaining('So troca de sexo o animal vivo, livre e na caixa do casal (nunca numa caixa de estoque): a correcao troca 1 femea, e so ha 0 assim.'),
+        message: expect.stringContaining('Só troca de sexo o animal vivo, livre e na caixa do casal (nunca numa caixa de estoque): a correção troca 1 fêmea, e só há 0 assim.'),
       }),
     )
   })
@@ -956,7 +956,7 @@ describe('correcao do nascimento', () => {
     criarAnimais(2, 1, 3, 3)
 
     await expect(corrigirNascimento(1, correcao({ nascidoM: 3, nascidoF: 0 }), 4)).rejects.toEqual(
-      noCampo('idCaixa', 'ninhada do 2o parto'),
+      noCampo('idCaixa', 'ninhada do 2º parto'),
     )
     expect(banco.animais.filter((a) => a.idParto === 1)).toHaveLength(2)
 
@@ -1042,7 +1042,7 @@ describe('correcao do nascimento', () => {
         extras: {
           campos: {
             idCaixa:
-              'A caixa F3C so recebeu os primeiros animais em 18/10/2026, depois do desmame (16/10/2026), quando estes animais chegariam nela.',
+              'A caixa F3C só recebeu os primeiros animais em 18/10/2026, depois do desmame (16/10/2026), quando estes animais chegariam nela.',
           },
         },
       }),
@@ -1080,7 +1080,7 @@ describe('correcao do nascimento', () => {
     for (const a of doParto(1)) Object.assign(a, { situacao: 'entregue', dtSaida: d('2026-11-01') })
 
     await expect(corrigirNascimento(1, correcao({ nascidoM: 1, nascidoF: 0 }), 4)).rejects.toEqual(
-      noCampo('nascidoM', 'o nascido nao fica abaixo de 2 machos.'),
+      noCampo('nascidoM', 'o nascido não fica abaixo de 2 machos.'),
     )
   })
 
@@ -1090,7 +1090,7 @@ describe('correcao do nascimento', () => {
 
     // de 5 F para 1 F: 2 trocam para macho e 2 se anulam, mas so ha 2 F vivas
     await expect(corrigirNascimento(1, correcao({ nascidoM: 7, nascidoF: 1 }), 4)).rejects.toEqual(
-      noCampo('nascidoF', 'o nascido nao fica abaixo de 3 femeas.'),
+      noCampo('nascidoF', 'o nascido não fica abaixo de 3 fêmeas.'),
     )
     expect(banco.ocorrencias.filter((o) => o.tipo === 'correcao')).toEqual([])
   })
@@ -1141,7 +1141,7 @@ describe('correcao da data do desmame', () => {
     // a ficha mostra o evento pela descricao: ela diz o que mudou
     expect(banco.historicos.at(-1)).toMatchObject({
       acao: 'correcao_desmame',
-      descricao: 'Correcao do desmame do 1o parto (de 16/10/2026 para 18/10/2026): data errada',
+      descricao: 'Correção do desmame do 1º parto (de 16/10/2026 para 18/10/2026): data errada',
     })
   })
 
@@ -1151,7 +1151,7 @@ describe('correcao da data do desmame', () => {
     banco.ocorrencias.push({ id: 1, tipo: 'mudanca', dtFato: d('2026-10-17'), idParto: null, motivo: null, ids, anulada: false })
 
     await expect(corrigirDesmame(1, { dtDesmameReal: '2026-10-18', motivo: 'x' }, 4)).rejects.toEqual(
-      noCampo('dtDesmameReal', 'primeira mudanca de caixa'),
+      noCampo('dtDesmameReal', 'primeira mudança de caixa'),
     )
   })
 
@@ -1161,7 +1161,7 @@ describe('correcao da data do desmame', () => {
     await registrarDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 2, desmamadoF: 3 }, 4)
 
     await expect(corrigirDesmame(1, { dtDesmameReal: '2026-09-30', motivo: 'x' }, 4)).rejects.toEqual(
-      noCampo('dtDesmameReal', 'selecao'),
+      noCampo('dtDesmameReal', 'seleção'),
     )
   })
 
@@ -1240,7 +1240,7 @@ describe('correcao da data do desmame', () => {
     expect(dtUltimaSelecao).toBe('2026-10-05')
 
     await expect(corrigirDesmame(1, { dtDesmameReal: '2026-10-04', motivo: 'x' }, 4)).rejects.toEqual(
-      noCampo('dtDesmameReal', 'ultima eutanasia de selecao'),
+      noCampo('dtDesmameReal', 'última eutanásia de seleção'),
     )
     await corrigirDesmame(1, { dtDesmameReal: dtUltimaSelecao ?? '', motivo: 'x' }, 4)
     expect(iso(banco.partos.get(1)?.dtDesmameReal ?? null)).toBe('2026-10-05')

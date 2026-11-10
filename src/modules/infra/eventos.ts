@@ -287,7 +287,7 @@ export async function eventosDaCaixa(idCaixa: number, desmamados: Map<number, Po
     const identificacao = casal.identificacao.trim()
 
     for (const parto of casal.partos) {
-      const doParto = `do ${parto.ordem}o parto do casal ${identificacao}`
+      const doParto = `do ${parto.ordem}º parto do casal ${identificacao}`
       // o 1o acasalamento e o da formacao do casal
       const acasalamento =
         parto.ordem === 1 ? primeiro('casal', 'formacao', casal.id) : primeiro('parto', 'acasalamento', parto.id)
@@ -321,7 +321,7 @@ export async function eventosDaCaixa(idCaixa: number, desmamados: Map<number, Po
           evento(
             dataISO(parto.dtSemNinhada),
             'sem_ninhada',
-            `O ${parto.ordem}o parto do casal ${identificacao} fechou sem ninhada: ${parto.motivoSemNinhada ?? ''}`,
+            `O ${parto.ordem}º parto do casal ${identificacao} fechou sem ninhada: ${parto.motivoSemNinhada ?? ''}`,
             autorDo(registro),
             registro?.dtHora ?? null,
           ),

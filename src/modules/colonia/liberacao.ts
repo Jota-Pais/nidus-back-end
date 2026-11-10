@@ -10,15 +10,15 @@ import type { MotivoDaLiberacao } from './tipos.ts'
 type Transacao = Pick<Prisma.TransactionClient, '$queryRaw' | 'caixa' | 'animal' | 'ocorrencia' | 'historico'>
 
 const POR_QUE: Record<MotivoDaLiberacao, string> = {
-  entrega: 'a entrega levou os ultimos animais',
-  baixa: 'nao sobrou animal vivo nela',
+  entrega: 'a entrega levou os últimos animais',
+  baixa: 'não sobrou animal vivo nela',
   mudanca: 'os animais foram para outra caixa',
-  casal_encerrado: 'o casal encerrou e nao sobrou animal nela',
+  casal_encerrado: 'o casal encerrou e não sobrou animal nela',
 }
 
 /** A caixa liberada nao recebe nem perde animal: a posicao ja pode ter outra caixa */
 export function caixaLiberada(codigo: string) {
-  return erroDeRegra('CAIXA_LIBERADA', `A caixa ${codigo} ja foi liberada. Atualize a tela.`)
+  return erroDeRegra('CAIXA_LIBERADA', `A caixa ${codigo} já foi liberada. Atualize a tela.`)
 }
 
 /** O parto que ainda pode nascer: nem nasceu, nem foi fechado sem ninhada */

@@ -18,6 +18,6 @@ describe('esqueleto da API', () => {
 
     expect(resposta.status).toBe(404)
     expect(resposta.body.erro.codigo).toBe('NAO_ENCONTRADO')
-    expect(resposta.body.erro.mensagem).toContain('nao existe')
+    expect(resposta.body.erro.mensagem).toContain('não existe')
   })
 })

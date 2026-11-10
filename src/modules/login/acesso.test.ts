@@ -214,10 +214,10 @@ vi.mock('./senha.ts', async (importOriginal) => {
 
 const SENHA_ANTIGA = 'antiga123'
 const SENHA_NOVA = 'nova-senha-1'
-const INVALIDO = 'Codigo invalido ou expirado.'
-const ESGOTADAS = 'Tentativas esgotadas. Peca um codigo novo.'
+const INVALIDO = 'Código inválido ou expirado.'
+const ESGOTADAS = 'Tentativas esgotadas. Peça um código novo.'
 const ERROS_DEMAIS =
-  'Muitos codigos errados para este e-mail nas ultimas 24 horas. Tente de novo mais tarde.'
+  'Muitos códigos errados para este e-mail nas últimas 24 horas. Tente de novo mais tarde.'
 
 let hashAntigo = ''
 
@@ -313,7 +313,7 @@ describe('POST /api/acesso/codigo', () => {
     for (const resposta of segundos) {
       expect(resposta.status).toBe(429)
       expect(resposta.body).toEqual({
-        erro: { codigo: 'MUITAS_TENTATIVAS', mensagem: 'Aguarde um minuto para pedir outro codigo.' },
+        erro: { codigo: 'MUITAS_TENTATIVAS', mensagem: 'Aguarde um minuto para pedir outro código.' },
       })
     }
 
@@ -395,7 +395,7 @@ describe('POST /api/acesso/codigo', () => {
 
     expect(resposta.status).toBe(429)
     expect(resposta.body.erro.mensagem).toBe(
-      'Voce ja pediu 5 codigos na ultima hora. Tente de novo mais tarde.',
+      'Você já pediu 5 códigos na última hora. Tente de novo mais tarde.',
     )
     expect(enviarCodigoDeAcesso).toHaveBeenCalledTimes(LIMITES_DE_PEDIDO.porEmailPorHora)
   })
@@ -413,7 +413,7 @@ describe('POST /api/acesso/codigo', () => {
     expect(alemDoTeto.status).toBe(429)
     expect(alemDoTeto.body.erro).toEqual({
       codigo: 'MUITAS_TENTATIVAS',
-      mensagem: 'Muitos codigos pedidos agora. Tente de novo mais tarde.',
+      mensagem: 'Muitos códigos pedidos agora. Tente de novo mais tarde.',
     })
     expect(vi.mocked(enviarCodigoDeAcesso).mock.calls.map(([email]) => email)).toEqual(['novo@ufsc.br'])
     expect(falso.tabelas.codigoAcesso).toHaveLength(teto)

@@ -15,9 +15,9 @@ export const idNoCorpo = z.number().int().positive().max(2147483647)
  * entra por aqui, sai da cadeia temporal
  */
 export const dataDoFato = z.iso
-  .date('Data invalida. Use aaaa-mm-dd.')
+  .date('Data inválida. Use aaaa-mm-dd.')
   .refine((data) => data >= '2000-01-01', 'Use um ano a partir de 2000.')
-  .refine((data) => data <= hojeISO(), 'A data nao pode ser depois de hoje.')
+  .refine((data) => data <= hojeISO(), 'A data não pode ser depois de hoje.')
 
 /** O motivo de uma correcao, que fica na trilha */
-export const motivoDaCorrecao = z.string().trim().min(1, 'Diga o motivo da correcao.').max(200)
+export const motivoDaCorrecao = z.string().trim().min(1, 'Diga o motivo da correção.').max(200)

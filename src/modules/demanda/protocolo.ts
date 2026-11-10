@@ -50,11 +50,11 @@ export function conferirProtocolo(numero: string, hoje: string = hojeISO()): str
     const digitos = numero.replace(/\D/g, '')
 
     if (verificadoresDoProcesso(digitos) !== digitos.slice(15)) {
-      return 'Digito verificador errado. Confira o numero do processo.'
+      return 'Dígito verificador errado. Confira o número do processo.'
     }
 
     if (Number(digitos.slice(11, 15)) > Number(hoje.slice(0, 4))) {
-      return 'O ano do processo ainda nao chegou.'
+      return 'O ano do processo ainda não chegou.'
     }
 
     return null
@@ -71,7 +71,7 @@ export function conferirProtocolo(numero: string, hoje: string = hojeISO()): str
     return null
   }
 
-  return 'Use o processo, 23080.XXXXXX/AAAA-XX, ou os 10 digitos do Sistema CEUA.'
+  return 'Use o processo, 23080.XXXXXX/AAAA-XX, ou os 10 dígitos do Sistema CEUA.'
 }
 
 /**

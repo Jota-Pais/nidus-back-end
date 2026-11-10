@@ -19,17 +19,17 @@ describe('processo da UFSC', () => {
 
   it('verificador errado e recusado', () => {
     expect(conferirProtocolo('23080.001234/2026-11', HOJE)).toBe(
-      'Digito verificador errado. Confira o numero do processo.',
+      'Dígito verificador errado. Confira o número do processo.',
     )
   })
 
   it('ano depois do atual e recusado', () => {
-    expect(conferirProtocolo('23080.001234/2026-74', '2025-12-31')).toBe('O ano do processo ainda nao chegou.')
+    expect(conferirProtocolo('23080.001234/2026-74', '2025-12-31')).toBe('O ano do processo ainda não chegou.')
   })
 
   it('so com a pontuacao: a API grava o processo como ele aparece no parecer', () => {
     expect(conferirProtocolo('23080001234202674', HOJE)).toBe(
-      'Use o processo, 23080.XXXXXX/AAAA-XX, ou os 10 digitos do Sistema CEUA.',
+      'Use o processo, 23080.XXXXXX/AAAA-XX, ou os 10 dígitos do Sistema CEUA.',
     )
   })
 })
@@ -82,7 +82,7 @@ describe('numeroCeua', () => {
 
     const vazio = numeroCeua.safeParse('')
     expect(vazio.error?.issues[0]?.message).toBe(
-      'Use o processo, 23080.XXXXXX/AAAA-XX, ou os 10 digitos do Sistema CEUA.',
+      'Use o processo, 23080.XXXXXX/AAAA-XX, ou os 10 dígitos do Sistema CEUA.',
     )
   })
 })

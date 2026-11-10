@@ -90,7 +90,7 @@ describe('mudar caixa de posicao', () => {
 
   it('posicao fora da estante e recusada no campo', async () => {
     await expect(mudarDePosicao(7, { ...destino, linha: 6 }, 1)).rejects.toEqual(
-      expect.objectContaining({ status: 400, extras: { campos: { posicao: 'Esta posicao nao existe na estante.' } } }),
+      expect.objectContaining({ status: 400, extras: { campos: { posicao: 'Esta posição não existe na estante.' } } }),
     )
     expect(banco.gravado).toBeNull()
   })

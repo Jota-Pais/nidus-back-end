@@ -26,13 +26,13 @@ export function foraDaOrdem(data: string, limites: Limites): string | null {
   for (const marco of limites.depoisDe ?? []) {
     if (marco.data === null || marco.data === undefined) continue
     const limite = dataISO(marco.data)
-    if (data < limite) return `Nao pode ser antes ${marco.evento} (${dataLegivel(limite)}).`
+    if (data < limite) return `Não pode ser antes ${marco.evento} (${dataLegivel(limite)}).`
   }
 
   for (const marco of limites.antesDe ?? []) {
     if (marco.data === null || marco.data === undefined) continue
     const limite = dataISO(marco.data)
-    if (data > limite) return `Nao pode ser depois ${marco.evento} (${dataLegivel(limite)}).`
+    if (data > limite) return `Não pode ser depois ${marco.evento} (${dataLegivel(limite)}).`
   }
 
   return null

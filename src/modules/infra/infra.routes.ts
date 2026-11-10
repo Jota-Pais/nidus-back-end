@@ -34,7 +34,7 @@ export const estanteNova = z
   // a topologia tem de caber no alfabeto, senao a grade nao teria letra para as colunas
   .refine((dados) => letrasNecessarias(dados.faces, dados.colunas) <= LETRAS_DISPONIVEIS, {
     path: ['colunas'],
-    error: `Faces x colunas nao pode passar de ${LETRAS_DISPONIVEIS} - o endereco ficaria sem letra.`,
+    error: `Faces x colunas não pode passar de ${LETRAS_DISPONIVEIS} - o endereço ficaria sem letra.`,
   })
 
 /**

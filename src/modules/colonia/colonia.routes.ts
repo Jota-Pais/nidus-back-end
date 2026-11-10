@@ -17,8 +17,8 @@ export const ocorrenciaRoutes = Router()
 
 const itemDaBaixa = z.object({
   sexo: z.enum(['M', 'F']),
-  qtd: z.number().int().positive('Informe quantos animais.').max(999, 'No maximo 999 animais.'),
-  dtNascimento: z.iso.date('Data invalida. Use aaaa-mm-dd.').optional(),
+  qtd: z.number().int().positive('Informe quantos animais.').max(999, 'No máximo 999 animais.'),
+  dtNascimento: z.iso.date('Data inválida. Use aaaa-mm-dd.').optional(),
   idPedido: idNoCorpo.optional(),
 })
 

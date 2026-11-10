@@ -26,9 +26,9 @@ describe('status do pedido', () => {
 
 describe('quantidade no texto', () => {
   it('so o que nao e zero, no singular e no plural', () => {
-    expect(descreverQuantidade({ m: 2, f: 1, qualquer: 3 })).toBe('2 machos, 1 femea e 3 de qualquer sexo')
+    expect(descreverQuantidade({ m: 2, f: 1, qualquer: 3 })).toBe('2 machos, 1 fêmea e 3 de qualquer sexo')
     expect(descreverQuantidade({ m: 1, f: 0, qualquer: 0 })).toBe('1 macho')
-    expect(descreverQuantidade({ m: 0, f: 2, qualquer: 1 })).toBe('2 femeas e 1 de qualquer sexo')
+    expect(descreverQuantidade({ m: 0, f: 2, qualquer: 1 })).toBe('2 fêmeas e 1 de qualquer sexo')
   })
 })
 
@@ -40,13 +40,13 @@ describe('a reserva contra o pedido', () => {
       recusa('PEDIDO_INCOMPLETO', 'falta 1 de qualquer sexo'),
     )
     expect(() => conferirReserva(pedido, nada, { m: 1, f: 0 }, true)).toThrow(
-      recusa('PEDIDO_INCOMPLETO', 'faltam 1 macho, 1 femea e 2 de qualquer sexo'),
+      recusa('PEDIDO_INCOMPLETO', 'faltam 1 macho, 1 fêmea e 2 de qualquer sexo'),
     )
   })
 
   it('nunca passa do pedido: nem o sexo acima de qtd mais o qualquer, nem o total', () => {
     expect(() => conferirReserva(pedido, nada, { m: 5, f: 0 }, true)).toThrow(
-      recusa('PEDIDO_EXCEDIDO', 'ficariam 5 machos para um pedido de 2 machos, 1 femea e 2 de qualquer sexo'),
+      recusa('PEDIDO_EXCEDIDO', 'ficariam 5 machos para um pedido de 2 machos, 1 fêmea e 2 de qualquer sexo'),
     )
     expect(() => conferirReserva(pedido, nada, { m: 0, f: 4 }, false)).toThrow(recusa('PEDIDO_EXCEDIDO', ''))
     expect(() => conferirReserva(pedido, nada, { m: 3, f: 3 }, false)).toThrow(recusa('PEDIDO_EXCEDIDO', ''))
@@ -57,7 +57,7 @@ describe('a reserva contra o pedido', () => {
 
     expect(() => conferirReserva(pedido, tem, { m: 1, f: 0 }, false)).not.toThrow()
     expect(() => conferirReserva(pedido, tem, { m: 1, f: 1 }, false)).not.toThrow()
-    expect(() => conferirReserva(pedido, tem, { m: 2, f: 1 }, false)).toThrow(recusa('PEDIDO_EXCEDIDO', 'ficariam 4 machos e 2 femeas'))
+    expect(() => conferirReserva(pedido, tem, { m: 2, f: 1 }, false)).toThrow(recusa('PEDIDO_EXCEDIDO', 'ficariam 4 machos e 2 fêmeas'))
   })
 })
 
@@ -68,13 +68,13 @@ describe('quem recebe reserva', () => {
   it('o aprovado; o reservado, so para completar a falta', () => {
     expect(() => exigirQueRecebeReserva(7, 'aprovado', semFalta)).not.toThrow()
     expect(() => exigirQueRecebeReserva(7, 'reservado', comFalta)).not.toThrow()
-    expect(() => exigirQueRecebeReserva(7, 'reservado', semFalta)).toThrow(recusa('PEDIDO_JA_RESERVADO', '#7 ja estao reservados'))
+    expect(() => exigirQueRecebeReserva(7, 'reservado', semFalta)).toThrow(recusa('PEDIDO_JA_RESERVADO', '#7 já estão reservados'))
   })
 
   it('o enviado espera a aprovacao; o entregue e o recusado nao recebem mais', () => {
     expect(() => exigirQueRecebeReserva(7, 'enviado', semFalta)).toThrow(recusa('SEQUENCIA_INVALIDA', 'Aprove o pedido'))
-    expect(() => exigirQueRecebeReserva(7, 'entregue', semFalta)).toThrow(recusa('SEQUENCIA_INVALIDA', 'esta entregue'))
-    expect(() => exigirQueRecebeReserva(7, 'recusado', comFalta)).toThrow(recusa('SEQUENCIA_INVALIDA', 'esta recusado'))
+    expect(() => exigirQueRecebeReserva(7, 'entregue', semFalta)).toThrow(recusa('SEQUENCIA_INVALIDA', 'está entregue'))
+    expect(() => exigirQueRecebeReserva(7, 'recusado', comFalta)).toThrow(recusa('SEQUENCIA_INVALIDA', 'está recusado'))
   })
 })
 
@@ -133,7 +133,7 @@ describe('a idade na data real da entrega', () => {
     const novos = reservado(3, { idParto: 2, dtNascimento: d('2026-10-01'), dtDesmameReal: d('2026-10-23'), sexo: 'F' })
 
     expect(() => exigirQueServemNaEntrega([reservado(1), novos], faixa, '2026-11-08')).toThrow(
-      recusa('IDADE_FORA_DA_FAIXA', 'Na entrega em 08/11/2026, 1 femea da caixa F2A (nascimento em 01/10/2026) teria 38 dias'),
+      recusa('IDADE_FORA_DA_FAIXA', 'Na entrega em 08/11/2026, 1 fêmea da caixa F2A (nascimento em 01/10/2026) teria 38 dias'),
     )
   })
 
@@ -141,7 +141,7 @@ describe('a idade na data real da entrega', () => {
     expect(() => exigirQueServemNaEntrega([reservado(1, { dtDesmameReal: null })], faixa, '2026-11-08')).toThrow(
       recusa(
         'NAO_DESMAMADO',
-        'O desmame de 1 macho da caixa F2A (nascimento em 01/09/2026) ainda nao foi registrado: registre o desmame antes da entrega.',
+        'O desmame de 1 macho da caixa F2A (nascimento em 01/09/2026) ainda não foi registrado: registre o desmame antes da entrega.',
       ),
     )
     expect(() =>

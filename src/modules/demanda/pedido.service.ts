@@ -19,7 +19,7 @@ import { soltarReservados } from './reserva.service.ts'
 
 export const PRAZO_DE_RESPOSTA_EM_DIAS = 14
 
-export const MOTIVO_SEM_RESPOSTA = `Recusado automaticamente: o CPMR nao respondeu em ${PRAZO_DE_RESPOSTA_EM_DIAS} dias.`
+export const MOTIVO_SEM_RESPOSTA = `Recusado automaticamente: o CPMR não respondeu em ${PRAZO_DE_RESPOSTA_EM_DIAS} dias.`
 
 /** As acoes do pedido no historico. A reserva, a reserva desfeita e a entrega ficam na trilha */
 export const ACAO_CRIACAO = 'criacao'
@@ -144,10 +144,10 @@ export async function criarPedido(dados: PedidoNovo, usuario: UsuarioDaSessao, a
   const linhagem = await prisma.linhagem.findUnique({ where: { id: dados.idLinhagem } })
 
   if (linhagem === null) throw naoEncontrado('Linhagem')
-  if (!linhagem.ativa) throw campoInvalido('idLinhagem', 'Esta linhagem esta inativa.')
+  if (!linhagem.ativa) throw campoInvalido('idLinhagem', 'Esta linhagem está inativa.')
 
   if (dados.dataEntrega < hojeISO(agora)) {
-    throw campoInvalido('dataEntrega', 'A data de entrega nao pode estar no passado.')
+    throw campoInvalido('dataEntrega', 'A data de entrega não pode estar no passado.')
   }
 
   const criado = await prisma.$transaction(async (tx) => {
@@ -202,11 +202,11 @@ export async function aprovarPedido(idPedido: number, usuario: UsuarioDaSessao) 
 
     // o caso comum e o segundo clique
     if (status === 'aprovado' || status === 'reservado') {
-      throw erroDeRegra('SEQUENCIA_INVALIDA', `O pedido #${idPedido} ja foi aprovado.`)
+      throw erroDeRegra('SEQUENCIA_INVALIDA', `O pedido #${idPedido} já foi aprovado.`)
     }
 
     if (status !== 'enviado') {
-      throw erroDeRegra('SEQUENCIA_INVALIDA', `O pedido #${idPedido} nao esta aguardando analise e nao pode ser aprovado.`)
+      throw erroDeRegra('SEQUENCIA_INVALIDA', `O pedido #${idPedido} não está aguardando análise e não pode ser aprovado.`)
     }
 
     await tx.pedido.update({ where: { id: idPedido }, data: { status: 'aprovado', dtManutencao: new Date() } })
@@ -216,7 +216,7 @@ export async function aprovarPedido(idPedido: number, usuario: UsuarioDaSessao) 
       entidade: 'pedido',
       idEntidade: idPedido,
       acao: ACAO_APROVACAO,
-      descricao: `Pedido #${idPedido} aprovado: os animais serao reservados para ${dataISO(pedido.dtDesejada)}`,
+      descricao: `Pedido #${idPedido} aprovado: os animais serão reservados para ${dataISO(pedido.dtDesejada)}`,
     })
 
     return pedido
@@ -249,7 +249,7 @@ async function recusar(
     const status = statusDo(pedido)
 
     if (!recusaveis.includes(status)) {
-      throw erroDeRegra('SEQUENCIA_INVALIDA', `O pedido #${idPedido} esta ${status} e nao pode ser recusado.`)
+      throw erroDeRegra('SEQUENCIA_INVALIDA', `O pedido #${idPedido} está ${status} e não pode ser recusado.`)
     }
 
     const soltos: PorSexo =

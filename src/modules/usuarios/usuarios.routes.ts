@@ -15,7 +15,7 @@ const idNaRota = z.object({ id: z.coerce.number().int().positive().max(214748364
 
 export const usuarioNovo = z.object({
   nome: z.string().trim().min(1).max(120),
-  email: z.email('E-mail invalido.').trim().max(160),
+  email: z.email('E-mail inválido.').trim().max(160),
   perfil: z.enum(perfil.termos),
 })
 

@@ -154,13 +154,13 @@ async function porQueNaoVolta(
   origem: CaixaDaBaixa,
   animais: AnimalDaBaixa[],
 ): Promise<string | null> {
-  if (!origem.ativa) return 'ja foi liberada'
+  if (!origem.ativa) return 'já foi liberada'
 
   if (origem.tipo === 'casal') {
     const partos = new Set(animais.map((animal) => animal.idParto))
     const outra = (await ninhadasNaCaixa(tx, origem.id)).find((ninhada) => !partos.has(ninhada.idParto))
 
-    return outra === undefined ? null : `tem agora a ninhada do ${outra.ordem}o parto do casal ${outra.casal}`
+    return outra === undefined ? null : `tem agora a ninhada do ${outra.ordem}º parto do casal ${outra.casal}`
   }
 
   const cabem = animais.every((animal) => animal.desmamado && recusaDoEstoque(origem, animal) === null)
@@ -218,7 +218,7 @@ async function caixaDaVolta(
   if (!animais.every((animal) => animal.desmamado)) {
     throw erroDeRegra(
       'SEQUENCIA_INVALIDA',
-      `${quantos} da baixa ainda ${noNumero(animais.length, 'mama', 'mamam')}, e a caixa ${origem.codigo} ${estado}: filhote que mama so fica com a mae.`,
+      `${quantos} da baixa ainda ${noNumero(animais.length, 'mama', 'mamam')}, e a caixa ${origem.codigo} ${estado}: filhote que mama só fica com a mãe.`,
     )
   }
 
@@ -270,14 +270,14 @@ export async function anularBaixa(
       },
     })
 
-    if (baixa === null) throw naoEncontrado('Ocorrencia')
+    if (baixa === null) throw naoEncontrado('Ocorrência')
 
     if (baixa.tipo !== 'baixa' || baixa.idCaixaOrigem === null) {
-      throw erroDeRegra('SEQUENCIA_INVALIDA', 'So a baixa se anula. As outras ocorrencias se corrigem na ficha.')
+      throw erroDeRegra('SEQUENCIA_INVALIDA', 'Só a baixa se anula. As outras ocorrências se corrigem na ficha.')
     }
 
     if (baixa.anulacoes.length > 0) {
-      throw erroDeRegra('OCORRENCIA_JA_ANULADA', 'Esta baixa ja foi anulada. Atualize a ficha.')
+      throw erroDeRegra('OCORRENCIA_JA_ANULADA', 'Esta baixa já foi anulada. Atualize a ficha.')
     }
 
     const animais = baixa.animais.map(({ animal }) => animalDaBaixa(animal))
@@ -286,7 +286,7 @@ export async function anularBaixa(
 
     for (const sexo of SEXOS) {
       if (indicadas[sexo] !== undefined && !animais.some((animal) => animal.sexo === sexo)) {
-        throw campoInvalido(CAMPO_DO_DESTINO[sexo], `Esta baixa nao tem ${ROTULO_DO_SEXO[sexo]}.`)
+        throw campoInvalido(CAMPO_DO_DESTINO[sexo], `Esta baixa não tem ${ROTULO_DO_SEXO[sexo]}.`)
       }
     }
 

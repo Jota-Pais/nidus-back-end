@@ -51,10 +51,10 @@ const DIA = 24 * HORA
  */
 export const TETO_DE_ERROS_POR_EMAIL = 20
 
-const CODIGO_INVALIDO = 'Codigo invalido ou expirado.'
-const TENTATIVAS_ESGOTADAS = 'Tentativas esgotadas. Peca um codigo novo.'
+const CODIGO_INVALIDO = 'Código inválido ou expirado.'
+const TENTATIVAS_ESGOTADAS = 'Tentativas esgotadas. Peça um código novo.'
 const ERROS_DEMAIS =
-  'Muitos codigos errados para este e-mail nas ultimas 24 horas. Tente de novo mais tarde.'
+  'Muitos códigos errados para este e-mail nas últimas 24 horas. Tente de novo mais tarde.'
 
 /** O mesmo 409 para todo codigo que nao serve, com a mensagem tambem no campo do codigo */
 const codigoInvalido = (mensagem = CODIGO_INVALIDO) =>
@@ -95,18 +95,18 @@ async function errosDoEmail(
  */
 async function conferirLimites(tx: Prisma.TransactionClient, email: string, agora: Date) {
   const desde = (intervalo: number) => ({ gt: new Date(agora.getTime() - intervalo) })
-  const doTotal = 'Muitos codigos pedidos agora. Tente de novo mais tarde.'
+  const doTotal = 'Muitos códigos pedidos agora. Tente de novo mais tarde.'
 
   const limites = [
     {
       onde: { email, dtCriacao: desde(MINUTO) },
       maximo: LIMITES_DE_PEDIDO.porEmailPorMinuto,
-      mensagem: 'Aguarde um minuto para pedir outro codigo.',
+      mensagem: 'Aguarde um minuto para pedir outro código.',
     },
     {
       onde: { email, dtCriacao: desde(HORA) },
       maximo: LIMITES_DE_PEDIDO.porEmailPorHora,
-      mensagem: `Voce ja pediu ${LIMITES_DE_PEDIDO.porEmailPorHora} codigos na ultima hora. Tente de novo mais tarde.`,
+      mensagem: `Você já pediu ${LIMITES_DE_PEDIDO.porEmailPorHora} códigos na última hora. Tente de novo mais tarde.`,
     },
     { onde: { dtCriacao: desde(HORA) }, maximo: LIMITES_DE_PEDIDO.totalPorHora, mensagem: doTotal },
     { onde: { dtCriacao: desde(DIA) }, maximo: LIMITES_DE_PEDIDO.totalPorDia, mensagem: doTotal },

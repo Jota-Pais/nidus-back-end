@@ -123,7 +123,7 @@ describe('cadastro de estante', () => {
   it('numero ja usado na sala e recusado, com o nome da sala', async () => {
     banco.mesmoNumero = { id: 5 }
 
-    await expect(cadastrarEstante(nova, 1)).rejects.toThrow('Ja existe a estante E-05 na sala Sala 2.')
+    await expect(cadastrarEstante(nova, 1)).rejects.toThrow('Já existe a estante E-05 na sala Sala 2.')
     expect(banco.numeroConsultado).toEqual({ idSala: 2, numeroVisivel: 'E-05', ativa: true })
   })
 })

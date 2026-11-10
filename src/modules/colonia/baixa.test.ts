@@ -350,7 +350,7 @@ describe('anulacao de baixa', () => {
     banco.caixas.set(6, { ...estoque(6, 'F2C'), ativa: false })
     banco.baixa = baixaDe([{ id: 1, sexo: 'M', idPedido: null }])
 
-    await expect(anularBaixa(30, { motivo: 'engano' }, 4)).rejects.toEqual(noCampo('idCaixaMachos', 'ja foi liberada'))
+    await expect(anularBaixa(30, { motivo: 'engano' }, 4)).rejects.toEqual(noCampo('idCaixaMachos', 'já foi liberada'))
   })
 
   it('com a caixa liberada e a caixa indicada, a volta e para ela', async () => {
@@ -370,7 +370,7 @@ describe('anulacao de baixa', () => {
 
     // falta a caixa de um dos sexos: a recusa sai no campo dele
     await expect(anularBaixa(30, { motivo: 'engano', idCaixaMachos: 7 }, 4)).rejects.toEqual(
-      noCampo('idCaixaFemeas', 'diga para qual caixa de estoque volta 1 femea'),
+      noCampo('idCaixaFemeas', 'diga para qual caixa de estoque volta 1 fêmea'),
     )
     await expect(anularBaixa(30, { motivo: 'engano', idCaixaFemeas: 9 }, 4)).rejects.toEqual(
       noCampo('idCaixaMachos', 'diga para qual caixa de estoque voltam 2 machos'),
@@ -399,7 +399,7 @@ describe('anulacao de baixa', () => {
         extras: {
           campos: {
             idCaixaMachos: expect.stringContaining('diga para qual caixa de estoque voltam 2 machos'),
-            idCaixaFemeas: expect.stringContaining('diga para qual caixa de estoque volta 1 femea'),
+            idCaixaFemeas: expect.stringContaining('diga para qual caixa de estoque volta 1 fêmea'),
           },
         },
       }),
@@ -419,7 +419,7 @@ describe('anulacao de baixa', () => {
         extras: {
           campos: {
             idCaixaMachos: expect.stringContaining('outro sexo'),
-            idCaixaFemeas: expect.stringContaining('diga para qual caixa de estoque volta 1 femea'),
+            idCaixaFemeas: expect.stringContaining('diga para qual caixa de estoque volta 1 fêmea'),
           },
         },
       }),
@@ -480,7 +480,7 @@ describe('anulacao de baixa', () => {
     banco.baixa = baixaDe([{ id: 1, sexo: 'M', idPedido: null }])
 
     await expect(anularBaixa(30, { motivo: 'engano', idCaixaFemeas: 9 }, 4)).rejects.toEqual(
-      noCampo('idCaixaFemeas', 'Esta baixa nao tem femeas.'),
+      noCampo('idCaixaFemeas', 'Esta baixa não tem fêmeas.'),
     )
   })
 
@@ -503,7 +503,7 @@ describe('anulacao de baixa', () => {
     banco.baixa = baixaDe([{ id: 1, sexo: 'M', idPedido: null, idParto: 1 }])
 
     await expect(anularBaixa(30, { motivo: 'engano' }, 4)).rejects.toEqual(
-      noCampo('idCaixaMachos', 'tem agora a ninhada do 2o parto'),
+      noCampo('idCaixaMachos', 'tem agora a ninhada do 2º parto'),
     )
 
     const resultado = await anularBaixa(30, { motivo: 'engano', idCaixaMachos: 7 }, 4)

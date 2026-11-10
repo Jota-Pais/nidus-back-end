@@ -297,7 +297,7 @@ describe.skipIf(!URL_TESTE)('a reserva ao mesmo tempo, em conexoes separadas', {
         expect.objectContaining({
           status: 409,
           codigo: 'SEM_ANIMAIS',
-          message: 'Pediu 4 machos, mas so ha 2 nesta caixa e idade para esta operacao.',
+          message: 'Pediu 4 machos, mas só há 2 nesta caixa e idade para esta operação.',
         }),
       )
 

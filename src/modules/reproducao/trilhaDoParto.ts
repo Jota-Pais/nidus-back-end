@@ -11,7 +11,7 @@ import { exigirOrdem } from './ordemDasDatas.ts'
 
 type Transacao = Prisma.TransactionClient
 
-const ROTULO_DO_FATO: Record<string, string> = { baixa: 'baixa', mudanca: 'mudanca de caixa', entrega: 'entrega' }
+const ROTULO_DO_FATO: Record<string, string> = { baixa: 'baixa', mudanca: 'mudança de caixa', entrega: 'entrega' }
 
 /**
  * O primeiro fato dos animais do parto entre os tipos pedidos, sem contar baixa anulada (o animal
@@ -27,7 +27,7 @@ export function primeiroFato(tx: Transacao, idParto: number, tipos: string[]) {
 
 /** 'da primeira mudanca de caixa dos animais deste parto', para a mensagem da data */
 export function rotuloDoFato(fato: { tipo: string } | null): string {
-  return `da primeira ${fato === null ? 'saida' : (ROTULO_DO_FATO[fato.tipo] ?? fato.tipo)} dos animais deste parto`
+  return `da primeira ${fato === null ? 'saída' : (ROTULO_DO_FATO[fato.tipo] ?? fato.tipo)} dos animais deste parto`
 }
 
 /**
@@ -108,7 +108,7 @@ export async function exigirDataDoDesmame(tx: Transacao, parto: PartoDoDesmame, 
   exigirOrdem('dtDesmameReal', dtDesmame, {
     depoisDe: [
       { evento: 'do parto', data: parto.dtPartoReal },
-      { evento: 'da ultima eutanasia de selecao', data: ultimaSelecao },
+      { evento: 'da última eutanásia de seleção', data: ultimaSelecao },
     ],
     antesDe: [
       { evento: rotuloDoFato(saida), data: saida?.dtFato },

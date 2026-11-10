@@ -52,19 +52,19 @@ export async function listarProjetos(usuario: UsuarioDaSessao, agora: Date = new
 
 async function conferir(dados: DadosDoProjeto, idProjeto?: number) {
   if (dados.dtVigenciaFim < dados.dtVigenciaInicio) {
-    throw campoInvalido('dtVigenciaFim', 'O fim da vigencia nao pode ser antes do inicio.')
+    throw campoInvalido('dtVigenciaFim', 'O fim da vigência não pode ser antes do início.')
   }
 
   const responsavel = await prisma.usuario.findUnique({ where: { id: dados.idUsuarioResponsavel } })
 
   if (responsavel === null || !responsavel.ativo) {
-    throw campoInvalido('idUsuarioResponsavel', 'Escolha um responsavel com conta ativa.')
+    throw campoInvalido('idUsuarioResponsavel', 'Escolha um responsável com conta ativa.')
   }
 
   const mesmoNumero = await prisma.projeto.findUnique({ where: { numero: dados.numero } })
 
   if (mesmoNumero !== null && mesmoNumero.id !== idProjeto) {
-    throw erroDeRegra('PROJETO_DUPLICADO', `Ja existe o projeto ${dados.numero}.`)
+    throw erroDeRegra('PROJETO_DUPLICADO', `Já existe o projeto ${dados.numero}.`)
   }
 }
 
@@ -144,7 +144,7 @@ export async function criarLinhagem(
   const especie = await prisma.especie.findUnique({ where: { id: dados.idEspecie } })
 
   if (especie === null) {
-    throw naoEncontrado('Especie')
+    throw naoEncontrado('Espécie')
   }
 
   const mesmoNome = await prisma.linhagem.findFirst({
@@ -152,7 +152,7 @@ export async function criarLinhagem(
   })
 
   if (mesmoNome !== null) {
-    throw erroDeRegra('LINHAGEM_DUPLICADA', `Ja existe a linhagem ${dados.nome} de ${especie.nome}.`)
+    throw erroDeRegra('LINHAGEM_DUPLICADA', `Já existe a linhagem ${dados.nome} de ${especie.nome}.`)
   }
 
   const criada = await prisma.$transaction(async (tx) => {
@@ -194,7 +194,7 @@ export async function alterarLinhagem(
     })
 
     if (mesmoNome !== null) {
-      throw erroDeRegra('LINHAGEM_DUPLICADA', `Ja existe a linhagem ${dados.nome}.`)
+      throw erroDeRegra('LINHAGEM_DUPLICADA', `Já existe a linhagem ${dados.nome}.`)
     }
   }
 

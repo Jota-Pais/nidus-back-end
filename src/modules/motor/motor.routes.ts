@@ -21,11 +21,11 @@ export const filtroDaBusca = z
     /** a idade exata vem com idadeMin = idadeMax */
     idadeMin: z.coerce.number().int().min(1).max(300),
     idadeMax: z.coerce.number().int().min(1).max(300),
-    dataEntrega: z.iso.date('Data invalida. Use aaaa-mm-dd.').optional(),
+    dataEntrega: z.iso.date('Data inválida. Use aaaa-mm-dd.').optional(),
   })
   .refine((filtro) => filtro.idadeMax >= filtro.idadeMin, {
     path: ['idadeMax'],
-    error: 'A idade maxima nao pode ser menor que a minima.',
+    error: 'A idade máxima não pode ser menor que a mínima.',
   })
 
 /** GET /api/busca - a busca de atendimento do tecnico */

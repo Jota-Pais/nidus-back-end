@@ -70,13 +70,13 @@ async function validarParGenetico(grupoMacho: string, grupoFemea: string): Promi
 
   throw erroDeRegra(
     'PAR_GENETICO_INVALIDO',
-    `O par ${grupoMacho}${grupoFemea} nao esta na rotacao permitida.`,
+    `O par ${grupoMacho}${grupoFemea} não está na rotação permitida.`,
     {
       campos: {
         grupoFemea:
           femeas.length > 0
-            ? `Com macho do grupo ${grupoMacho}, so e valido o grupo ${femeas}.`
-            : `O grupo ${grupoMacho} nao tem par valido cadastrado.`,
+            ? `Com macho do grupo ${grupoMacho}, só é válido o grupo ${femeas}.`
+            : `O grupo ${grupoMacho} não tem par válido cadastrado.`,
       },
     },
   )
@@ -118,7 +118,7 @@ export function recusaDaCaixaOcupada(ninhadas: NinhadaNaCaixa[], para: string) {
   if (primeira === undefined) return null
 
   const animais = quantosAnimais(primeira)
-  const doParto = `do ${primeira.ordem}o parto do casal ${primeira.casal}`
+  const doParto = `do ${primeira.ordem}º parto do casal ${primeira.casal}`
 
   if (!primeira.desmamado) {
     return erroDeRegra(
@@ -204,18 +204,18 @@ async function exigirCaixaParaCasal(tx: Transacao, idCaixa: number, idEspecie: n
   if (caixa.tipo === 'estoque') {
     throw erroDeRegra(
       'CAIXA_DE_ESTOQUE',
-      'Esta e uma caixa de estoque: casal novo vai numa posicao vazia ou numa caixa de casal sem animal.',
+      'Esta é uma caixa de estoque: casal novo vai numa posição vazia ou numa caixa de casal sem animal.',
     )
   }
 
   if (caixa.idEspecie !== idEspecie) {
-    throw campoInvalido('idLinhagem', 'Esta linhagem nao pertence a especie da caixa.')
+    throw campoInvalido('idLinhagem', 'Esta linhagem não pertence à espécie da caixa.')
   }
 
   if (caixa.casais.some((casal) => casal.ativo)) {
     throw erroDeRegra(
       'CAIXA_JA_TEM_CASAL_ATIVO',
-      'Esta caixa ja tem um casal ativo. Encerre o casal atual antes de formar outro.',
+      'Esta caixa já tem um casal ativo. Encerre o casal atual antes de formar outro.',
     )
   }
 
@@ -224,7 +224,7 @@ async function exigirCaixaParaCasal(tx: Transacao, idCaixa: number, idEspecie: n
   if (pendente !== undefined) {
     throw erroDeRegra(
       'CAIXA_COM_ANIMAIS',
-      `O ${pendente.ordem}o parto do casal anterior ainda esta pendente nesta caixa: registre o nascimento ou feche o parto sem ninhada antes.`,
+      `O ${pendente.ordem}º parto do casal anterior ainda está pendente nesta caixa: registre o nascimento ou feche o parto sem ninhada antes.`,
     )
   }
 
@@ -246,7 +246,7 @@ export async function formarCasal(dados: NovoCasal, idUsuario: number) {
 
   // a mesma regra do pedido: linhagem inativa nao aparece no catalogo e nao recebe nada novo
   if (!linhagem.ativa) {
-    throw campoInvalido('idLinhagem', 'Esta linhagem esta inativa e nao forma casal novo.')
+    throw campoInvalido('idLinhagem', 'Esta linhagem está inativa e não forma casal novo.')
   }
 
   await validarParGenetico(dados.grupoMacho, dados.grupoFemea)
@@ -333,7 +333,7 @@ export async function registrarAcasalamento(idCasal: number, dados: Acasalamento
     }
 
     if (!casal.ativo) {
-      throw erroDeRegra('SEQUENCIA_INVALIDA', 'Este casal esta encerrado e nao recebe acasalamento novo.')
+      throw erroDeRegra('SEQUENCIA_INVALIDA', 'Este casal está encerrado e não recebe acasalamento novo.')
     }
 
     const [ultimo] = casal.partos
@@ -341,21 +341,21 @@ export async function registrarAcasalamento(idCasal: number, dados: Acasalamento
     if (ultimo !== undefined && ultimo.dtPartoReal === null) {
       throw erroDeRegra(
         'SEQUENCIA_INVALIDA',
-        `Registre o ${ultimo.ordem}o parto antes do acasalamento seguinte. Se o acasalamento nao pegou, corrija a data dele.`,
+        `Registre o ${ultimo.ordem}º parto antes do acasalamento seguinte. Se o acasalamento não pegou, corrija a data dele.`,
       )
     }
 
     const ordem = (ultimo?.ordem ?? 0) + 1
 
     if (ordem > MAX_PARTOS_POR_CASAL) {
-      throw erroDeRegra('SEQUENCIA_INVALIDA', `Este casal ja teve os ${MAX_PARTOS_POR_CASAL} partos.`)
+      throw erroDeRegra('SEQUENCIA_INVALIDA', `Este casal já teve os ${MAX_PARTOS_POR_CASAL} partos.`)
     }
 
     // no mesmo dia do parto anterior pode: a femea entra no cio logo depois de parir
     exigirOrdem('dtAcasalamento', dados.dtAcasalamento, {
       depoisDe: [
-        { evento: 'da formacao do casal', data: casal.dtFormacao },
-        { evento: `do ${ultimo?.ordem}o parto`, data: ultimo?.dtPartoReal },
+        { evento: 'da formação do casal', data: casal.dtFormacao },
+        { evento: `do ${ultimo?.ordem}º parto`, data: ultimo?.dtPartoReal },
       ],
     })
 
@@ -368,7 +368,7 @@ export async function registrarAcasalamento(idCasal: number, dados: Acasalamento
       entidade: 'parto',
       idEntidade: parto.id,
       acao: 'acasalamento',
-      descricao: `Acasalamento do ${ordem}o parto do casal ${casal.identificacao.trim()} em ${dados.dtAcasalamento}`,
+      descricao: `Acasalamento do ${ordem}º parto do casal ${casal.identificacao.trim()} em ${dados.dtAcasalamento}`,
       dados: { ...dados },
     })
 
@@ -399,7 +399,7 @@ export async function registrarNascimento(idParto: number, dados: Nascimento, id
     if (parto.dtPartoReal !== null) {
       throw erroDeRegra(
         'SEQUENCIA_INVALIDA',
-        'Este parto ja tem data real registrada. Para mudar, use Corrigir no parto.',
+        'Este parto já tem data real registrada. Para mudar, use Corrigir no parto.',
       )
     }
 
@@ -535,13 +535,13 @@ export async function registrarSelecao(idParto: number, dados: Selecao, idUsuari
     const parto = await travarELerParto(tx, idParto)
 
     if (parto.dtPartoReal === null) {
-      throw erroDeRegra('SEQUENCIA_INVALIDA', 'Registre o parto antes da eutanasia.')
+      throw erroDeRegra('SEQUENCIA_INVALIDA', 'Registre o parto antes da eutanásia.')
     }
 
     if (parto.dtDesmameReal !== null) {
       throw erroDeRegra(
         'SEQUENCIA_INVALIDA',
-        'O desmame ja foi registrado: a eutanasia de selecao vem antes dele. Depois do desmame, registre a baixa na caixa.',
+        'O desmame já foi registrado: a eutanásia de seleção vem antes dele. Depois do desmame, registre a baixa na caixa.',
       )
     }
 
@@ -562,7 +562,7 @@ export async function registrarSelecao(idParto: number, dados: Selecao, idUsuari
       throw contagemInvalida(
         'eutanasiado',
         passou,
-        `Nao pode passar dos vivos deste parto na caixa do casal (${quantosAnimais(vivos)}).`,
+        `Não pode passar dos vivos deste parto na caixa do casal (${quantosAnimais(vivos)}).`,
       )
     }
 
@@ -608,7 +608,7 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
     if (parto.dtDesmameReal !== null) {
       throw erroDeRegra(
         'SEQUENCIA_INVALIDA',
-        'O desmame deste parto ja foi registrado. Para mudar a data, use Corrigir no parto.',
+        'O desmame deste parto já foi registrado. Para mudar a data, use Corrigir no parto.',
       )
     }
 
@@ -624,7 +624,7 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
       throw contagemInvalida(
         'desmamado',
         acima,
-        `Nao pode passar dos vivos deste parto na caixa do casal no dia do desmame (${quantosAnimais(vivos)}). Se nasceram mais, corrija o nascimento.`,
+        `Não pode passar dos vivos deste parto na caixa do casal no dia do desmame (${quantosAnimais(vivos)}). Se nasceram mais, corrija o nascimento.`,
       )
     }
 
@@ -661,7 +661,7 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
       entidade: 'parto',
       idEntidade: idParto,
       acao: 'desmame',
-      descricao: `Desmame do ${parto.ordem}o parto em ${dados.dtDesmameReal}: ${quantosAnimais({ m: dados.desmamadoM, f: dados.desmamadoF })}`,
+      descricao: `Desmame do ${parto.ordem}º parto em ${dados.dtDesmameReal}: ${quantosAnimais({ m: dados.desmamadoM, f: dados.desmamadoF })}`,
       dados: { dtDesmameReal: dados.dtDesmameReal, desmamadoM: dados.desmamadoM, desmamadoF: dados.desmamadoF },
     })
 
@@ -700,7 +700,7 @@ export async function encerrarCasal(idCasal: number, dados: Encerramento, idUsua
     }
 
     if (!casal.ativo) {
-      throw campoInvalido('idCasal', 'Este casal ja esta encerrado.')
+      throw campoInvalido('idCasal', 'Este casal já está encerrado.')
     }
 
     // o parto pode vir depois do encerramento, porque a femea separada do macho ainda pare a
@@ -709,8 +709,8 @@ export async function encerrarCasal(idCasal: number, dados: Encerramento, idUsua
 
     exigirOrdem('dtEncerramento', dados.dtEncerramento, {
       depoisDe: [
-        { evento: 'da formacao do casal', data: casal.dtFormacao },
-        { evento: `do acasalamento do ${ultimo?.ordem}o parto`, data: ultimo?.dtAcasalamento },
+        { evento: 'da formação do casal', data: casal.dtFormacao },
+        { evento: `do acasalamento do ${ultimo?.ordem}º parto`, data: ultimo?.dtAcasalamento },
       ],
     })
 
@@ -755,13 +755,13 @@ export async function fecharSemNinhada(idParto: number, dados: SemNinhada, idUsu
     const { casal } = parto
 
     if (parto.dtPartoReal !== null || parto.dtSemNinhada !== null) {
-      throw erroDeRegra('SEQUENCIA_INVALIDA', 'Este parto nao esta pendente: ja nasceu ou ja foi fechado.')
+      throw erroDeRegra('SEQUENCIA_INVALIDA', 'Este parto não está pendente: já nasceu ou já foi fechado.')
     }
 
     if (casal.ativo) {
       throw erroDeRegra(
         'SEQUENCIA_INVALIDA',
-        'O casal esta ativo: registre o nascimento ou, se o acasalamento nao pegou, corrija a data dele.',
+        'O casal está ativo: registre o nascimento ou, se o acasalamento não pegou, corrija a data dele.',
       )
     }
 
@@ -786,7 +786,7 @@ export async function fecharSemNinhada(idParto: number, dados: SemNinhada, idUsu
       entidade: 'parto',
       idEntidade: idParto,
       acao: 'sem_ninhada',
-      descricao: `${parto.ordem}o parto do casal ${casal.identificacao.trim()} fechado sem ninhada em ${dados.dtSemNinhada}: ${dados.motivo}`,
+      descricao: `${parto.ordem}º parto do casal ${casal.identificacao.trim()} fechado sem ninhada em ${dados.dtSemNinhada}: ${dados.motivo}`,
       dados: { ...dados },
     })
 

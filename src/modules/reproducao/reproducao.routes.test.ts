@@ -179,14 +179,14 @@ describe('validacao de entrada - nada se registra no futuro', () => {
         'dtDesmameReal',
       ],
       ['patch', '/api/partos/1/acasalamento', { dtAcasalamento: amanha, motivo: 'Erro' }, 'dtAcasalamento'],
-      ['post', '/api/partos/1/sem-ninhada', { dtSemNinhada: amanha, motivo: 'Nao pariu' }, 'dtSemNinhada'],
+      ['post', '/api/partos/1/sem-ninhada', { dtSemNinhada: amanha, motivo: 'Não pariu' }, 'dtSemNinhada'],
     ] as const
 
     // a validacao barra antes do servico: nada chega ao banco
     for (const [metodo, caminho, corpo, campo] of rotas) {
       const resposta = await request(app('tecnico'))[metodo](caminho).send(corpo)
       expect(resposta.status, caminho).toBe(400)
-      expect(resposta.body.erro.campos[campo], caminho).toBe('A data nao pode ser depois de hoje.')
+      expect(resposta.body.erro.campos[campo], caminho).toBe('A data não pode ser depois de hoje.')
     }
   })
 

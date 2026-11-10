@@ -8,9 +8,9 @@ export const SEXOS: Sexo[] = ['M', 'F']
 /** Quantidade por sexo. E como a API conta animal em todo lugar */
 export type PorSexo = { m: number; f: number }
 
-export const ROTULO_DO_SEXO: Record<Sexo, string> = { M: 'machos', F: 'femeas' }
+export const ROTULO_DO_SEXO: Record<Sexo, string> = { M: 'machos', F: 'fêmeas' }
 
-const UM_DO_SEXO: Record<Sexo, string> = { M: 'macho', F: 'femea' }
+const UM_DO_SEXO: Record<Sexo, string> = { M: 'macho', F: 'fêmea' }
 
 /** A quantidade de um sexo dentro de um PorSexo */
 export function doSexo(contagem: PorSexo, sexo: Sexo): number {

@@ -26,8 +26,8 @@ export const projetoNovo = z.object({
   numero: numeroCeua,
   titulo: z.string().trim().min(1).max(255),
   idUsuarioResponsavel: idNoCorpo,
-  dtVigenciaInicio: z.iso.date('Data invalida. Use aaaa-mm-dd.'),
-  dtVigenciaFim: z.iso.date('Data invalida. Use aaaa-mm-dd.'),
+  dtVigenciaInicio: z.iso.date('Data inválida. Use aaaa-mm-dd.'),
+  dtVigenciaFim: z.iso.date('Data inválida. Use aaaa-mm-dd.'),
   cotaAutorizada: z.number().int().min(0).max(2147483647),
   situacao: z.enum(Object.values(SITUACAO_DO_PROJETO)),
 })
@@ -59,9 +59,9 @@ const IDADE = { minima: 21, maxima: 300 }
 
 const animais = z
   .number()
-  .int('Use um numero inteiro de animais.')
-  .min(0, 'O numero de animais nao pode ser negativo.')
-  .max(MAXIMO_DE_ANIMAIS, `No maximo ${MAXIMO_DE_ANIMAIS} animais.`)
+  .int('Use um número inteiro de animais.')
+  .min(0, 'O número de animais não pode ser negativo.')
+  .max(MAXIMO_DE_ANIMAIS, `No máximo ${MAXIMO_DE_ANIMAIS} animais.`)
 
 /** corpo de POST /api/pedidos - o formulario "Solicitar animais". O e-mail vem da sessao */
 export const pedidoNovo = z
@@ -81,32 +81,32 @@ export const pedidoNovo = z
     idadeMin: z
       .number()
       .int()
-      .min(IDADE.minima, `A idade minima e ${IDADE.minima} dias.`)
-      .max(IDADE.maxima, `A idade maxima e ${IDADE.maxima} dias.`),
-    idadeMax: z.number().int().max(IDADE.maxima, `A idade maxima e ${IDADE.maxima} dias.`),
+      .min(IDADE.minima, `A idade mínima é ${IDADE.minima} dias.`)
+      .max(IDADE.maxima, `A idade máxima é ${IDADE.maxima} dias.`),
+    idadeMax: z.number().int().max(IDADE.maxima, `A idade máxima é ${IDADE.maxima} dias.`),
     dataEntrega: z.iso
-      .date('Data invalida. Use aaaa-mm-dd.')
-      .refine((data) => data <= '2100-12-31', 'Use um ano ate 2100.'),
+      .date('Data inválida. Use aaaa-mm-dd.')
+      .refine((data) => data <= '2100-12-31', 'Use um ano até 2100.'),
     /** vazia, ausente ou null (o que o GET devolve sem observacoes) vira null */
     observacoes: z
       .string()
       .trim()
-      .max(500, 'As observacoes passam de 500 caracteres.')
+      .max(500, 'As observações passam de 500 caracteres.')
       .nullish()
       .transform((texto) => texto || null),
   })
   .refine((dados) => dados.machos + dados.femeas + dados.qualquer > 0, {
     path: ['machos'],
-    error: 'Peca ao menos um animal.',
+    error: 'Peça ao menos um animal.',
   })
   .refine((dados) => dados.idadeMax >= dados.idadeMin, {
     path: ['idadeMax'],
-    error: 'A idade maxima nao pode ser menor que a minima.',
+    error: 'A idade máxima não pode ser menor que a mínima.',
   })
   // hoje e o dia de Brasilia: em UTC, das 21h a meia-noite, hoje ja seria passado
   .refine((dados) => dados.dataEntrega >= hojeISO(), {
     path: ['dataEntrega'],
-    error: 'A data de entrega ja passou.',
+    error: 'A data de entrega já passou.',
   })
 
 pedidoRoutes.post('/', exigirPerfil('pesquisador'), async (req, res) => {
@@ -132,7 +132,7 @@ export const alocacao = z.object({
       z
         .object({
           idCaixa: idNoCorpo,
-          dtNascimento: z.iso.date('Data invalida. Use aaaa-mm-dd.'),
+          dtNascimento: z.iso.date('Data inválida. Use aaaa-mm-dd.'),
           machos: animais,
           femeas: animais,
         })
@@ -142,7 +142,7 @@ export const alocacao = z.object({
         }),
     )
     .min(1, 'Escolha ao menos uma caixa.')
-    .max(100, 'No maximo 100 lugares numa reserva.'),
+    .max(100, 'No máximo 100 lugares numa reserva.'),
 })
 
 /**

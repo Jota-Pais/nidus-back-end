@@ -157,8 +157,8 @@ beforeEach(() => {
   banco.historico = [
     historico('casal', 'formacao', 1, '2026-08-09'),
     historico('casal', 'encerramento', 1, '2026-10-10'),
-    historico('parto', 'correcao_desmame', 10, '2026-10-01', { descricao: 'Correcao do desmame do 1o parto: digitado errado' }),
-    historico('caixa', 'virar_estoque', 7, '2026-10-12', { descricao: 'Caixa F1A virou caixa de estoque com 2 femeas' }),
+    historico('parto', 'correcao_desmame', 10, '2026-10-01', { descricao: 'Correção do desmame do 1º parto: digitado errado' }),
+    historico('caixa', 'virar_estoque', 7, '2026-10-12', { descricao: 'Caixa F1A virou caixa de estoque com 2 fêmeas' }),
   ]
 })
 
@@ -167,17 +167,17 @@ describe('os eventos da ficha', () => {
     const eventos = await eventosDaCaixa(7, new Map([[10, { m: 4, f: 3 }]]))
 
     expect(eventos.map((e) => [e.dataHora.slice(0, 10), e.tipo, e.descricao, e.autor])).toEqual([
-      ['2026-08-09', 'acasalamento', 'Acasalamento do 1o parto do casal AB.', 'Bia'],
-      ['2026-09-01', 'nascimento', 'Nascimento do 1o parto do casal AB: 5 machos e 5 femeas.', 'Sistema'],
-      ['2026-09-05', 'baixa', 'Eutanasia de selecao do 1o parto do casal AB: 1 macho e 1 femea.', 'Ana'],
-      ['2026-09-23', 'baixa', '1 femea do 1o parto do casal AB nao chegou ao desmame. (anulada)', 'Ana'],
-      ['2026-09-23', 'desmame', 'Desmame do 1o parto do casal AB: 4 machos e 3 femeas.', 'Caio'],
+      ['2026-08-09', 'acasalamento', 'Acasalamento do 1º parto do casal AB.', 'Bia'],
+      ['2026-09-01', 'nascimento', 'Nascimento do 1º parto do casal AB: 5 machos e 5 fêmeas.', 'Sistema'],
+      ['2026-09-05', 'baixa', 'Eutanásia de seleção do 1º parto do casal AB: 1 macho e 1 fêmea.', 'Ana'],
+      ['2026-09-23', 'baixa', '1 fêmea do 1º parto do casal AB não chegou ao desmame. (anulada)', 'Ana'],
+      ['2026-09-23', 'desmame', 'Desmame do 1º parto do casal AB: 4 machos e 3 fêmeas.', 'Caio'],
       ['2026-09-25', 'mudanca', '4 machos mudaram para a caixa F2A.', 'Ana'],
-      ['2026-10-01', 'correcao', 'Correcao do desmame do 1o parto: digitado errado', 'Bia'],
+      ['2026-10-01', 'correcao', 'Correção do desmame do 1º parto: digitado errado', 'Bia'],
       ['2026-10-10', 'encerramento', 'Casal AB encerrado: idade', 'Bia'],
-      ['2026-10-12', 'virar_estoque', 'Caixa F1A virou caixa de estoque com 2 femeas', 'Bia'],
+      ['2026-10-12', 'virar_estoque', 'Caixa F1A virou caixa de estoque com 2 fêmeas', 'Bia'],
       // a entrega conta so os animais que sairam desta caixa
-      ['2026-10-20', 'entrega', '2 femeas entregues ao pedido #3.', 'Ana'],
+      ['2026-10-20', 'entrega', '2 fêmeas entregues ao pedido #3.', 'Ana'],
     ])
   })
 
@@ -259,7 +259,7 @@ describe('os eventos da ficha', () => {
     const eventos = await eventosDaCaixa(7, new Map())
 
     expect(eventos.map((e) => [e.dataHora.slice(0, 10), e.tipo, e.descricao])).toEqual([
-      ['2026-10-02', 'mudanca', '3 femeas chegaram da caixa T1B.'],
+      ['2026-10-02', 'mudanca', '3 fêmeas chegaram da caixa T1B.'],
       ['2026-10-20', 'liberacao', 'Caixa F1A liberada em 2026-10-20'],
     ])
   })
@@ -277,14 +277,14 @@ describe('os eventos da ficha', () => {
       }),
     ]
     banco.historico = [
-      historico('parto', 'correcao_nascimento', 30, '2026-10-05', { descricao: 'Correcao do 2o parto: contou 2 a menos' }),
+      historico('parto', 'correcao_nascimento', 30, '2026-10-05', { descricao: 'Correção do 2º parto: contou 2 a menos' }),
     ]
 
     const eventos = await eventosDaCaixa(7, new Map())
 
     expect(eventos.map((e) => [e.dataHora.slice(0, 10), e.tipo, e.descricao, e.autor])).toEqual([
-      ['2026-10-02', 'mudanca', '3 femeas chegaram da caixa T1B.', 'Ana'],
-      ['2026-10-05', 'correcao', 'Casal CD: Correcao do 2o parto: contou 2 a menos', 'Bia'],
+      ['2026-10-02', 'mudanca', '3 fêmeas chegaram da caixa T1B.', 'Ana'],
+      ['2026-10-05', 'correcao', 'Casal CD: Correção do 2º parto: contou 2 a menos', 'Bia'],
     ])
   })
 
@@ -311,21 +311,21 @@ describe('os eventos da ficha', () => {
     // na propria correcao, que chegou junto
     banco.chegadas = [chegada('2026-10-02', 30, 'CD'), chegada('2026-10-05', 31, 'DE', '12:00')]
     banco.historico = [
-      historico('parto', 'correcao_nascimento', 30, '2026-09-28', { descricao: 'Correcao do 1o parto: antes da chegada' }),
-      historico('parto', 'correcao_desmame', 30, '2026-10-02', { descricao: 'Correcao do desmame: na hora da chegada' }),
-      historico('parto', 'correcao_nascimento', 30, '2026-10-04', { descricao: 'Correcao do 1o parto: depois da chegada' }),
+      historico('parto', 'correcao_nascimento', 30, '2026-09-28', { descricao: 'Correção do 1º parto: antes da chegada' }),
+      historico('parto', 'correcao_desmame', 30, '2026-10-02', { descricao: 'Correção do desmame: na hora da chegada' }),
+      historico('parto', 'correcao_nascimento', 30, '2026-10-04', { descricao: 'Correção do 1º parto: depois da chegada' }),
       historico('parto', 'correcao_nascimento', 31, '2026-10-05', {
         dtHora: new Date('2026-10-05T12:00:00.000Z'),
-        descricao: 'Correcao do 2o parto: os a mais entraram aqui',
+        descricao: 'Correção do 2º parto: os a mais entraram aqui',
       }),
     ]
 
     const eventos = await eventosDaCaixa(7, new Map())
 
     expect(eventos.map((e) => [e.dataHora.slice(0, 10), e.descricao])).toEqual([
-      ['2026-10-02', 'Casal CD: Correcao do desmame: na hora da chegada'],
-      ['2026-10-04', 'Casal CD: Correcao do 1o parto: depois da chegada'],
-      ['2026-10-05', 'Casal DE: Correcao do 2o parto: os a mais entraram aqui'],
+      ['2026-10-02', 'Casal CD: Correção do desmame: na hora da chegada'],
+      ['2026-10-04', 'Casal CD: Correção do 1º parto: depois da chegada'],
+      ['2026-10-05', 'Casal DE: Correção do 2º parto: os a mais entraram aqui'],
     ])
   })
 
@@ -346,11 +346,11 @@ describe('os eventos da ficha', () => {
     banco.ocorrencias = []
     banco.historico = [
       historico('caixa', 'estoque', 7, '2026-09-25', {
-        descricao: '4 machos do 1o parto do casal AB (caixa F1A) passaram para a caixa de estoque F2A',
+        descricao: '4 machos do 1º parto do casal AB (caixa F1A) passaram para a caixa de estoque F2A',
         dados: { idParto: 10, idCaixaDoCasal: 1, sexo: 'M', qtd: 4 },
       }),
       historico('caixa', 'estoque', 7, '2026-10-12', {
-        descricao: 'Caixa F1A virou caixa de estoque com 2 femeas',
+        descricao: 'Caixa F1A virou caixa de estoque com 2 fêmeas',
         dados: { sexo: 'F', total: 2 },
       }),
     ]
@@ -358,7 +358,7 @@ describe('os eventos da ficha', () => {
     const eventos = await eventosDaCaixa(7, new Map())
 
     expect(eventos.map((e) => [e.dataHora.slice(0, 10), e.tipo, e.descricao])).toEqual([
-      ['2026-10-12', 'virar_estoque', 'Caixa F1A virou caixa de estoque com 2 femeas'],
+      ['2026-10-12', 'virar_estoque', 'Caixa F1A virou caixa de estoque com 2 fêmeas'],
     ])
   })
 

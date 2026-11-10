@@ -300,7 +300,7 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
 
     // a caixa do casal tem agora a ninhada do 2o parto: cada sexo pede a sua caixa de estoque
     await expect(anularBaixa(idBaixa, { motivo: 'contei errado', idCaixaMachos: machos ?? 0 }, tecnico)).rejects.toEqual(
-      expect.objectContaining({ status: 400, extras: { campos: { idCaixaFemeas: expect.stringContaining('ninhada do 2o parto') } } }),
+      expect.objectContaining({ status: 400, extras: { campos: { idCaixaFemeas: expect.stringContaining('ninhada do 2º parto') } } }),
     )
 
     const volta = await anularBaixa(
@@ -330,15 +330,15 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
     const eventosDa = async (id: number) => (await montarFicha(id)).eventos.map((evento) => evento.descricao)
     expect(await eventosDa(idCaixa)).toEqual(
       expect.arrayContaining([
-        '1 macho e 1 femea do 1o parto do casal AB nao chegaram ao desmame. (anulada)',
+        '1 macho e 1 fêmea do 1º parto do casal AB não chegaram ao desmame. (anulada)',
         'Baixa anulada: 1 macho voltou para a caixa F1B. Motivo: contei errado',
-        'Baixa anulada: 1 femea voltou para a caixa F1C. Motivo: contei errado',
+        'Baixa anulada: 1 fêmea voltou para a caixa F1C. Motivo: contei errado',
       ]),
     )
     expect(await eventosDa(machos ?? 0)).toContain('Baixa da caixa F1A anulada: 1 macho voltou para esta caixa. Motivo: contei errado')
     const { historico } = await listarHistorico({ entidade: 'caixa', idEntidade: idCaixa, limite: 50 })
     expect(historico.map((linha) => linha.descricao)).toEqual(
-      expect.arrayContaining([expect.stringContaining('Baixa da caixa F1A anulada: 1 femea voltou para a caixa F1C.')]),
+      expect.arrayContaining([expect.stringContaining('Baixa da caixa F1A anulada: 1 fêmea voltou para a caixa F1C.')]),
     )
 
     // anulada, a baixa nao se anula de novo, nem para outra caixa
@@ -356,7 +356,7 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
     ).rejects.toEqual(
       expect.objectContaining({
         status: 400,
-        extras: { campos: { dtPartoReal: `Nao pode ser depois da primeira baixa dos animais deste parto (${dataLegivel(daqui(-49))}).` } },
+        extras: { campos: { dtPartoReal: `Não pode ser depois da primeira baixa dos animais deste parto (${dataLegivel(daqui(-49))}).` } },
       }),
     )
 
@@ -364,7 +364,7 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
       `SELECT id FROM colonia.ocorrencia WHERE tipo = 'baixa' AND id_parto = $1`,
       idParto,
     )
-    await anularBaixa(selecao?.id ?? 0, { motivo: 'nao era para eutanasiar' }, tecnico)
+    await anularBaixa(selecao?.id ?? 0, { motivo: 'não era para eutanasiar' }, tecnico)
 
     const { parto } = await corrigirNascimento(
       idParto,
@@ -382,7 +382,7 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
       expect.objectContaining({
         status: 400,
         extras: {
-          campos: { dtDesmameReal: `Nao pode ser depois da primeira mudanca de caixa dos animais deste parto (${dataLegivel(daqui(-25))}).` },
+          campos: { dtDesmameReal: `Não pode ser depois da primeira mudança de caixa dos animais deste parto (${dataLegivel(daqui(-25))}).` },
         },
       }),
     )
@@ -421,7 +421,7 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
     await expect(corrigirDesmame(idParto, { dtDesmameReal: daqui(-9), motivo: 'data errada' }, tecnico)).rejects.toEqual(
       expect.objectContaining({
         status: 400,
-        extras: { campos: { dtDesmameReal: `Nao pode ser depois da primeira entrega dos animais deste parto (${dataLegivel(daqui(-10))}).` } },
+        extras: { campos: { dtDesmameReal: `Não pode ser depois da primeira entrega dos animais deste parto (${dataLegivel(daqui(-10))}).` } },
       }),
     )
   })
@@ -469,7 +469,7 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
     await encerrarCasal(idCasal, { dtEncerramento: daqui(-5), motivo: 'fim' }, tecnico)
     expect(await caixa(idCaixa)).toMatchObject({ ativa: true })
 
-    await fecharSemNinhada(parto2.id, { dtSemNinhada: daqui(-1), motivo: 'nao emprenhou' }, tecnico)
+    await fecharSemNinhada(parto2.id, { dtSemNinhada: daqui(-1), motivo: 'não emprenhou' }, tecnico)
     expect(await caixa(idCaixa)).toMatchObject({ ativa: false, motivo: 'casal_encerrado', dt: daqui(-1) })
   })
 
@@ -501,7 +501,7 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
 
     const ficha = await montarFicha(idCaixa)
     expect(ficha.eventos.find((e) => e.tipo === 'correcao')?.descricao).toBe(
-      `Correcao do 1o parto (nascimento de ${dataLegivel(NASCIMENTO)} para ${dataLegivel(daqui(-51))}; contagem de 2 machos e 2 femeas para 3 machos e 2 femeas): contagem errada`,
+      `Correção do 1º parto (nascimento de ${dataLegivel(NASCIMENTO)} para ${dataLegivel(daqui(-51))}; contagem de 2 machos e 2 fêmeas para 3 machos e 2 fêmeas): contagem errada`,
     )
   })
 
@@ -533,7 +533,7 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
     ).rejects.toEqual(
       expect.objectContaining({
         status: 400,
-        extras: { campos: { dtFato: `Nao pode ser antes da chegada dos primeiros animais na caixa F1B (${dataLegivel(daqui(-20))}).` } },
+        extras: { campos: { dtFato: `Não pode ser antes da chegada dos primeiros animais na caixa F1B (${dataLegivel(daqui(-20))}).` } },
       }),
     )
 
@@ -551,7 +551,7 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
     })
     const ficha = await montarFicha(idCaixa)
     expect(ficha.eventos.find((e) => e.tipo === 'correcao')?.descricao).toBe(
-      `Correcao do acasalamento do 2o parto (de ${dataLegivel(daqui(-30))} para ${dataLegivel(daqui(-32))}): digitado errado`,
+      `Correção do acasalamento do 2º parto (de ${dataLegivel(daqui(-30))} para ${dataLegivel(daqui(-32))}): digitado errado`,
     )
   })
 

@@ -28,7 +28,7 @@ export const partoRoutes = Router()
 
 const grupoGenetico = z.enum(['A', 'B', 'C', 'D', 'E'])
 
-const contagem = z.number().int().min(0).max(999, 'No maximo 999 animais.')
+const contagem = z.number().int().min(0).max(999, 'No máximo 999 animais.')
 
 /**
  * Corpo de POST /api/casais. O casal vai numa caixa que ja existe ('idCaixa') ou numa posicao
@@ -53,7 +53,7 @@ export const casalNovo = z
   })
   .refine((dados) => (dados.idCaixa === undefined) !== (dados.posicao === undefined), {
     path: ['idCaixa'],
-    error: 'Informe a caixa ou a posicao vazia, uma das duas.',
+    error: 'Informe a caixa ou a posição vazia, uma das duas.',
   })
 
 casalRoutes.post('/', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
@@ -137,7 +137,7 @@ partoRoutes.post('/:id/desmame', exigirPerfil(...OPERA_A_COLONIA), async (req, r
 /** Corpo de POST /api/partos/:id/sem-ninhada */
 export const semNinhada = z.object({
   dtSemNinhada: dataDoFato,
-  motivo: z.string().trim().min(1, 'Diga por que o parto nao vai nascer.').max(200),
+  motivo: z.string().trim().min(1, 'Diga por que o parto não vai nascer.').max(200),
 })
 
 partoRoutes.post('/:id/sem-ninhada', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {

@@ -60,17 +60,17 @@ caixaRoutes.post('/:id/estoque', exigirPerfil(...OPERA_A_COLONIA), async (req, r
  */
 const grupoQueMuda = z
   .object({
-    qtd: z.number().int().positive('Informe quantos animais.').max(999, 'No maximo 999 animais.'),
-    dtNascimento: z.iso.date('Data invalida. Use aaaa-mm-dd.').optional(),
+    qtd: z.number().int().positive('Informe quantos animais.').max(999, 'No máximo 999 animais.'),
+    dtNascimento: z.iso.date('Data inválida. Use aaaa-mm-dd.').optional(),
     idPedido: idNoCorpo.optional(),
     soDoPedido: z.boolean().optional(),
     destino: z.union([z.object({ idCaixa: idNoCorpo }), z.object({ posicao })], {
-      error: 'Escolha a caixa de estoque ou uma posicao vazia.',
+      error: 'Escolha a caixa de estoque ou uma posição vazia.',
     }),
   })
   .refine((grupo) => grupo.soDoPedido !== true || grupo.idPedido !== undefined, {
     path: ['idPedido'],
-    error: 'Diga de qual pedido sao os reservados que mudam.',
+    error: 'Diga de qual pedido são os reservados que mudam.',
   })
 
 /** Corpo de POST /api/caixas/:id/mudanca */
@@ -82,7 +82,7 @@ export const mudanca = z
   })
   .refine((dados) => dados.machos !== undefined || dados.femeas !== undefined, {
     path: ['machos'],
-    error: 'Informe os machos, as femeas ou os dois.',
+    error: 'Informe os machos, as fêmeas ou os dois.',
   })
 
 /**

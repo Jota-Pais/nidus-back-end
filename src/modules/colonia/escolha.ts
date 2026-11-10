@@ -119,10 +119,10 @@ export function pedidoDosReservados(
   if (indicado !== undefined) {
     if (pedidos.includes(indicado)) return indicado
 
-    const quais = pedidos.length === 0 ? '' : `; os que ha sao dos pedidos ${lista}`
+    const quais = pedidos.length === 0 ? '' : `; os que há são dos pedidos ${lista}`
 
-    throw erroDeRegra('SEM_ANIMAIS', `Os livres nao bastam, e o pedido #${indicado} nao tem ${reservados}.`, {
-      campos: { [campo]: `O pedido #${indicado} nao tem ${reservados}${quais}.` },
+    throw erroDeRegra('SEM_ANIMAIS', `Os livres não bastam, e o pedido #${indicado} não tem ${reservados}.`, {
+      campos: { [campo]: `O pedido #${indicado} não tem ${reservados}${quais}.` },
     })
   }
 
@@ -132,7 +132,7 @@ export function pedidoDosReservados(
 
   throw erroDeRegra(
     'PEDIDO_NAO_INDICADO',
-    `Os livres nao bastam, e os outros animais estao reservados para os pedidos ${lista}: diga de qual pedido eles saem.`,
+    `Os livres não bastam, e os outros animais estão reservados para os pedidos ${lista}: diga de qual pedido eles saem.`,
     { campos: { [campo]: `Escolha um dos pedidos: ${lista}.` } },
   )
 }
@@ -144,8 +144,8 @@ function semAnimais(grupo: Grupo, qtd: number, achados: number, idPedido?: numbe
   return erroDeRegra(
     'SEM_ANIMAIS',
     achados === 0
-      ? `Nao ha ${ROTULO_DO_SEXO[grupo.sexo]} vivos${doPedido} ${onde} para esta operacao.`
-      : `Pediu ${quantosDoSexo(qtd, grupo.sexo)}${doPedido}, mas so ha ${achados} ${onde} para esta operacao.`,
+      ? `Não há ${ROTULO_DO_SEXO[grupo.sexo]} vivos${doPedido} ${onde} para esta operação.`
+      : `Pediu ${quantosDoSexo(qtd, grupo.sexo)}${doPedido}, mas só há ${achados} ${onde} para esta operação.`,
   )
 }
 
@@ -190,7 +190,7 @@ export async function escolherAnimais(
 
   if (escolha.soDoPedido === true) {
     if (escolha.idPedido === undefined) {
-      throw campoInvalido(escolha.campoDoPedido ?? 'idPedido', 'Diga de qual pedido sao os reservados que mudam.')
+      throw campoInvalido(escolha.campoDoPedido ?? 'idPedido', 'Diga de qual pedido são os reservados que mudam.')
     }
 
     const doPedido = await travarVivos(tx, grupo, excluir, escolha.idPedido, qtd)

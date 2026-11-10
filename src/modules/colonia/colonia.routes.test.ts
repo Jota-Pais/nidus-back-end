@@ -51,7 +51,7 @@ describe('validacao da baixa', () => {
       .send({ ...baixaValida, dtFato: somarDias(hojeISO(), 1) })
 
     expect(resposta.status).toBe(400)
-    expect(resposta.body.erro.campos.dtFato).toBe('A data nao pode ser depois de hoje.')
+    expect(resposta.body.erro.campos.dtFato).toBe('A data não pode ser depois de hoje.')
   })
 
   it('id da caixa que nao e numero vira 400', async () => {

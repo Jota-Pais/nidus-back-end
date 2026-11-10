@@ -36,19 +36,19 @@ function comVerbo(qtd: PorSexo, singular: string, plural: string): string {
 
 function doParto(ocorrencia: OcorrenciaDescrita): string {
   const { parto } = ocorrencia
-  return parto === null ? '' : ` do ${parto.ordem}o parto do casal ${parto.casal.identificacao.trim()}`
+  return parto === null ? '' : ` do ${parto.ordem}º parto do casal ${parto.casal.identificacao.trim()}`
 }
 
 function descricaoDaBaixa(ocorrencia: OcorrenciaDescrita, qtd: PorSexo, naCaixa: string): string {
   const anulada = ocorrencia.anulacoes.length === 0 ? '' : ' (anulada)'
 
   if (ocorrencia.motivo === MOTIVO_SELECAO) {
-    return `Eutanasia de selecao${doParto(ocorrencia)}: ${quantosAnimais(qtd)}.${anulada}`
+    return `Eutanásia de seleção${doParto(ocorrencia)}: ${quantosAnimais(qtd)}.${anulada}`
   }
 
   if (ocorrencia.motivo === MOTIVO_NAO_CHEGOU_AO_DESMAME) {
     const quem = `${quantosAnimais(qtd)}${doParto(ocorrencia)}`
-    return `${quem} ${concordar(qtd, 'nao chegou', 'nao chegaram')} ao desmame.${anulada}`
+    return `${quem} ${concordar(qtd, 'não chegou', 'não chegaram')} ao desmame.${anulada}`
   }
 
   return `Baixa de ${quantosAnimais(qtd)}${naCaixa}${ocorrencia.motivo === null ? '' : `: ${ocorrencia.motivo}`}.${anulada}`
@@ -110,7 +110,7 @@ export function descreverOcorrencia(ocorrencia: OcorrenciaDescrita, daCaixa?: nu
       return `Reserva do ${pedido} desfeita: ${comVerbo(qtd, 'voltou', 'voltaram')} a ficar ${livres}${motivo}.`
     }
     case 'correcao':
-      return `Correcao${doParto(ocorrencia)} que mudou ${quantosAnimais(qtd)}${ocorrencia.motivo === null ? '' : `: ${ocorrencia.motivo}`}.`
+      return `Correção${doParto(ocorrencia)} que mudou ${quantosAnimais(qtd)}${ocorrencia.motivo === null ? '' : `: ${ocorrencia.motivo}`}.`
     default:
       return `${ocorrencia.tipo}: ${quantosAnimais(qtd)}.`
   }

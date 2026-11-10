@@ -31,7 +31,7 @@ const doParto = { parto: { ordem: 2, casal: { identificacao: 'AB' } } }
 describe('o texto da ocorrencia, sem ponto de vista', () => {
   it('nascimento, baixa e mudanca dizem as caixas', () => {
     expect(descreverOcorrencia(ocorrencia('nascimento', { ...doParto, caixaDestino: { codigo: 'F1A' }, animais: animais(5, 4) }))).toBe(
-      'Nascimento do 2o parto do casal AB: 5 machos e 4 femeas na caixa F1A.',
+      'Nascimento do 2º parto do casal AB: 5 machos e 4 fêmeas na caixa F1A.',
     )
     expect(descreverOcorrencia(ocorrencia('baixa', { caixaOrigem: { codigo: 'F2A' }, motivo: 'morte', animais: animais(1, 0) }))).toBe(
       'Baixa de 1 macho na caixa F2A: morte.',
@@ -45,32 +45,32 @@ describe('o texto da ocorrencia, sem ponto de vista', () => {
       descreverOcorrencia(
         ocorrencia('mudanca', { idCaixaOrigem: 1, idCaixaDestino: 2, caixaOrigem: { codigo: 'F1A' }, caixaDestino: { codigo: 'F2A' }, animais: animais(0, 1) }),
       ),
-    ).toBe('1 femea mudou da caixa F1A para a caixa F2A.')
+    ).toBe('1 fêmea mudou da caixa F1A para a caixa F2A.')
   })
 
   it('as baixas do parto dizem de que parto, e a anulada diz que foi anulada', () => {
     expect(descreverOcorrencia(ocorrencia('baixa', { ...doParto, motivo: 'eutanasia de selecao', animais: animais(1, 1) }))).toBe(
-      'Eutanasia de selecao do 2o parto do casal AB: 1 macho e 1 femea.',
+      'Eutanásia de seleção do 2º parto do casal AB: 1 macho e 1 fêmea.',
     )
     expect(
       descreverOcorrencia(
         ocorrencia('baixa', { ...doParto, motivo: 'nao chegou ao desmame', animais: animais(0, 1), anulacoes: [{ id: 9 }] }),
       ),
-    ).toBe('1 femea do 2o parto do casal AB nao chegou ao desmame. (anulada)')
+    ).toBe('1 fêmea do 2º parto do casal AB não chegou ao desmame. (anulada)')
   })
 
   it('a reserva, a reserva desfeita e a entrega dizem o pedido; a desfeita, tambem o motivo', () => {
     expect(descreverOcorrencia(ocorrencia('reserva', { idPedido: 4, animais: animais(2, 1) }))).toBe(
-      'Reserva para o pedido #4: 2 machos e 1 femea.',
+      'Reserva para o pedido #4: 2 machos e 1 fêmea.',
     )
     expect(descreverOcorrencia(ocorrencia('reserva_desfeita', { idPedido: 4, motivo: 'Pedido recusado: sem verba', animais: animais(2, 1) }))).toBe(
-      'Reserva do pedido #4 desfeita: 2 machos e 1 femea voltaram a ficar livres (Pedido recusado: sem verba).',
+      'Reserva do pedido #4 desfeita: 2 machos e 1 fêmea voltaram a ficar livres (Pedido recusado: sem verba).',
     )
     expect(descreverOcorrencia(ocorrencia('reserva_desfeita', { idPedido: 4, animais: [] }))).toBe(
       'Reserva do pedido #4 desfeita: nenhum animal voltou a ficar livre.',
     )
     expect(descreverOcorrencia(ocorrencia('entrega', { idPedido: 4, animais: [...animais(2, 0, 2), ...animais(0, 1, 3)] }))).toBe(
-      '2 machos e 1 femea entregues ao pedido #4.',
+      '2 machos e 1 fêmea entregues ao pedido #4.',
     )
   })
 
@@ -91,7 +91,7 @@ describe('o texto da ocorrencia, sem ponto de vista', () => {
       ),
     ).toBe('Baixa da caixa F1A anulada: 2 machos voltaram para a caixa E03. Motivo: engano')
     expect(descreverOcorrencia(ocorrencia('correcao', { ...doParto, motivo: 'contagem errada', animais: animais(1, 0) }))).toBe(
-      'Correcao do 2o parto do casal AB que mudou 1 macho: contagem errada.',
+      'Correção do 2º parto do casal AB que mudou 1 macho: contagem errada.',
     )
   })
 })
@@ -100,7 +100,7 @@ describe('o texto visto da caixa', () => {
   it('a entrega conta so os que sairam dela, e a baixa nao repete a caixa', () => {
     const entrega = ocorrencia('entrega', { idPedido: 4, animais: [...animais(2, 0, 2), ...animais(0, 1, 3)] })
 
-    expect(descreverOcorrencia(entrega, 3)).toBe('1 femea entregue ao pedido #4.')
+    expect(descreverOcorrencia(entrega, 3)).toBe('1 fêmea entregue ao pedido #4.')
     expect(descreverOcorrencia(ocorrencia('baixa', { motivo: 'morte', animais: animais(1, 0) }), 2)).toBe('Baixa de 1 macho: morte.')
   })
 
@@ -124,14 +124,14 @@ describe('o texto visto da caixa', () => {
 
     // na ficha da caixa da baixa
     expect(descreverOcorrencia(machos, 1)).toBe('Baixa anulada: 2 machos voltaram para a caixa E03. Motivo: engano')
-    expect(descreverOcorrencia(femeas, 1)).toBe('Baixa anulada: 1 femea voltou para a caixa E04. Motivo: engano')
+    expect(descreverOcorrencia(femeas, 1)).toBe('Baixa anulada: 1 fêmea voltou para a caixa E04. Motivo: engano')
     // na ficha da caixa para onde voltaram
-    expect(descreverOcorrencia(femeas, 4)).toBe('Baixa da caixa F1A anulada: 1 femea voltou para esta caixa. Motivo: engano')
+    expect(descreverOcorrencia(femeas, 4)).toBe('Baixa da caixa F1A anulada: 1 fêmea voltou para esta caixa. Motivo: engano')
   })
 
   it('a anulacao na propria caixa da baixa nao repete a caixa', () => {
     const anulacao = ocorrencia('anulacao', { idCaixaOrigem: 2, caixaOrigem: { codigo: 'F2A' }, motivo: 'engano', animais: animais(1, 2) })
 
-    expect(descreverOcorrencia(anulacao, 2)).toBe('Baixa anulada: 1 macho e 2 femeas voltaram a viver. Motivo: engano')
+    expect(descreverOcorrencia(anulacao, 2)).toBe('Baixa anulada: 1 macho e 2 fêmeas voltaram a viver. Motivo: engano')
   })
 })

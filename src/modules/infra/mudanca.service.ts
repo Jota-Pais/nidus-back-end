@@ -71,12 +71,12 @@ async function linhagemDosDesmamados(tx: Transacao, escolhidos: Escolhido[], dtF
   if (mamando !== undefined) {
     throw erroDeRegra(
       'SEQUENCIA_INVALIDA',
-      `A ninhada do ${mamando.ordem}o parto do casal ${mamando.casal.identificacao.trim()} ainda nao desmamou: registre o desmame antes de mudar os animais de caixa.`,
+      `A ninhada do ${mamando.ordem}º parto do casal ${mamando.casal.identificacao.trim()} ainda não desmamou: registre o desmame antes de mudar os animais de caixa.`,
     )
   }
 
   exigirOrdem('dtFato', dtFato, {
-    depoisDe: partos.map((parto) => ({ evento: `do desmame do ${parto.ordem}o parto`, data: parto.dtDesmameReal })),
+    depoisDe: partos.map((parto) => ({ evento: `do desmame do ${parto.ordem}º parto`, data: parto.dtDesmameReal })),
   })
 
   const [primeiro] = partos
@@ -101,7 +101,7 @@ async function caixaDeDestino(
   dtFato: string,
 ): Promise<{ id: number; codigo: string }> {
   if ('idCaixa' in destino) {
-    if (destino.idCaixa === origem.id) throw campoInvalido(campo, 'Os animais ja estao nesta caixa.')
+    if (destino.idCaixa === origem.id) throw campoInvalido(campo, 'Os animais já estão nesta caixa.')
 
     const { codigo } = await exigirEstoqueQueRecebe(tx, destino.idCaixa, campo, quem, { data: dtFato, campo: 'dtFato' })
     return { id: destino.idCaixa, codigo }
@@ -135,7 +135,7 @@ function exigirPosicoesDiferentes(dados: Mudanca): void {
     machos.posicao.linha === femeas.posicao.linha &&
     machos.posicao.coluna === femeas.posicao.coluna
 
-  if (mesma) throw campoInvalido('femeas.destino', 'Machos e femeas vao em caixas diferentes.')
+  if (mesma) throw campoInvalido('femeas.destino', 'Machos e fêmeas vão em caixas diferentes.')
 }
 
 /**
@@ -236,8 +236,8 @@ export function viradaParaEstoque(caixa: CaixaParaVirar): Virada {
     const liberada = caixaLiberada(caixa.codigo)
     return recusa(liberada.codigo, liberada.message)
   }
-  if (caixa.tipo !== 'casal') return recusa('CAIXA_DE_ESTOQUE', 'Esta caixa ja e de estoque.')
-  if (caixa.casalAtivo) return recusa('SEQUENCIA_INVALIDA', 'O casal desta caixa esta ativo: encerre o casal antes.')
+  if (caixa.tipo !== 'casal') return recusa('CAIXA_DE_ESTOQUE', 'Esta caixa já é de estoque.')
+  if (caixa.casalAtivo) return recusa('SEQUENCIA_INVALIDA', 'O casal desta caixa está ativo: encerre o casal antes.')
 
   if (caixa.partoPendente) {
     return recusa(
@@ -247,13 +247,13 @@ export function viradaParaEstoque(caixa: CaixaParaVirar): Virada {
   }
 
   const [primeira] = caixa.ninhadas
-  if (primeira === undefined) return recusa('SEQUENCIA_INVALIDA', 'Nao sobrou animal vivo nesta caixa.')
+  if (primeira === undefined) return recusa('SEQUENCIA_INVALIDA', 'Não sobrou animal vivo nesta caixa.')
 
   const mamando = caixa.ninhadas.find((ninhada) => !ninhada.desmamado)
   if (mamando !== undefined) {
     return recusa(
       'CAIXA_COM_ANIMAIS',
-      `A ninhada do ${mamando.ordem}o parto ainda mama nesta caixa: registre o desmame antes.`,
+      `A ninhada do ${mamando.ordem}º parto ainda mama nesta caixa: registre o desmame antes.`,
     )
   }
 
@@ -270,7 +270,7 @@ export function viradaParaEstoque(caixa: CaixaParaVirar): Virada {
   if (machos > 0 && femeas > 0) {
     return recusa(
       'CAIXA_COM_ANIMAIS',
-      'A caixa ainda tem machos e femeas: mude um dos sexos para outra caixa de estoque antes.',
+      'A caixa ainda tem machos e fêmeas: mude um dos sexos para outra caixa de estoque antes.',
     )
   }
 

@@ -110,11 +110,11 @@ function exigirQueServe(lugar: Lugar, item: ItemDaReserva, pedido: PedidoDaReser
   const deQuem = `Os animais da caixa ${lugar.codigo} ${nascimento}`
 
   if (lugar.livres.m + lugar.livres.f === 0) {
-    throw erroDeRegra('SEM_ANIMAIS', `A caixa ${lugar.codigo} nao tem animais livres ${nascimento}.`)
+    throw erroDeRegra('SEM_ANIMAIS', `A caixa ${lugar.codigo} não tem animais livres ${nascimento}.`)
   }
 
   if (lugar.linhagens.some((idLinhagem) => idLinhagem !== pedido.idLinhagem)) {
-    throw erroDeRegra('PEDIDO_RESERVA', `${deQuem} nao sao da linhagem do pedido.`)
+    throw erroDeRegra('PEDIDO_RESERVA', `${deQuem} não são da linhagem do pedido.`)
   }
 
   const dtDesejada = dataISO(pedido.dtDesejada)
@@ -129,14 +129,14 @@ function exigirQueServe(lugar: Lugar, item: ItemDaReserva, pedido: PedidoDaReser
 
     throw erroDeRegra(
       'IDADE_FORA_DA_FAIXA',
-      `${deQuem} terao ${dias} em ${dataLegivel(dtDesejada)}, fora da idade aceita no pedido (${naoServe.faixa.min} a ${naoServe.faixa.max} dias).`,
+      `${deQuem} terão ${dias} em ${dataLegivel(dtDesejada)}, fora da idade aceita no pedido (${naoServe.faixa.min} a ${naoServe.faixa.max} dias).`,
     )
   }
 
   if (naoServe?.motivo === 'desmame') {
     throw erroDeRegra(
       'NAO_DESMAMADO',
-      `${deQuem} so estarao desmamados em ${dataLegivel(naoServe.dtDesmame)}, depois da entrega de ${dataLegivel(dtDesejada)}.`,
+      `${deQuem} só estarão desmamados em ${dataLegivel(naoServe.dtDesmame)}, depois da entrega de ${dataLegivel(dtDesejada)}.`,
     )
   }
 
@@ -263,7 +263,7 @@ export async function desfazerReserva(idPedido: number, usuario: UsuarioDaSessao
     if (statusDo(pedido) !== 'reservado') {
       throw erroDeRegra(
         'SEQUENCIA_INVALIDA',
-        `O pedido #${idPedido} nao tem animais reservados: nao ha reserva para desfazer.`,
+        `O pedido #${idPedido} não tem animais reservados: não há reserva para desfazer.`,
       )
     }
 

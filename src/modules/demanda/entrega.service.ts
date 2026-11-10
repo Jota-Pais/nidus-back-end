@@ -54,7 +54,7 @@ export function exigirQueServemNaEntrega(
     if (animal.dtDesmameReal === null) {
       throw erroDeRegra(
         'NAO_DESMAMADO',
-        `O desmame de ${quem} ainda nao foi registrado: registre o desmame antes da entrega.`,
+        `O desmame de ${quem} ainda não foi registrado: registre o desmame antes da entrega.`,
       )
     }
 
@@ -73,7 +73,7 @@ export function exigirQueServemNaEntrega(
       // sem "e de 40 dias": sem o acento, o "e" se le como conjuncao
       throw erroDeRegra(
         'IDADE_FORA_DA_FAIXA',
-        `Na entrega em ${dataLegivel(dtEntrega)}, ${quem} ${noNumero(grupo.length, 'teria', 'teriam')} ${dias}, fora da idade aceita no pedido (${naoServe.faixa.min} a ${naoServe.faixa.max} dias). Desfaca a reserva e reserve animais na idade.`,
+        `Na entrega em ${dataLegivel(dtEntrega)}, ${quem} ${noNumero(grupo.length, 'teria', 'teriam')} ${dias}, fora da idade aceita no pedido (${naoServe.faixa.min} a ${naoServe.faixa.max} dias). Desfaça a reserva e reserve animais na idade.`,
       )
     }
   }
@@ -107,19 +107,19 @@ export async function registrarEntrega(idPedido: number, dtEntrega: string, idUs
     const status = statusDo(pedido)
 
     if (status === 'entregue') {
-      throw erroDeRegra('SEQUENCIA_INVALIDA', `A entrega do pedido #${idPedido} ja foi registrada.`)
+      throw erroDeRegra('SEQUENCIA_INVALIDA', `A entrega do pedido #${idPedido} já foi registrada.`)
     }
 
     if (status === 'recusado') {
-      throw erroDeRegra('SEQUENCIA_INVALIDA', `O pedido #${idPedido} foi recusado e nao tem entrega.`)
+      throw erroDeRegra('SEQUENCIA_INVALIDA', `O pedido #${idPedido} foi recusado e não tem entrega.`)
     }
 
     if (status !== 'reservado') {
-      throw erroDeRegra('SEQUENCIA_INVALIDA', `O pedido #${idPedido} ainda nao tem animais reservados.`)
+      throw erroDeRegra('SEQUENCIA_INVALIDA', `O pedido #${idPedido} ainda não tem animais reservados.`)
     }
 
     if (dtEntrega < hojeISO(pedido.dtCriacao)) {
-      throw campoInvalido('dtEntrega', 'A data da entrega nao pode ser antes do pedido.')
+      throw campoInvalido('dtEntrega', 'A data da entrega não pode ser antes do pedido.')
     }
 
     const reservados = await travarReservados(tx, idPedido)
@@ -131,7 +131,7 @@ export async function registrarEntrega(idPedido: number, dtEntrega: string, idUs
     if (temFalta(falta)) {
       throw erroDeRegra(
         'PEDIDO_INCOMPLETO',
-        `A reserva do pedido #${idPedido} esta em falta (${descreverQuantidade(falta)}): complete a reserva ou desfaca antes de registrar a entrega.`,
+        `A reserva do pedido #${idPedido} está em falta (${descreverQuantidade(falta)}): complete a reserva ou desfaça antes de registrar a entrega.`,
       )
     }
 

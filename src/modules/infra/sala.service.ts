@@ -41,7 +41,7 @@ async function conferirNomeLivre(nome: string, idSala?: number) {
   })
 
   if (mesmoNome !== null) {
-    throw erroDeRegra('SALA_DUPLICADA', `Ja existe uma sala com o nome ${nome}.`)
+    throw erroDeRegra('SALA_DUPLICADA', `Já existe uma sala com o nome ${nome}.`)
   }
 }
 
@@ -102,7 +102,7 @@ export async function removerSala(id: number, idUsuario: number) {
   if (estantes > 0) {
     throw erroDeRegra(
       'SALA_COM_ESTANTE',
-      `${sala.nome} ainda tem ${estantes} ${estantes === 1 ? 'estante' : 'estantes'}. So da para remover a sala sem estante: remova as estantes ou mude-as de sala antes.`,
+      `${sala.nome} ainda tem ${estantes} ${estantes === 1 ? 'estante' : 'estantes'}. Só dá para remover a sala sem estante: remova as estantes ou mude-as de sala antes.`,
     )
   }
 

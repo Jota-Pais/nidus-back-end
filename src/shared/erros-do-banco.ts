@@ -44,21 +44,21 @@ const POR_CONSTRAINT: Record<string, Traducao> = {
   // unicidade parcial
   caixa_uma_por_posicao: {
     codigo: 'POSICAO_OCUPADA',
-    mensagem: 'Esta posicao da estante ja tem uma caixa ativa.',
+    mensagem: 'Esta posição da estante já tem uma caixa ativa.',
   },
   // unicidade parcial
   casal_um_ativo_por_caixa: {
     codigo: 'CAIXA_JA_TEM_CASAL_ATIVO',
-    mensagem: 'Esta caixa ja tem um casal ativo. Encerre o casal atual antes de formar outro.',
+    mensagem: 'Esta caixa já tem um casal ativo. Encerre o casal atual antes de formar outro.',
   },
   parto_id_casal_ordem_key: {
     codigo: 'SEQUENCIA_INVALIDA',
-    mensagem: 'Este parto ja foi aberto por outro registro de acasalamento. Atualize a ficha.',
+    mensagem: 'Este parto já foi aberto por outro registro de acasalamento. Atualize a ficha.',
   },
   // CHECK
   parto_ordem_ciclo: {
     codigo: 'LIMITE_PARTOS_ATINGIDO',
-    mensagem: 'O casal ja atingiu o limite de 5 partos.',
+    mensagem: 'O casal já atingiu o limite de 5 partos.',
   },
   // CHECKs de data. O zod das rotas e os servicos conferem antes, com a mensagem no campo; estes
   // sao a rede de seguranca
@@ -69,29 +69,29 @@ const POR_CONSTRAINT: Record<string, Traducao> = {
   },
   casal_encerra_depois_de_formar: {
     codigo: 'DATA_FORA_DA_ORDEM',
-    mensagem: 'O encerramento do casal nao pode ser antes da formacao.',
+    mensagem: 'O encerramento do casal não pode ser antes da formação.',
   },
   animal_sai_depois_de_chegar: {
     codigo: 'DATA_FORA_DA_ORDEM',
-    mensagem: 'A data e anterior a chegada dos animais nesta caixa.',
+    mensagem: 'A data é anterior à chegada dos animais nesta caixa.',
   },
   // FK composta do par genetico. Rede de seguranca: a mensagem rica vem da pre-validacao em
   // 'reproducao.service.ts'
   casal_grupo_macho_grupo_femea_fkey: {
     codigo: 'PAR_GENETICO_INVALIDO',
-    mensagem: 'Este par nao esta na rotacao genetica permitida.',
+    mensagem: 'Este par não está na rotação genética permitida.',
   },
   usuario_email_key: {
     codigo: 'EMAIL_EM_USO',
-    mensagem: 'Ja existe uma conta com este e-mail.',
+    mensagem: 'Já existe uma conta com este e-mail.',
   },
   projeto_numero_key: {
     codigo: 'PROJETO_DUPLICADO',
-    mensagem: 'Ja existe um projeto com este numero.',
+    mensagem: 'Já existe um projeto com este número.',
   },
   linhagem_id_especie_nome_key: {
     codigo: 'LINHAGEM_DUPLICADA',
-    mensagem: 'Ja existe uma linhagem com este nome nesta especie.',
+    mensagem: 'Já existe uma linhagem com este nome nesta espécie.',
   },
 }
 

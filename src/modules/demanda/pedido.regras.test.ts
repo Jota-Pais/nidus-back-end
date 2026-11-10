@@ -484,7 +484,7 @@ describe('pedido novo', () => {
         entidade: 'pedido',
         idEntidade: id,
         acao: 'criacao',
-        descricao: 'Pedido de 2 machos e 1 femea de Wistar para 2026-12-01',
+        descricao: 'Pedido de 2 machos e 1 fêmea de Wistar para 2026-12-01',
       }),
     ])
   })
@@ -512,7 +512,7 @@ describe('aprovacao', () => {
     pedido(10, { status: 'aprovado' })
     pedido(11, { status: 'recusado' })
 
-    await expect(aprovarPedido(10, tecnica)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'ja foi aprovado'))
+    await expect(aprovarPedido(10, tecnica)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'já foi aprovado'))
     await expect(aprovarPedido(11, tecnica)).rejects.toEqual(recusa(409, 'SEQUENCIA_INVALIDA'))
     await expect(aprovarPedido(99, tecnica)).rejects.toEqual(recusa(404, 'NAO_ENCONTRADO'))
     expect(banco.avisos).toEqual([])
@@ -601,7 +601,7 @@ describe('reservar o pedido aprovado', () => {
   it('nunca passa do pedido: o macho pedido nao vira femea, nem o total passa', async () => {
     pedido(10)
 
-    await expect(reservarAnimais(10, doParto1(4, 2), tecnica)).rejects.toEqual(mensagem('PEDIDO_EXCEDIDO', 'ficariam 4 machos e 2 femeas'))
+    await expect(reservarAnimais(10, doParto1(4, 2), tecnica)).rejects.toEqual(mensagem('PEDIDO_EXCEDIDO', 'ficariam 4 machos e 2 fêmeas'))
     await expect(reservarAnimais(10, doParto1(1, 4), tecnica)).rejects.toEqual(recusa(409, 'PEDIDO_EXCEDIDO'))
     expect(doPedido(10)).toEqual([])
   })
@@ -615,7 +615,7 @@ describe('reservar o pedido aprovado', () => {
 
     // no pedido de 60 a 70 dias, os 21 dias ficam fora da faixa aceita (53 a 80)
     pedido(12, { qtdM: 1, qtdF: 0, qtdQualquer: 0 })
-    await expect(reservarAnimais(12, doParto2, tecnica)).rejects.toEqual(mensagem('IDADE_FORA_DA_FAIXA', 'terao 21 dias em 10/11/2026'))
+    await expect(reservarAnimais(12, doParto2, tecnica)).rejects.toEqual(mensagem('IDADE_FORA_DA_FAIXA', 'terão 21 dias em 10/11/2026'))
 
     // com entrega em 11/11, 22 dias e desmamado pelo previsto: passa
     pedido(13, { qtdM: 1, qtdF: 0, qtdQualquer: 0, idadeMinDias: 22, idadeMaxDias: 22, dtDesejada: d('2026-11-11') })
@@ -631,11 +631,11 @@ describe('reservar o pedido aprovado', () => {
       mensagem('SEM_ANIMAIS', 'A caixa F2A tem 5 machos livres'),
     )
     await expect(reservarAnimais(11, [{ idCaixa: 2, dtNascimento: '2026-09-02', machos: 1, femeas: 0 }], tecnica)).rejects.toEqual(
-      mensagem('SEM_ANIMAIS', 'nao tem animais livres do nascimento de 02/09/2026'),
+      mensagem('SEM_ANIMAIS', 'não tem animais livres do nascimento de 02/09/2026'),
     )
     // a caixa F1B guarda Kyoto
     await expect(reservarAnimais(11, [{ idCaixa: 4, dtNascimento: '2026-09-01', machos: 1, femeas: 0 }], tecnica)).rejects.toEqual(
-      mensagem('PEDIDO_RESERVA', 'nao sao da linhagem do pedido'),
+      mensagem('PEDIDO_RESERVA', 'não são da linhagem do pedido'),
     )
   })
 
@@ -661,7 +661,7 @@ describe('reservar o pedido aprovado', () => {
     // dois tecnicos, ou dois cliques em Reservar
     await expect(
       reservarAnimais(12, [{ idCaixa: 2, dtNascimento: '2026-09-01', machos: 1, femeas: 0 }], tecnica),
-    ).rejects.toEqual(mensagem('PEDIDO_JA_RESERVADO', 'ja estao reservados'))
+    ).rejects.toEqual(mensagem('PEDIDO_JA_RESERVADO', 'já estão reservados'))
     await expect(reservarAnimais(99, doParto1(), tecnica)).rejects.toEqual(recusa(404, 'NAO_ENCONTRADO'))
   })
 })
@@ -803,7 +803,7 @@ describe('desfazer a reserva', () => {
     pedido(10)
     pedido(11, { status: 'entregue' })
 
-    await expect(desfazerReserva(10, tecnica)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'nao ha reserva para desfazer'))
+    await expect(desfazerReserva(10, tecnica)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'não há reserva para desfazer'))
     await expect(desfazerReserva(11, tecnica)).rejects.toEqual(recusa(409, 'SEQUENCIA_INVALIDA'))
   })
 })
@@ -833,7 +833,7 @@ describe('recusa', () => {
 
     expect((await recusarPedido(10, 'x', 2)).soltos).toEqual({ m: 0, f: 0 })
     expect((await recusarPedido(11, 'x', 2)).status).toBe('recusado')
-    await expect(recusarPedido(12, 'x', 2)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'esta entregue'))
+    await expect(recusarPedido(12, 'x', 2)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'está entregue'))
     await expect(recusarPedido(13, 'x', 2)).rejects.toEqual(recusa(409, 'SEQUENCIA_INVALIDA'))
     expect(banco.ocorrencias).toEqual([])
   })
@@ -887,7 +887,7 @@ describe('entrega', () => {
     await reservado()
     morrer([doPedido(10)[0]?.id ?? 0])
 
-    await expect(registrarEntrega(10, '2026-11-08', 2)).rejects.toEqual(mensagem('PEDIDO_INCOMPLETO', 'esta em falta (1 de qualquer sexo)'))
+    await expect(registrarEntrega(10, '2026-11-08', 2)).rejects.toEqual(mensagem('PEDIDO_INCOMPLETO', 'está em falta (1 de qualquer sexo)'))
     expect(banco.pedidos.get(10)?.status).toBe('reservado')
   })
 
@@ -908,7 +908,7 @@ describe('entrega', () => {
     pedido(13, { qtdM: 1, qtdF: 0, qtdQualquer: 0, idadeMinDias: 22, idadeMaxDias: 22, dtDesejada: d('2026-11-11') })
     await reservarAnimais(13, [{ idCaixa: 1, dtNascimento: '2026-10-20', machos: 1, femeas: 0 }], tecnica)
 
-    await expect(registrarEntrega(13, '2026-11-11', 2)).rejects.toEqual(mensagem('NAO_DESMAMADO', 'ainda nao foi registrado'))
+    await expect(registrarEntrega(13, '2026-11-11', 2)).rejects.toEqual(mensagem('NAO_DESMAMADO', 'ainda não foi registrado'))
   })
 
   it('a data vem depois do pedido e da chegada dos animais na caixa, no campo', async () => {
@@ -926,8 +926,8 @@ describe('entrega', () => {
     await reservado()
     await registrarEntrega(10, '2026-11-08', 2)
 
-    await expect(registrarEntrega(10, '2026-11-08', 2)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'ja foi registrada'))
-    await expect(registrarEntrega(11, '2026-11-08', 2)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'ainda nao tem animais reservados'))
+    await expect(registrarEntrega(10, '2026-11-08', 2)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'já foi registrada'))
+    await expect(registrarEntrega(11, '2026-11-08', 2)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'ainda não tem animais reservados'))
     await expect(registrarEntrega(12, '2026-11-08', 2)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'foi recusado'))
   })
 })

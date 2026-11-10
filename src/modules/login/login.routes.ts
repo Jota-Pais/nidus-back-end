@@ -92,9 +92,9 @@ const emailDeAcesso = z
   .max(160, 'O e-mail passa de 160 caracteres.')
   // E a unica regra do formato: barra 'eu,voce@exemplo.com', que no envio vira uma lista de
   // destinatarios
-  .email('E-mail invalido.')
+  .email('E-mail inválido.')
 
-const codigoDeSeisDigitos = z.string().regex(/^\d{6}$/, 'O codigo tem 6 numeros.')
+const codigoDeSeisDigitos = z.string().regex(/^\d{6}$/, 'O código tem 6 números.')
 
 const pedidoDeCodigo = z.object({ email: emailDeAcesso })
 

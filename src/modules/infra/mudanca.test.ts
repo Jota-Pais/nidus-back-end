@@ -478,13 +478,13 @@ describe('o que a mudanca recusa', () => {
 
     await expect(
       registrarMudanca(2, { dtFato: '2026-09-25', femeas: { qtd: 1, destino: { idCaixa: 2 } } }, 7),
-    ).rejects.toEqual(noCampo('femeas.destino', 'ja estao nesta caixa'))
+    ).rejects.toEqual(noCampo('femeas.destino', 'já estão nesta caixa'))
   })
 
   it('posicao ocupada, e machos e femeas na mesma posicao', async () => {
     await expect(
       registrarMudanca(1, { dtFato: '2026-09-25', machos: { qtd: 1, destino: { posicao: { ...vazia, linha: 1 } } } }, 7),
-    ).rejects.toEqual(noCampo('machos.destino', 'ja tem uma caixa'))
+    ).rejects.toEqual(noCampo('machos.destino', 'já tem uma caixa'))
 
     await expect(
       registrarMudanca(
@@ -532,9 +532,9 @@ describe('virar caixa de estoque', () => {
   it('o que impede', () => {
     recusada({ casalAtivo: true }, 'SEQUENCIA_INVALIDA', 'encerre o casal')
     recusada({ partoPendente: true }, 'SEQUENCIA_INVALIDA', 'parto pendente')
-    recusada({ ninhadas: [] }, 'SEQUENCIA_INVALIDA', 'Nao sobrou animal')
-    recusada({ tipo: 'estoque' }, 'CAIXA_DE_ESTOQUE', 'ja e de estoque')
-    recusada({ ativa: false }, 'CAIXA_LIBERADA', 'ja foi liberada')
+    recusada({ ninhadas: [] }, 'SEQUENCIA_INVALIDA', 'Não sobrou animal')
+    recusada({ tipo: 'estoque' }, 'CAIXA_DE_ESTOQUE', 'já é de estoque')
+    recusada({ ativa: false }, 'CAIXA_LIBERADA', 'já foi liberada')
     recusada(
       { ninhadas: [{ ordem: 2, casal: 'AB', idLinhagem: 3, desmamado: false, vivos: { m: 0, f: 4 } }] },
       'CAIXA_COM_ANIMAIS',
@@ -543,7 +543,7 @@ describe('virar caixa de estoque', () => {
     recusada(
       { ninhadas: [{ ordem: 1, casal: 'AB', idLinhagem: 3, desmamado: true, vivos: { m: 1, f: 4 } }] },
       'CAIXA_COM_ANIMAIS',
-      'machos e femeas',
+      'machos e fêmeas',
     )
     recusada(
       {

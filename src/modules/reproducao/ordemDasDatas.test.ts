@@ -13,20 +13,20 @@ describe('ordem das datas', () => {
 
   it('antes do evento de que depende diz qual e a data dele', () => {
     expect(foraDaOrdem('2026-08-31', { depoisDe: [acasalamento] })).toBe(
-      'Nao pode ser antes do acasalamento (01/09/2026).',
+      'Não pode ser antes do acasalamento (01/09/2026).',
     )
   })
 
   it('depois do evento que vem a seguir tambem e recusado', () => {
     expect(foraDaOrdem('2026-10-17', { depoisDe: [acasalamento], antesDe: [desmame] })).toBe(
-      'Nao pode ser depois do desmame (16/10/2026).',
+      'Não pode ser depois do desmame (16/10/2026).',
     )
   })
 
   it('evento que ainda nao aconteceu nao limita', () => {
     expect(
       foraDaOrdem('2026-08-01', {
-        depoisDe: [{ evento: 'da eutanasia', data: null }],
+        depoisDe: [{ evento: 'da eutanásia', data: null }],
         antesDe: [{ evento: 'do desmame', data: undefined }],
       }),
     ).toBeNull()
@@ -37,7 +37,7 @@ describe('ordem das datas', () => {
       expect.objectContaining({
         status: 400,
         codigo: 'VALIDACAO',
-        extras: { campos: { dtPartoReal: 'Nao pode ser antes do acasalamento (01/09/2026).' } },
+        extras: { campos: { dtPartoReal: 'Não pode ser antes do acasalamento (01/09/2026).' } },
       }),
     )
   })

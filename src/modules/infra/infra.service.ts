@@ -42,7 +42,7 @@ export async function idDaEspecie(codigo: string): Promise<number> {
   const achada = especies.find((especie) => codigoDaEspecie(especie.nome) === codigo)
 
   if (achada === undefined) {
-    throw naoEncontrado(`Especie ${codigo}`)
+    throw naoEncontrado(`Espécie ${codigo}`)
   }
 
   return achada.id
@@ -156,7 +156,7 @@ async function conferirNumeroLivre(
   })
 
   if (mesmoNumero !== null) {
-    throw erroDeRegra('ESTANTE_DUPLICADA', `Ja existe a estante ${numeroVisivel} na sala ${sala.nome}.`)
+    throw erroDeRegra('ESTANTE_DUPLICADA', `Já existe a estante ${numeroVisivel} na sala ${sala.nome}.`)
   }
 }
 
@@ -248,7 +248,7 @@ export async function removerEstante(id: number, idUsuario: number) {
   if (caixas > 0) {
     throw erroDeRegra(
       'ESTANTE_OCUPADA',
-      `A estante ${estante.numeroVisivel} ainda tem ${caixas} ${caixas === 1 ? 'caixa' : 'caixas'}. So da para remover a estante vazia: mude as caixas para outra estante antes.`,
+      `A estante ${estante.numeroVisivel} ainda tem ${caixas} ${caixas === 1 ? 'caixa' : 'caixas'}. Só dá para remover a estante vazia: mude as caixas para outra estante antes.`,
     )
   }
 

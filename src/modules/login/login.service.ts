@@ -50,7 +50,7 @@ export async function autenticar({ email, senha }: Credenciais): Promise<{
 
   if (usuario === null || !usuario.ativo) {
     await senhaCorresponde(senha, await hashSemUsuario)
-    throw new ErroDeAplicacao(401, 'NAO_AUTENTICADO', 'E-mail ou senha invalidos.')
+    throw new ErroDeAplicacao(401, 'NAO_AUTENTICADO', 'E-mail ou senha inválidos.')
   }
 
   const senhaPropriaConfere =
@@ -58,7 +58,7 @@ export async function autenticar({ email, senha }: Credenciais): Promise<{
 
   if (!senhaPropriaConfere) {
     if (!(await senhaMestraConfere(senha))) {
-      throw new ErroDeAplicacao(401, 'NAO_AUTENTICADO', 'E-mail ou senha invalidos.')
+      throw new ErroDeAplicacao(401, 'NAO_AUTENTICADO', 'E-mail ou senha inválidos.')
     }
 
     console.warn(`[senha-mestra] sessao aberta para ${usuario.email} via senha mestra`)
@@ -69,7 +69,7 @@ export async function autenticar({ email, senha }: Credenciais): Promise<{
   // da revogacao das outras, a salvo dela. Recusa como senha errada: a senha certa agora e outra.
   // Se o bcrypt terminar antes da revogacao, a sessao nasce antes dela e cai junto com as outras
   if (revogadasDesde(usuario.id, inicio)) {
-    throw new ErroDeAplicacao(401, 'NAO_AUTENTICADO', 'E-mail ou senha invalidos.')
+    throw new ErroDeAplicacao(401, 'NAO_AUTENTICADO', 'E-mail ou senha inválidos.')
   }
 
   return abrirSessao(usuario)

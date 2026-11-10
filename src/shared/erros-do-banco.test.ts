@@ -137,7 +137,7 @@ describe('constraint do banco vira 409', () => {
 
     expect(traduzido?.status).toBe(409)
     expect(traduzido?.codigo).toBe('SEQUENCIA_INVALIDA')
-    expect(traduzido?.message).toBe('Este parto ja foi aberto por outro registro de acasalamento. Atualize a ficha.')
+    expect(traduzido?.message).toBe('Este parto já foi aberto por outro registro de acasalamento. Atualize a ficha.')
   })
 
   it('sexto parto vira LIMITE_PARTOS_ATINGIDO', () => {
@@ -173,7 +173,7 @@ describe('constraint do banco vira 409', () => {
     const traduzido = traduzirErroDoBanco(unique('caixa_uma_por_posicao', 'caixa'))
 
     expect(traduzido?.message).not.toMatch(/duplicate key/)
-    expect(traduzido?.message).toMatch(/posicao da estante/)
+    expect(traduzido?.message).toMatch(/posição da estante/)
   })
 })
 

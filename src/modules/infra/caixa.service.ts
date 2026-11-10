@@ -69,7 +69,7 @@ export async function mudarDePosicao(idCaixa: number, destino: PosicaoNaEstante,
     const posicao = await lerPosicao(tx, destino, 'posicao')
 
     if (posicao.ocupante !== null && posicao.ocupante.id !== idCaixa) {
-      throw erroDeRegra('POSICAO_OCUPADA', 'Esta posicao da estante ja tem uma caixa ativa.')
+      throw erroDeRegra('POSICAO_OCUPADA', 'Esta posição da estante já tem uma caixa ativa.')
     }
 
     const movida = await tx.caixa.update({

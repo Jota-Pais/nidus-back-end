@@ -29,7 +29,7 @@ export async function lerPosicao(banco: Leitura, posicao: PosicaoNaEstante, camp
   const face = posicao.face === 'frontal' ? 1 : 2
 
   if (face > estante.faces || posicao.linha > estante.linhas || posicao.coluna > estante.colunas) {
-    throw campoInvalido(campo, 'Esta posicao nao existe na estante.')
+    throw campoInvalido(campo, 'Esta posição não existe na estante.')
   }
 
   const ocupante = await banco.caixa.findFirst({
@@ -44,7 +44,7 @@ export async function lerPosicao(banco: Leitura, posicao: PosicaoNaEstante, camp
 export async function exigirPosicaoVazia(banco: Leitura, posicao: PosicaoNaEstante, campo: string) {
   const lida = await lerPosicao(banco, posicao, campo)
 
-  if (lida.ocupante !== null) throw campoInvalido(campo, 'Esta posicao ja tem uma caixa.')
+  if (lida.ocupante !== null) throw campoInvalido(campo, 'Esta posição já tem uma caixa.')
 
   return lida
 }

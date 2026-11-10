@@ -8,7 +8,7 @@ export const rotaNaoEncontrada: RequestHandler = (req, res) => {
   res.status(404).json({
     erro: {
       codigo: 'NAO_ENCONTRADO',
-      mensagem: `Rota ${req.method} ${req.originalUrl} nao existe.`,
+      mensagem: `Rota ${req.method} ${req.originalUrl} não existe.`,
     },
   })
 }
@@ -43,9 +43,9 @@ export const tratadorDeErros: ErrorRequestHandler = (erro, req, res, next) => {
       erro: {
         codigo: 'VALIDACAO',
         mensagem: grande
-          ? 'O corpo da requisicao e grande demais.'
-          : 'O corpo da requisicao nao e um JSON valido.',
-        campos: { '(corpo)': grande ? 'Grande demais.' : 'JSON invalido.' },
+          ? 'O corpo da requisição é grande demais.'
+          : 'O corpo da requisição não é um JSON válido.',
+        campos: { '(corpo)': grande ? 'Grande demais.' : 'JSON inválido.' },
       },
     })
     return

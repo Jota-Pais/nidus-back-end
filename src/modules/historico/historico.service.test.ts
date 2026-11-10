@@ -145,7 +145,7 @@ describe('a trilha no historico', () => {
 
     expect(historico.map((linha) => [linha.fonte, linha.id, linha.entidade, linha.idEntidade, linha.acao, linha.descricao])).toEqual([
       ['historico', 10, 'pedido', 4, 'recusa', 'Pedido #4 recusado'],
-      ['trilha', 3, 'pedido', 4, 'reserva', 'Em 05/11/2026: Reserva para o pedido #4: 2 machos e 1 femea.'],
+      ['trilha', 3, 'pedido', 4, 'reserva', 'Em 05/11/2026: Reserva para o pedido #4: 2 machos e 1 fêmea.'],
     ])
     expect(ocorrenciaFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: {}, take: 2 }))
   })
