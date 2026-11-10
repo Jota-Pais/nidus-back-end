@@ -22,7 +22,7 @@ export type PedidoDeViabilidade = {
 
 // texto para quem pede, por isso com acento, como os e-mails
 export const DATA_PROXIMA_DEMAIS =
-  'Essa data é muito próxima: o CPMR provavelmente não consegue entregar esses animais a tempo.'
+  'Essa data é muito próxima: a equipe provavelmente não consegue entregar esses animais a tempo.'
 
 /**
  * Da quando a colonia cobre o pedido na data, contando os partos previstos (secao 6.1), ou quando
