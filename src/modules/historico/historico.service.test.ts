@@ -7,9 +7,23 @@ import { entidadeDaOcorrencia, linhasQueForamParaATrilha, listarHistorico, ondeN
 const historicoFindMany = vi.hoisted(() => vi.fn())
 const ocorrenciaFindMany = vi.hoisted(() => vi.fn())
 const queryRaw = vi.hoisted(() => vi.fn())
+const caixaFindMany = vi.hoisted(() => vi.fn())
+const casalFindMany = vi.hoisted(() => vi.fn())
+const partoFindMany = vi.hoisted(() => vi.fn())
+const pedidoFindMany = vi.hoisted(() => vi.fn())
+const estanteFindMany = vi.hoisted(() => vi.fn())
 
 vi.mock('../../shared/prisma.ts', () => ({
-  prisma: { historico: { findMany: historicoFindMany }, ocorrencia: { findMany: ocorrenciaFindMany }, $queryRaw: queryRaw },
+  prisma: {
+    historico: { findMany: historicoFindMany },
+    ocorrencia: { findMany: ocorrenciaFindMany },
+    caixa: { findMany: caixaFindMany },
+    casal: { findMany: casalFindMany },
+    parto: { findMany: partoFindMany },
+    pedido: { findMany: pedidoFindMany },
+    estante: { findMany: estanteFindMany },
+    $queryRaw: queryRaw,
+  },
 }))
 
 const registro = (id: number, dtHora: string, campos: Record<string, unknown> = {}) => ({
@@ -53,6 +67,10 @@ beforeEach(() => {
   historicoFindMany.mockResolvedValue([])
   ocorrenciaFindMany.mockReset()
   ocorrenciaFindMany.mockResolvedValue([])
+  for (const leitura of [caixaFindMany, casalFindMany, partoFindMany, pedidoFindMany, estanteFindMany]) {
+    leitura.mockReset()
+    leitura.mockResolvedValue([])
+  }
   queryRaw.mockReset()
   queryRaw.mockResolvedValue([{ id: 16 }, { id: 24 }])
 })
@@ -194,7 +212,7 @@ describe('a trilha no historico', () => {
 
     const { historico } = await listarHistorico({ busca: 'f2c', limite: 300 })
 
-    expect(historico.map((linha) => linha.descricao)).toEqual(['Em 05/11/2026: 3 machos mudaram da caixa F2A para a caixa F2C.'])
+    expect(historico.map((linha) => linha.descricao)).toEqual(['Em 05/11/2026: 3 machos passaram da caixa F2A para a caixa F2C.'])
     expect((await listarHistorico({ busca: 'caio', limite: 300 })).historico).toHaveLength(2)
   })
 
@@ -220,5 +238,46 @@ describe('quem fez', () => {
     const { historico } = await listarHistorico({ limite: 300 })
 
     expect(historico.map((r) => r.usuario)).toEqual(['Sistema', 'Sistema'])
+  })
+})
+
+describe('onde', () => {
+  it('cada linha traz o nome legivel de onde foi, lido em lote, e o resto fica null', async () => {
+    historicoFindMany.mockResolvedValue([
+      registro(1, '2026-11-09T12:00:00.000Z', { entidade: 'casal', idEntidade: 3 }),
+      registro(2, '2026-11-08T12:00:00.000Z', { entidade: 'parto', idEntidade: 9 }),
+      registro(3, '2026-11-07T12:00:00.000Z', { entidade: 'estante', idEntidade: 1 }),
+      registro(4, '2026-11-06T12:00:00.000Z', { entidade: 'usuario', idEntidade: 8 }),
+      registro(5, '2026-11-05T12:00:00.000Z', { entidade: 'pedido', idEntidade: 3 }),
+      registro(6, '2026-11-04T12:00:00.000Z', { entidade: 'caixa', idEntidade: 2 }),
+      registro(7, '2026-11-03T12:00:00.000Z', { entidade: 'caixa', idEntidade: 2 }),
+    ])
+    caixaFindMany.mockResolvedValue([{ id: 2, codigo: 'F1A' }])
+    casalFindMany.mockResolvedValue([{ id: 3, identificacao: 'AB', caixa: { codigo: 'F1A' } }])
+    partoFindMany.mockResolvedValue([{ id: 9, ordem: 2, casal: { identificacao: 'AB' } }])
+    pedidoFindMany.mockResolvedValue([{ id: 3 }])
+    estanteFindMany.mockResolvedValue([{ id: 1, numeroVisivel: 'E-01' }])
+
+    const { historico } = await listarHistorico({ limite: 300 })
+
+    expect(historico.map((linha) => linha.onde)).toEqual([
+      'Casal AB (F1A)',
+      '2º parto do casal AB',
+      'Estante E-01',
+      null,
+      'Pedido #3',
+      'Caixa F1A',
+      'Caixa F1A',
+    ])
+    // uma leitura por entidade, com os ids sem repetir
+    expect(caixaFindMany).toHaveBeenCalledTimes(1)
+    expect(caixaFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: { in: [2] } } }))
+  })
+
+  it('sem linhas, nao le nome nenhum', async () => {
+    await listarHistorico({ limite: 300 })
+
+    expect(caixaFindMany).not.toHaveBeenCalled()
+    expect(pedidoFindMany).not.toHaveBeenCalled()
   })
 })

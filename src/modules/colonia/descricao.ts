@@ -1,5 +1,5 @@
 // O texto de uma ocorrencia da trilha, num lugar so: a ficha da caixa o mostra visto da caixa
-// ("2 machos chegaram da caixa F1A"), e a tela Historico, sem ponto de vista ("2 machos mudaram da
+// ("2 machos chegaram da caixa F1A"), e a tela Historico, sem ponto de vista ("2 machos passaram da
 // caixa F1A para a caixa F2C"). A quantidade sai de quantosAnimais e o verbo concorda com ela
 
 import type { Prisma } from '@prisma/client'
@@ -29,7 +29,7 @@ function concordar(qtd: PorSexo, singular: string, plural: string): string {
   return noNumero(Math.max(qtd.m + qtd.f, 1), singular, plural)
 }
 
-/** Os animais e o verbo: '2 machos e 1 femea mudaram', '1 femea mudou', 'nenhum animal mudou' */
+/** Os animais e o verbo: '2 machos e 1 femea passaram', '1 femea passou', 'nenhum animal passou' */
 function comVerbo(qtd: PorSexo, singular: string, plural: string): string {
   return `${quantosAnimais(qtd)} ${concordar(qtd, singular, plural)}`
 }
@@ -90,13 +90,13 @@ export function descreverOcorrencia(ocorrencia: OcorrenciaDescrita, daCaixa?: nu
 
   switch (ocorrencia.tipo) {
     case 'nascimento':
-      return `Nascimento${doParto(ocorrencia)}: ${quantosAnimais(qtd)}${daCaixa === undefined ? ` na caixa ${destino}` : ''}.`
+      return `${doParto(ocorrencia).trim().replace(/^do /, '') || 'Parto'}: ${quantosAnimais(qtd)}${daCaixa === undefined ? ` na caixa ${destino}` : ''}.`
     case 'baixa':
       return descricaoDaBaixa(ocorrencia, qtd, daCaixa === undefined ? ` na caixa ${origem}` : '')
     case 'mudanca':
-      if (daCaixa === undefined) return `${comVerbo(qtd, 'mudou', 'mudaram')} da caixa ${origem} para a caixa ${destino}.`
+      if (daCaixa === undefined) return `${comVerbo(qtd, 'passou', 'passaram')} da caixa ${origem} para a caixa ${destino}.`
       return ocorrencia.idCaixaOrigem === daCaixa
-        ? `${comVerbo(qtd, 'mudou', 'mudaram')} para a caixa ${destino}.`
+        ? `${comVerbo(qtd, 'passou', 'passaram')} para a caixa ${destino}.`
         : `${comVerbo(qtd, 'chegou', 'chegaram')} da caixa ${origem}.`
     case 'anulacao':
       return descricaoDaAnulacao(ocorrencia, qtd, daCaixa)

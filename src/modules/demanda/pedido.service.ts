@@ -6,20 +6,20 @@ import { avisarPedidoDecidido } from '../../shared/email.ts'
 import { ErroDeAplicacao, campoInvalido, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { prisma } from '../../shared/prisma.ts'
-import { codigoDaEspecie, dataISO, hojeISO, paraData } from '../../shared/traducao.ts'
+import { codigoDaEspecie, dataISO, dataLegivel, hojeISO, paraData } from '../../shared/traducao.ts'
 import { faltasDosPedidos } from '../colonia/consultas.ts'
 import type { PorSexo } from '../colonia/tipos.ts'
 import { travarPedidos } from '../colonia/travas.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
 import { PARA_O_AVISO, avisarPesquisador } from './aviso.ts'
-import { RECUSAVEIS, descreverQuantidade, statusDo } from './pedido.ts'
+import { NOME_NA_TELA, RECUSAVEIS, descreverQuantidade, statusDo } from './pedido.ts'
 import type { StatusDoPedido } from './pedido.ts'
 import { soltarReservados } from './reserva.service.ts'
 
 export const PRAZO_DE_RESPOSTA_EM_DIAS = 14
 
-export const MOTIVO_SEM_RESPOSTA = `Recusado automaticamente: o CPMR não respondeu em ${PRAZO_DE_RESPOSTA_EM_DIAS} dias.`
+export const MOTIVO_SEM_RESPOSTA = `Recusado automaticamente: a equipe não respondeu em ${PRAZO_DE_RESPOSTA_EM_DIAS} dias.`
 
 /** As acoes do pedido no historico. A reserva, a reserva desfeita e a entrega ficam na trilha */
 export const ACAO_CRIACAO = 'criacao'
@@ -175,7 +175,7 @@ export async function criarPedido(dados: PedidoNovo, usuario: UsuarioDaSessao, a
       entidade: 'pedido',
       idEntidade: pedido.id,
       acao: ACAO_CRIACAO,
-      descricao: `Pedido de ${descreverQuantidade({ m: dados.machos, f: dados.femeas, qualquer: dados.qualquer })} de ${linhagem.nome} para ${dados.dataEntrega}`,
+      descricao: `Pedido de ${descreverQuantidade({ m: dados.machos, f: dados.femeas, qualquer: dados.qualquer })} de ${linhagem.nome} para ${dataLegivel(dados.dataEntrega)}`,
       dados: { ...dados },
     })
 
@@ -216,7 +216,7 @@ export async function aprovarPedido(idPedido: number, usuario: UsuarioDaSessao) 
       entidade: 'pedido',
       idEntidade: idPedido,
       acao: ACAO_APROVACAO,
-      descricao: `Pedido #${idPedido} aprovado: os animais serão reservados para ${dataISO(pedido.dtDesejada)}`,
+      descricao: `Pedido #${idPedido} aprovado: os animais serão reservados para ${dataLegivel(dataISO(pedido.dtDesejada))}`,
     })
 
     return pedido
@@ -249,7 +249,7 @@ async function recusar(
     const status = statusDo(pedido)
 
     if (!recusaveis.includes(status)) {
-      throw erroDeRegra('SEQUENCIA_INVALIDA', `O pedido #${idPedido} está ${status} e não pode ser recusado.`)
+      throw erroDeRegra('SEQUENCIA_INVALIDA', `O pedido #${idPedido} está ${NOME_NA_TELA[status]} e não pode ser recusado.`)
     }
 
     const soltos: PorSexo =

@@ -65,7 +65,7 @@ export function conferirProtocolo(numero: string, hoje: string = hojeISO()): str
     const registro = dataDoRegistro(numero)
 
     if (registro === null || registro > hoje) {
-      return 'Protocolo no formato incorreto.'
+      return 'Protocolo CEUA no formato incorreto.'
     }
 
     return null

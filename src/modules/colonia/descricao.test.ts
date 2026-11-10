@@ -31,7 +31,7 @@ const doParto = { parto: { ordem: 2, casal: { identificacao: 'AB' } } }
 describe('o texto da ocorrencia, sem ponto de vista', () => {
   it('nascimento, baixa e mudanca dizem as caixas', () => {
     expect(descreverOcorrencia(ocorrencia('nascimento', { ...doParto, caixaDestino: { codigo: 'F1A' }, animais: animais(5, 4) }))).toBe(
-      'Nascimento do 2º parto do casal AB: 5 machos e 4 fêmeas na caixa F1A.',
+      '2º parto do casal AB: 5 machos e 4 fêmeas na caixa F1A.',
     )
     expect(descreverOcorrencia(ocorrencia('baixa', { caixaOrigem: { codigo: 'F2A' }, motivo: 'morte', animais: animais(1, 0) }))).toBe(
       'Baixa de 1 macho na caixa F2A: morte.',
@@ -40,12 +40,12 @@ describe('o texto da ocorrencia, sem ponto de vista', () => {
       descreverOcorrencia(
         ocorrencia('mudanca', { idCaixaOrigem: 1, idCaixaDestino: 2, caixaOrigem: { codigo: 'F1A' }, caixaDestino: { codigo: 'F2A' }, animais: animais(3, 0) }),
       ),
-    ).toBe('3 machos mudaram da caixa F1A para a caixa F2A.')
+    ).toBe('3 machos passaram da caixa F1A para a caixa F2A.')
     expect(
       descreverOcorrencia(
         ocorrencia('mudanca', { idCaixaOrigem: 1, idCaixaDestino: 2, caixaOrigem: { codigo: 'F1A' }, caixaDestino: { codigo: 'F2A' }, animais: animais(0, 1) }),
       ),
-    ).toBe('1 fêmea mudou da caixa F1A para a caixa F2A.')
+    ).toBe('1 fêmea passou da caixa F1A para a caixa F2A.')
   })
 
   it('as baixas do parto dizem de que parto, e a anulada diz que foi anulada', () => {
@@ -113,7 +113,7 @@ describe('o texto visto da caixa', () => {
       animais: animais(1, 0),
     })
 
-    expect(descreverOcorrencia(mudanca, 1)).toBe('1 macho mudou para a caixa F2A.')
+    expect(descreverOcorrencia(mudanca, 1)).toBe('1 macho passou para a caixa F2A.')
     expect(descreverOcorrencia(mudanca, 2)).toBe('1 macho chegou da caixa F1A.')
   })
 

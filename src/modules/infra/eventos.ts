@@ -298,7 +298,7 @@ export async function eventosDaCaixa(idCaixa: number, desmamados: Map<number, Po
       const acasalamento =
         parto.ordem === 1 ? primeiro('casal', 'formacao', casal.id) : primeiro('parto', 'acasalamento', parto.id)
       // o que o nascimento do parto anterior abriu sozinho diz isso, e o autor e o Sistema
-      const sozinho = ehAutomatico(acasalamento?.dados) ? `, aberto sozinho ${INTERVALO_ACASALAMENTO_DIAS} dias depois do parto anterior` : ''
+      const sozinho = ehAutomatico(acasalamento?.dados) ? `, aberto automaticamente ${INTERVALO_ACASALAMENTO_DIAS} dias depois do parto anterior` : ''
 
       eventos.push(
         evento(

@@ -96,7 +96,7 @@ export const tratadorDeErros: ErrorRequestHandler = (erro, req, res, next) => {
   res.status(500).json({
     erro: {
       codigo: 'ERRO_INTERNO',
-      mensagem: 'Erro interno. Tente novamente em instantes.',
+      mensagem: 'Erro interno. Tente de novo em instantes.',
     },
   })
 }

@@ -137,7 +137,7 @@ describe('constraint do banco vira 409', () => {
 
     expect(traduzido?.status).toBe(409)
     expect(traduzido?.codigo).toBe('SEQUENCIA_INVALIDA')
-    expect(traduzido?.message).toBe('Este parto já foi aberto por outro registro de acasalamento. Atualize a ficha.')
+    expect(traduzido?.message).toBe('Este parto já foi aberto por outro registro de acasalamento. Atualize a tela e tente de novo.')
   })
 
   it('sexto parto vira LIMITE_PARTOS_ATINGIDO', () => {

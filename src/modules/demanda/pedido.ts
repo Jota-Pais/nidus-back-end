@@ -71,6 +71,15 @@ export function conferirReserva(pedido: Pedido, tem: PorSexo, novos: PorSexo, in
   }
 }
 
+/** O status como a tela o escreve, para as mensagens de erro */
+export const NOME_NA_TELA: Record<StatusDoPedido, string> = {
+  enviado: 'aguardando análise',
+  aprovado: 'aguardando animais',
+  reservado: 'com os animais reservados',
+  entregue: 'entregue',
+  recusado: 'recusado',
+}
+
 /**
  * Se o pedido recebe uma reserva agora: o aprovado, inteira; o reservado, so para completar a
  * falta. 'falta' e a do pedido hoje
@@ -88,5 +97,5 @@ export function exigirQueRecebeReserva(idPedido: number, status: StatusDoPedido,
     throw erroDeRegra('SEQUENCIA_INVALIDA', 'Aprove o pedido antes de reservar os animais.')
   }
 
-  throw erroDeRegra('SEQUENCIA_INVALIDA', `O pedido #${idPedido} está ${status} e não recebe mais animais.`)
+  throw erroDeRegra('SEQUENCIA_INVALIDA', `O pedido #${idPedido} está ${NOME_NA_TELA[status]} e não recebe mais animais.`)
 }

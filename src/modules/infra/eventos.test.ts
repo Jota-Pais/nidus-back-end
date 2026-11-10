@@ -168,11 +168,11 @@ describe('os eventos da ficha', () => {
 
     expect(eventos.map((e) => [e.dataHora.slice(0, 10), e.tipo, e.descricao, e.autor])).toEqual([
       ['2026-08-09', 'acasalamento', 'Acasalamento do 1º parto do casal AB.', 'Bia'],
-      ['2026-09-01', 'nascimento', 'Nascimento do 1º parto do casal AB: 5 machos e 5 fêmeas.', 'Sistema'],
+      ['2026-09-01', 'nascimento', '1º parto do casal AB: 5 machos e 5 fêmeas.', 'Sistema'],
       ['2026-09-05', 'baixa', 'Eutanásia de seleção do 1º parto do casal AB: 1 macho e 1 fêmea.', 'Ana'],
       ['2026-09-23', 'baixa', '1 fêmea do 1º parto do casal AB não chegou ao desmame. (anulada)', 'Ana'],
       ['2026-09-23', 'desmame', 'Desmame do 1º parto do casal AB: 4 machos e 3 fêmeas.', 'Caio'],
-      ['2026-09-25', 'mudanca', '4 machos mudaram para a caixa F2A.', 'Ana'],
+      ['2026-09-25', 'mudanca', '4 machos passaram para a caixa F2A.', 'Ana'],
       ['2026-10-01', 'correcao', 'Correção do desmame do 1º parto: digitado errado', 'Bia'],
       ['2026-10-10', 'encerramento', 'Casal AB encerrado: idade', 'Bia'],
       ['2026-10-12', 'virar_estoque', 'Caixa F1A virou caixa de estoque com 2 fêmeas', 'Bia'],
@@ -204,7 +204,7 @@ describe('os eventos da ficha', () => {
 
     expect(eventos.find((e) => e.dataHora.startsWith('2026-09-07'))).toMatchObject({
       tipo: 'acasalamento',
-      descricao: 'Acasalamento do 2º parto do casal AB, aberto sozinho 6 dias depois do parto anterior.',
+      descricao: 'Acasalamento do 2º parto do casal AB, aberto automaticamente 6 dias depois do parto anterior.',
       autor: 'Sistema',
     })
   })

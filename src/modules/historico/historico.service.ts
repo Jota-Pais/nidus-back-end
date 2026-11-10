@@ -57,8 +57,12 @@ export type LinhaDoHistorico = {
   idEntidade: number
   acao: string
   descricao: string
+  /** nome legivel de onde foi: 'Caixa F1A', 'Casal AB (F1A)', '2º parto do casal AB'... Null nas demais entidades */
+  onde: string | null
   dados: unknown
 }
+
+type LinhaSemOnde = Omit<LinhaDoHistorico, 'onde'>
 
 /**
  * As linhas do historico de antes do modelo por rato cujo fato a conversao para ele virou
@@ -97,7 +101,7 @@ const buscaOSistema = (busca: string) => NOME_DO_SISTEMA.toLowerCase().includes(
 
 // ------------------------------------------------------------ auditoria.historico
 
-async function doHistorico(filtro: FiltroDoHistorico): Promise<LinhaDoHistorico[]> {
+async function doHistorico(filtro: FiltroDoHistorico): Promise<LinhaSemOnde[]> {
   const naTrilha = await linhasQueForamParaATrilha()
 
   const registros = await prisma.historico.findMany({
@@ -188,7 +192,7 @@ const selecaoDaLinha = {
 
 type OcorrenciaDaLinha = Prisma.OcorrenciaGetPayload<{ select: typeof selecaoDaLinha }>
 
-function linhaDaOcorrencia(ocorrencia: OcorrenciaDaLinha): LinhaDoHistorico {
+function linhaDaOcorrencia(ocorrencia: OcorrenciaDaLinha): LinhaSemOnde {
   const dtFato = dataISO(ocorrencia.dtFato)
 
   return {
@@ -211,7 +215,7 @@ const PAGINA_DA_BUSCA = 200
  * As ocorrencias mais recentes do filtro. O texto da ocorrencia e montado aqui, entao a busca por
  * texto le a trilha em paginas, do registro mais novo para o mais velho, ate achar 'limite'
  */
-async function daTrilha(filtro: FiltroDoHistorico): Promise<LinhaDoHistorico[]> {
+async function daTrilha(filtro: FiltroDoHistorico): Promise<LinhaSemOnde[]> {
   const onde = ondeNaTrilha(filtro)
   if (onde === null) return []
 
@@ -224,11 +228,11 @@ async function daTrilha(filtro: FiltroDoHistorico): Promise<LinhaDoHistorico[]> 
   }
 
   const procurado = busca.toLowerCase()
-  const achou = (linha: LinhaDoHistorico) =>
+  const achou = (linha: LinhaSemOnde) =>
     linha.descricao.toLowerCase().includes(procurado) ||
     linha.usuario.toLowerCase().includes(procurado)
 
-  const achadas: LinhaDoHistorico[] = []
+  const achadas: LinhaSemOnde[] = []
   let depoisDe: number | undefined
 
   while (achadas.length < filtro.limite) {
@@ -251,15 +255,67 @@ async function daTrilha(filtro: FiltroDoHistorico): Promise<LinhaDoHistorico[]> 
 }
 
 /**
+ * O nome legivel de onde cada linha foi, lido em lote: uma consulta por entidade presente nas
+ * linhas, nunca uma por linha
+ */
+async function nomesDeOnde(linhas: LinhaSemOnde[]): Promise<Map<string, string>> {
+  const ids = (entidade: string) => [
+    ...new Set(linhas.filter((linha) => linha.entidade === entidade && linha.idEntidade > 0).map((linha) => linha.idEntidade)),
+  ]
+  const nomes = new Map<string, string>()
+  const [caixas, casais, partos, pedidos, estantes] = [ids('caixa'), ids('casal'), ids('parto'), ids('pedido'), ids('estante')]
+
+  await Promise.all([
+    caixas.length === 0
+      ? null
+      : prisma.caixa.findMany({ where: { id: { in: caixas } }, select: { id: true, codigo: true } }).then((lidas) => {
+          for (const caixa of lidas) nomes.set(`caixa:${caixa.id}`, `Caixa ${caixa.codigo}`)
+        }),
+    casais.length === 0
+      ? null
+      : prisma.casal
+          .findMany({ where: { id: { in: casais } }, select: { id: true, identificacao: true, caixa: { select: { codigo: true } } } })
+          .then((lidos) => {
+            for (const casal of lidos) nomes.set(`casal:${casal.id}`, `Casal ${casal.identificacao.trim()} (${casal.caixa.codigo})`)
+          }),
+    partos.length === 0
+      ? null
+      : prisma.parto
+          .findMany({ where: { id: { in: partos } }, select: { id: true, ordem: true, casal: { select: { identificacao: true } } } })
+          .then((lidos) => {
+            for (const parto of lidos) nomes.set(`parto:${parto.id}`, `${parto.ordem}º parto do casal ${parto.casal.identificacao.trim()}`)
+          }),
+    pedidos.length === 0
+      ? null
+      : prisma.pedido.findMany({ where: { id: { in: pedidos } }, select: { id: true } }).then((lidos) => {
+          for (const pedido of lidos) nomes.set(`pedido:${pedido.id}`, `Pedido #${pedido.id}`)
+        }),
+    estantes.length === 0
+      ? null
+      : prisma.estante.findMany({ where: { id: { in: estantes } }, select: { id: true, numeroVisivel: true } }).then((lidas) => {
+          for (const estante of lidas) nomes.set(`estante:${estante.id}`, `Estante ${estante.numeroVisivel}`)
+        }),
+  ])
+
+  return nomes
+}
+
+/**
  * GET /api/historico - as 'limite' linhas mais recentes do filtro, do historico e da trilha juntos,
  * pela data do registro
  */
 export async function listarHistorico(filtro: FiltroDoHistorico) {
   const [doHistoricoLidas, daTrilhaLidas] = await Promise.all([doHistorico(filtro), daTrilha(filtro)])
 
+  const linhas = [...doHistoricoLidas, ...daTrilhaLidas]
+    .sort((a, b) => b.dataHora.localeCompare(a.dataHora) || (a.fonte === b.fonte ? b.id - a.id : 0))
+    .slice(0, filtro.limite)
+  const nomes = await nomesDeOnde(linhas)
+
   return {
-    historico: [...doHistoricoLidas, ...daTrilhaLidas]
-      .sort((a, b) => b.dataHora.localeCompare(a.dataHora) || (a.fonte === b.fonte ? b.id - a.id : 0))
-      .slice(0, filtro.limite),
+    historico: linhas.map((linha): LinhaDoHistorico => ({
+      ...linha,
+      onde: nomes.get(`${linha.entidade}:${linha.idEntidade}`) ?? null,
+    })),
   }
 }

@@ -31,6 +31,8 @@ export async function listarUsuarios() {
   return { usuarios: usuarios.map(paraApi) }
 }
 
+const ROTULO_DO_PERFIL: Record<Perfil, string> = { tecnico: 'Técnico', gestor: 'Gestor', pesquisador: 'Pesquisador' }
+
 export type NovoUsuario = {
   nome: string
   email: string
@@ -61,7 +63,7 @@ export async function criarUsuario(dados: NovoUsuario, gestor: UsuarioDaSessao) 
       entidade: 'usuario',
       idEntidade: usuario.id,
       acao: 'cadastro',
-      descricao: `Conta de ${dados.nome} (${email}) criada como ${dados.perfil}`,
+      descricao: `Conta de ${dados.nome} (${email}) criada como ${ROTULO_DO_PERFIL[dados.perfil]}`,
       dados: { nome: dados.nome, email, perfil: dados.perfil },
     })
 
@@ -96,7 +98,7 @@ export async function alterarUsuario(
   const usuario = await prisma.usuario.findUnique({ where: { id } })
 
   if (usuario === null) {
-    throw naoEncontrado('Usuário')
+    throw naoEncontrado('Conta')
   }
 
   const perfilAntes = dicPerfil.paraApi(usuario.perfil)
@@ -153,7 +155,7 @@ export async function enviarRedefinicaoDeSenha(id: number, gestor: UsuarioDaSess
   const usuario = await prisma.usuario.findUnique({ where: { id } })
 
   if (usuario === null) {
-    throw naoEncontrado('Usuário')
+    throw naoEncontrado('Conta')
   }
 
   // A conta inativa nao recebe codigo: pedirCodigo responderia igual, mas o e-mail nao sairia

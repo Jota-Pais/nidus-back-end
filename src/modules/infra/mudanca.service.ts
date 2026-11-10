@@ -71,7 +71,7 @@ async function linhagemDosDesmamados(tx: Transacao, escolhidos: Escolhido[], dtF
   if (mamando !== undefined) {
     throw erroDeRegra(
       'SEQUENCIA_INVALIDA',
-      `A ninhada do ${mamando.ordem}º parto do casal ${mamando.casal.identificacao.trim()} ainda não desmamou: registre o desmame antes de mudar os animais de caixa.`,
+      `A ninhada do ${mamando.ordem}º parto do casal ${mamando.casal.identificacao.trim()} ainda não desmamou: registre o desmame antes de passar os animais para outra caixa.`,
     )
   }
 
@@ -242,7 +242,7 @@ export function viradaParaEstoque(caixa: CaixaParaVirar): Virada {
   if (caixa.partoPendente) {
     return recusa(
       'SEQUENCIA_INVALIDA',
-      'O casal desta caixa ainda tem um parto pendente: registre o nascimento ou feche o parto sem ninhada antes.',
+      'O casal desta caixa ainda tem um parto pendente: registre o parto ou feche o parto sem ninhada antes.',
     )
   }
 

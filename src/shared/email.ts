@@ -121,7 +121,7 @@ export async function enviarCodigoDeAcesso(
 
   await enviarPelaBrevo({
     para: email,
-    assunto: 'Seu código de acesso ao Nidus',
+    assunto: 'Seu código para definir a senha do Nidus',
     texto: [
       'Olá!',
       '',
@@ -170,7 +170,7 @@ export async function avisarSenhaAlterada(email: string, quando: Date): Promise<
       '',
       'Se foi você, não precisa fazer nada.',
       '',
-      'Se não foi você, troque a senha deste e-mail e avise a gestão do CPMR o quanto antes.',
+      'Se não foi você, troque a senha deste e-mail e avise a equipe o quanto antes.',
       '',
       NOME_DO_REMETENTE,
     ].join('\n'),
@@ -248,9 +248,9 @@ export async function avisarPedidoDecidido(
       'Olá!',
       '',
       aprovado
-        ? 'O CPMR aprovou o seu pedido de animais. Os animais serão separados até a data de ' +
-            'entrega, e você recebe outro e-mail quando eles estiverem reservados.'
-        : `O CPMR recusou o seu pedido de animais.`,
+        ? 'A equipe aprovou o seu pedido de animais. Os animais serão reservados para a data de ' +
+            'entrega, e você recebe outro e-mail quando a reserva estiver pronta.'
+        : 'A equipe recusou o seu pedido de animais.',
       '',
       ...(aprovado ? [] : [`Motivo: ${motivoDaRecusa}`, '']),
       ...linhasDoResumo(pedido),

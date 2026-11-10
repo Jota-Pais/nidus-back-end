@@ -512,7 +512,7 @@ describe('acasalamento automatico', () => {
       entidade: 'parto',
       idEntidade: partoDeOrdem(2)?.id,
       acao: 'acasalamento',
-      descricao: 'Acasalamento do 2º parto do casal AB em 2026-09-30, aberto sozinho 6 dias depois do 1º parto',
+      descricao: 'Acasalamento do 2º parto do casal AB em 30/09/2026, aberto automaticamente 6 dias depois do 1º parto',
       dados: { dtAcasalamento: '2026-09-30', automatico: true },
     })
     // a ficha que volta e a do parto que nasceu
@@ -557,7 +557,7 @@ describe('acasalamento automatico', () => {
       idUsuario: 4,
       entidade: 'parto',
       idEntidade: 2,
-      descricao: 'Acasalamento do 2º parto do casal AB em 2026-09-30 desfeito: o casal foi encerrado antes, em 2026-09-27',
+      descricao: 'Acasalamento do 2º parto do casal AB em 30/09/2026 desfeito: o casal foi encerrado antes, em 27/09/2026',
     })
     // a ninhada do 1o parto continua na caixa: ela nao libera
     expect(banco.liberadas).toEqual([])
@@ -741,7 +741,7 @@ describe('desmame', () => {
     expect(ciclo).toMatchObject({ dtDesmameReal: '2026-10-16', desmamadoM: 4, desmamadoF: 3 })
     expect(banco.historicos.at(-1)).toMatchObject({
       acao: 'desmame',
-      descricao: 'Desmame do 1º parto em 2026-10-16: 4 machos e 3 fêmeas',
+      descricao: 'Desmame do 1º parto em 16/10/2026: 4 machos e 3 fêmeas',
     })
   })
 
@@ -758,7 +758,7 @@ describe('desmame', () => {
 
     await expect(
       registrarDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 3, desmamadoF: 2 }, 4),
-    ).rejects.toEqual(noCampo('desmamadoM', 'corrija o nascimento'))
+    ).rejects.toEqual(noCampo('desmamadoM', 'corrija o parto'))
     expect(banco.partos.get(1)?.dtDesmameReal).toBeNull()
   })
 
@@ -1287,7 +1287,7 @@ describe('correcao da data do desmame', () => {
     banco.ocorrencias.push({ id: 1, tipo: 'mudanca', dtFato: d('2026-10-17'), idParto: null, motivo: null, ids, anulada: false })
 
     await expect(corrigirDesmame(1, { dtDesmameReal: '2026-10-18', motivo: 'x' }, 4)).rejects.toEqual(
-      noCampo('dtDesmameReal', 'primeira mudança de caixa'),
+      noCampo('dtDesmameReal', 'primeira passagem para outra caixa'),
     )
   })
 

@@ -248,7 +248,7 @@ describe('forma da reserva e da entrega', () => {
 
   it('o item sem animal, sem data ou no corpo antigo (idParto) e VALIDACAO no campo', async () => {
     const semAnimal = alocacao.safeParse({ itens: [{ ...item, machos: 0 }] })
-    expect(semAnimal.error?.issues[0]).toMatchObject({ path: ['itens', 0, 'machos'], message: 'Escolha ao menos um animal deste lugar.' })
+    expect(semAnimal.error?.issues[0]).toMatchObject({ path: ['itens', 0, 'machos'], message: 'Escolha ao menos um animal desta caixa.' })
 
     expect(alocacao.safeParse({ itens: [{ ...item, dtNascimento: '01/09/2026' }] }).success).toBe(false)
     expect(alocacao.safeParse({ itens: [{ idParto: 1, machos: 1, femeas: 0 }] }).success).toBe(false)

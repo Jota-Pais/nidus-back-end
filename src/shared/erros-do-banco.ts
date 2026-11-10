@@ -53,7 +53,7 @@ const POR_CONSTRAINT: Record<string, Traducao> = {
   },
   parto_id_casal_ordem_key: {
     codigo: 'SEQUENCIA_INVALIDA',
-    mensagem: 'Este parto já foi aberto por outro registro de acasalamento. Atualize a ficha.',
+    mensagem: 'Este parto já foi aberto por outro registro de acasalamento. Atualize a tela e tente de novo.',
   },
   // CHECK
   parto_ordem_ciclo: {
@@ -79,7 +79,7 @@ const POR_CONSTRAINT: Record<string, Traducao> = {
   // 'reproducao.service.ts'
   casal_grupo_macho_grupo_femea_fkey: {
     codigo: 'PAR_GENETICO_INVALIDO',
-    mensagem: 'Este par não está na rotação genética permitida.',
+    mensagem: 'Esta combinação não está na rotação genética permitida.',
   },
   usuario_email_key: {
     codigo: 'EMAIL_EM_USO',

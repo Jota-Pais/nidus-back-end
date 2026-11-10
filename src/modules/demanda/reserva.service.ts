@@ -65,7 +65,7 @@ type Lugar = {
 async function lerLugar(tx: Transacao, item: ItemDaReserva): Promise<Lugar> {
   const caixa = await tx.caixa.findUnique({ where: { id: item.idCaixa }, select: { codigo: true, ativa: true } })
 
-  if (caixa === null) throw naoEncontrado(`Caixa ${item.idCaixa}`)
+  if (caixa === null) throw naoEncontrado('Caixa')
   if (!caixa.ativa) throw caixaLiberada(caixa.codigo)
 
   const linhas = await tx.animal.groupBy({

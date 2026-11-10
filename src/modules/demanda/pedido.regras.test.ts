@@ -484,7 +484,7 @@ describe('pedido novo', () => {
         entidade: 'pedido',
         idEntidade: id,
         acao: 'criacao',
-        descricao: 'Pedido de 2 machos e 1 fêmea de Wistar para 2026-12-01',
+        descricao: 'Pedido de 2 machos e 1 fêmea de Wistar para 01/12/2026',
       }),
     ])
   })

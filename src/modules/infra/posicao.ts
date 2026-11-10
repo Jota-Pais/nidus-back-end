@@ -44,7 +44,7 @@ export async function lerPosicao(banco: Leitura, posicao: PosicaoNaEstante, camp
 export async function exigirPosicaoVazia(banco: Leitura, posicao: PosicaoNaEstante, campo: string) {
   const lida = await lerPosicao(banco, posicao, campo)
 
-  if (lida.ocupante !== null) throw campoInvalido(campo, 'Esta posição já tem uma caixa.')
+  if (lida.ocupante !== null) throw campoInvalido(campo, 'Esta posição da estante já tem uma caixa ativa.')
 
   return lida
 }

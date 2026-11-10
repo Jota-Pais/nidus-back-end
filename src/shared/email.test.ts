@@ -88,7 +88,7 @@ describe('codigo de acesso, em production, pela Brevo', () => {
     expect(corpo).toEqual({
       sender: { email: REMETENTE, name: NOME_DO_REMETENTE },
       to: [{ email: 'fulano@ufsc.br' }],
-      subject: 'Seu código de acesso ao Nidus',
+      subject: 'Seu código para definir a senha do Nidus',
       textContent: expect.any(String),
     })
   })
@@ -224,7 +224,7 @@ describe('aviso de senha alterada, em production', () => {
     expect(textContent).toContain('foi alterada em 30/10/2026, às 22:30 (horário de Brasília)')
     expect(textContent).toContain('As sessões abertas antes disso foram encerradas.')
     expect(textContent).toContain('Se foi você, não precisa fazer nada.')
-    expect(textContent).toContain('Se não foi você, troque a senha deste e-mail e avise a gestão do CPMR')
+    expect(textContent).toContain('Se não foi você, troque a senha deste e-mail e avise a equipe')
   })
 
   it('a recusa da Brevo vira erro, sem a chave', async () => {
@@ -267,9 +267,9 @@ describe('aviso do pedido decidido', () => {
     expect(corpo.to).toEqual([{ email: 'ana@ufsc.br' }])
     expect(corpo.subject).toBe('Seu pedido de animais foi aprovado')
     expect(corpo.textContent).toContain('aprovou o seu pedido de animais')
-    // aprovar nao e reservar: os animais sao separados depois, e vem outro e-mail
-    expect(corpo.textContent).toContain('Os animais serão separados até a data de entrega')
-    expect(corpo.textContent).toContain('você recebe outro e-mail quando eles estiverem reservados')
+    // aprovar nao e reservar: os animais sao reservados depois, e vem outro e-mail
+    expect(corpo.textContent).toContain('Os animais serão reservados para a data de entrega')
+    expect(corpo.textContent).toContain('você recebe outro e-mail quando a reserva estiver pronta')
     expect(corpo.textContent).toContain('Protocolo CEUA: 23080.000001/2026-54')
     expect(corpo.textContent).toContain('Linhagem: Wistar')
     expect(corpo.textContent).toContain('Animais: 2 machos, 1 fêmea')
@@ -287,7 +287,7 @@ describe('aviso do pedido decidido', () => {
     expect(corpo.subject).toBe('Seu pedido de animais foi recusado')
     expect(corpo.textContent).toContain('recusou o seu pedido de animais')
     expect(corpo.textContent).toContain('Motivo: Sem Wistar até dezembro')
-    expect(corpo.textContent).not.toContain('separados')
+    expect(corpo.textContent).not.toContain('reservados para')
   })
 })
 

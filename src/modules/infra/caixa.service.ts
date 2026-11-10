@@ -47,7 +47,7 @@ export async function mudarDePosicao(idCaixa: number, destino: PosicaoNaEstante,
       entidade: 'caixa',
       idEntidade: idCaixa,
       acao: 'mudanca_de_posicao',
-      descricao: `Caixa movida de ${caixa.codigo} para ${movida.codigo} (estante ${posicao.estante.numeroVisivel})`,
+      descricao: `Caixa ${movida.codigo} mudou de lugar: de ${caixa.codigo} para ${movida.codigo} (estante ${posicao.estante.numeroVisivel})`,
       dados: {
         antes: { idEstante: caixa.idEstante, codigo: caixa.codigo },
         depois: { idEstante: posicao.estante.id, codigo: movida.codigo },

@@ -277,7 +277,7 @@ export async function anularBaixa(
     }
 
     if (baixa.anulacoes.length > 0) {
-      throw erroDeRegra('OCORRENCIA_JA_ANULADA', 'Esta baixa já foi anulada. Atualize a ficha.')
+      throw erroDeRegra('OCORRENCIA_JA_ANULADA', 'Esta baixa já foi anulada. Atualize a tela e tente de novo.')
     }
 
     const animais = baixa.animais.map(({ animal }) => animalDaBaixa(animal))

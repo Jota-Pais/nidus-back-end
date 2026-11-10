@@ -2,7 +2,7 @@
 
 import type { Prisma } from '@prisma/client'
 import { erroDeRegra } from '../../shared/erros.ts'
-import { dataISO, paraData } from '../../shared/traducao.ts'
+import { dataISO, dataLegivel, paraData } from '../../shared/traducao.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
 import { travarCaixas } from './travas.ts'
 import type { MotivoDaLiberacao } from './tipos.ts'
@@ -11,14 +11,14 @@ type Transacao = Pick<Prisma.TransactionClient, '$queryRaw' | 'caixa' | 'animal'
 
 const POR_QUE: Record<MotivoDaLiberacao, string> = {
   entrega: 'a entrega levou os últimos animais',
-  baixa: 'não sobrou animal vivo nela',
-  mudanca: 'os animais foram para outra caixa',
-  casal_encerrado: 'o casal encerrou e não sobrou animal nela',
+  baixa: 'a baixa dos últimos animais a esvaziou',
+  mudanca: 'os últimos animais passaram para outra caixa',
+  casal_encerrado: 'o casal encerrou sem animais nela',
 }
 
 /** A caixa liberada nao recebe nem perde animal: a posicao ja pode ter outra caixa */
 export function caixaLiberada(codigo: string) {
-  return erroDeRegra('CAIXA_LIBERADA', `A caixa ${codigo} já foi liberada. Atualize a tela.`)
+  return erroDeRegra('CAIXA_LIBERADA', `A caixa ${codigo} já foi liberada. Atualize a tela e tente de novo.`)
 }
 
 /** O parto que ainda pode nascer: nem nasceu, nem foi fechado sem ninhada */
@@ -108,7 +108,7 @@ export async function liberarSeVazia(
     entidade: 'caixa',
     idEntidade: idCaixa,
     acao: 'liberacao',
-    descricao: `Caixa ${caixa.codigo} liberada em ${dtLiberacao}: ${POR_QUE[motivo]}`,
+    descricao: `Caixa ${caixa.codigo} liberada em ${dataLegivel(dtLiberacao)}: ${POR_QUE[motivo]}`,
     dados: { dtLiberacao, motivo },
   })
 

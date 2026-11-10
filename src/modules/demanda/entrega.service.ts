@@ -81,7 +81,7 @@ export function exigirQueServemNaEntrega(
 
 /** Os animais mudaram de caixa entre a leitura e a trava: nada fica, e a tela recarrega */
 function animaisMudaram() {
-  return erroDeRegra('SEM_ANIMAIS', 'Os animais do pedido mudaram durante o registro. Atualize e tente de novo.')
+  return erroDeRegra('SEM_ANIMAIS', 'Os animais do pedido mudaram durante o registro. Atualize a tela e tente de novo.')
 }
 
 /**

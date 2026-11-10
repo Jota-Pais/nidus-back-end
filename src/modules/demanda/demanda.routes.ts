@@ -138,11 +138,11 @@ export const alocacao = z.object({
         })
         .refine((item) => item.machos + item.femeas > 0, {
           path: ['machos'],
-          error: 'Escolha ao menos um animal deste lugar.',
+          error: 'Escolha ao menos um animal desta caixa.',
         }),
     )
     .min(1, 'Escolha ao menos uma caixa.')
-    .max(100, 'No máximo 100 lugares numa reserva.'),
+    .max(100, 'No máximo 100 caixas numa reserva.'),
 })
 
 /**

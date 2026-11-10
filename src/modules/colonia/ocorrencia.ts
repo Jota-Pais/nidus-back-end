@@ -105,7 +105,7 @@ export type Lancado = { idOcorrencia: number; ids: number[] }
 
 /** Os animais mudaram entre a escolha e a escrita: nada fica, e a tela recarrega */
 function animaisMudaram() {
-  return erroDeRegra('SEM_ANIMAIS', 'Os animais mudaram durante o registro. Atualize a ficha e tente de novo.')
+  return erroDeRegra('SEM_ANIMAIS', 'Os animais mudaram durante o registro. Atualize a tela e tente de novo.')
 }
 
 /** UPDATE dos animais que estao no estado esperado. Se faltar algum, desfaz tudo */

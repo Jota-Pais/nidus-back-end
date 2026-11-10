@@ -47,9 +47,9 @@ describe('numero do Sistema CEUA', () => {
   })
 
   it('data que nao existe ou que ainda nao chegou e recusada', () => {
-    expect(conferirProtocolo('1234310220', HOJE)).toBe('Protocolo no formato incorreto.')
-    expect(conferirProtocolo('1234001320', HOJE)).toBe('Protocolo no formato incorreto.')
-    expect(conferirProtocolo('1234061126', HOJE)).toBe('Protocolo no formato incorreto.')
+    expect(conferirProtocolo('1234310220', HOJE)).toBe('Protocolo CEUA no formato incorreto.')
+    expect(conferirProtocolo('1234001320', HOJE)).toBe('Protocolo CEUA no formato incorreto.')
+    expect(conferirProtocolo('1234061126', HOJE)).toBe('Protocolo CEUA no formato incorreto.')
   })
 
   it('com a pontuacao do processo, ou com digito a menos, e recusado', () => {
