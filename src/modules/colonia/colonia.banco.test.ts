@@ -567,8 +567,9 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
 
     const grade = await montarGrade(idEstante)
     const naGrade = grade.faces.flatMap((face) => face.posicoes).filter((p) => p.caixa !== null)
-    expect(naGrade.map((p) => [p.codigo, p.caixa?.estado, p.caixa?.idLinhagem])).toEqual([
-      ['F1A', 'livres', idLinhagem],
+    // na caixa do casal ficaram desmamados: pronta para o estoque
+    expect(naGrade.map((p) => [p.codigo, p.caixa?.fase, p.caixa?.idLinhagem])).toEqual([
+      ['F1A', 'pronto_estoque', idLinhagem],
       ['F1B', 'estoque', idLinhagem],
     ])
     expect(naGrade[1]?.caixa?.estoque).toMatchObject({ sexo: 'M', total: 1, reservado: 0 })

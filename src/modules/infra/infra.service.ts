@@ -92,7 +92,8 @@ export async function montarGrade(id: number) {
               ? null
               : {
                   id: caixa.id,
-                  estado: caixa.estado,
+                  fase: caixa.fase,
+                  atrasado: caixa.atrasado,
                   idLinhagem: caixa.idLinhagem,
                   linhagem: caixa.linhagem,
                   casal: caixa.casal,

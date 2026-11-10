@@ -174,7 +174,7 @@ describe('a leitura dos cards', () => {
     },
   })
 
-  it('a coluna de cada caixa sai do que ela tem, e a linhagem da caixa de estoque e a dela', async () => {
+  it('a fase de cada caixa sai do que ela tem, e a linhagem da caixa de estoque e a dela', async () => {
     const casal = { identificacao: 'AB', ativo: true, linhagem: { nome: 'Kyoto' }, partos: [parto(1, '2026-08-01', '2026-08-24')] }
     const cards = await lerCards(
       banco(
@@ -190,11 +190,12 @@ describe('a leitura dos cards', () => {
       hoje,
     )
 
-    expect(cards.map((c) => [c.codigo, c.estado, c.linhagem])).toEqual([
-      ['F1A', 'livres', 'Kyoto'],
-      ['F1B', 'estoque', 'Wistar'],
-      ['F1C', 'reserva', 'Wistar'],
-      ['F1D', 'enviado', 'Wistar'],
+    // F1A: desmamados ainda na caixa do casal; a de estoque e estoque, reservada ou nao; a liberada nao tem fase
+    expect(cards.map((c) => [c.codigo, c.fase, c.atrasado, c.linhagem])).toEqual([
+      ['F1A', 'pronto_estoque', false, 'Kyoto'],
+      ['F1B', 'estoque', false, 'Wistar'],
+      ['F1C', 'estoque', false, 'Wistar'],
+      ['F1D', null, false, 'Wistar'],
     ])
     expect(cards[0]?.casal).toMatchObject({ identificacao: 'AB', reservado: 2 })
     expect(cards[0]?.estoque).toBeNull()
@@ -202,13 +203,13 @@ describe('a leitura dos cards', () => {
     expect(cards[1]?.estoque).toMatchObject({ sexo: 'M', idLinhagem: 3, total: 4, reservado: 1 })
   })
 
-  it('a caixa liberada que nao e enviada nao tem coluna', async () => {
+  it('a caixa liberada nao tem fase', async () => {
     const [card] = await lerCards(
       banco([caixa(1, { ativa: false, motivoLiberacao: 'baixa', dtLiberacao: d('2026-11-05') })], []) as never,
       {},
       hoje,
     )
 
-    expect(card?.estado).toBeNull()
+    expect(card?.fase).toBeNull()
   })
 })

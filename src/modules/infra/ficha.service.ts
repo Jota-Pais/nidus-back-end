@@ -6,13 +6,13 @@
 import { naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { codigoDaEspecie, dataISO } from '../../shared/traducao.ts'
-import { colunaDaCaixa } from '../colonia/coluna.ts'
 import { chegadaDosAnimais } from '../colonia/escolha.ts'
 import { semVivos, vivosNasCaixas } from '../colonia/consultas.ts'
+import { faseDaCaixa } from '../colonia/fase.ts'
 import type { MotivoDaLiberacao, PorSexo, Sexo } from '../colonia/tipos.ts'
 import { cicloFicha } from '../reproducao/cicloFicha.ts'
 import { casalFicha } from '../reproducao/reproducao.service.ts'
-import { gruposPorNascimento } from './card.ts'
+import { gruposPorNascimento, partoPrevisto } from './card.ts'
 import { eventosDaCaixa } from './eventos.ts'
 import { viradaParaEstoque } from './mudanca.service.ts'
 
@@ -84,8 +84,8 @@ function daIdade(vivos: VivoUmAUm[], dtNascimento: string) {
 }
 
 /**
- * GET /api/caixas/:id - a ficha da caixa, de casal ou de estoque. 'estado' e a coluna da caixa
- * (colunaDaCaixa; null na caixa liberada que nao foi enviada)
+ * GET /api/caixas/:id - a ficha da caixa, de casal ou de estoque. 'fase' e 'atrasado' sao os da
+ * grade (faseDaCaixa): null na caixa liberada
  */
 export async function montarFicha(idCaixa: number) {
   const caixa = await prisma.caixa.findUnique({
@@ -103,7 +103,16 @@ export async function montarFicha(idCaixa: number) {
       linhagem: { select: { nome: true } },
       estante: { select: { numeroVisivel: true, sala: { select: { nome: true } } } },
       // o casal ativo (ou o mais recente, a ficha e historico) primeiro, e depois os que vieram antes
-      casais: { orderBy: [{ ativo: 'desc' }, { dtFormacao: 'desc' }, { id: 'desc' }], select: { id: true } },
+      casais: {
+        orderBy: [{ ativo: 'desc' }, { dtFormacao: 'desc' }, { id: 'desc' }],
+        select: {
+          id: true,
+          partos: {
+            orderBy: { ordem: 'asc' },
+            select: { ordem: true, dtAcasalamento: true, dtPartoReal: true, dtSemNinhada: true },
+          },
+        },
+      },
     },
   })
 
@@ -126,13 +135,12 @@ export async function montarFicha(idCaixa: number) {
     id: caixa.id,
     endereco: { numeroVisivel: caixa.estante.numeroVisivel, sala: caixa.estante.sala.nome, codigo: caixa.codigo },
     especie: codigoDaEspecie(caixa.especie.nome),
-    estado: colunaDaCaixa({
+    ...faseDaCaixa({
       tipo: deEstoque ? 'estoque' : 'casal',
       ativa: caixa.ativa,
-      motivoLiberacao,
-      dtLiberacao,
-      vivos: total,
-      reservados: reservado,
+      ninhadas: naCaixa.partos,
+      // o casal da caixa e o primeiro: o ativo, ou o mais recente
+      partoPrevisto: deEstoque || caixa.casais[0] === undefined ? null : partoPrevisto(caixa.casais[0].partos),
     }),
     ativa: caixa.ativa,
     dtLiberacao,

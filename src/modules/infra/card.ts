@@ -1,16 +1,16 @@
 // O card de cada caixa, como a grade da estante mostra (spec do cliente, secao 1.13).
 // A caixa de casal mostra o casal, o parto em curso, a previsao do proximo e os vivos dela por
 // ninhada; a de estoque, o sexo, a linhagem e os vivos por data de nascimento. Os numeros sao
-// todos contados nos animais (vivosNasCaixas), e a coluna sai de colunaDaCaixa
+// todos contados nos animais (vivosNasCaixas), e a fase (a cor na grade) sai de faseDaCaixa
 
 import type { Prisma } from '@prisma/client'
 import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { dataISO, hojeISO } from '../../shared/traducao.ts'
-import { colunaDaCaixa } from '../colonia/coluna.ts'
-import type { Coluna } from '../colonia/coluna.ts'
 import { semVivos, vivosNasCaixas } from '../colonia/consultas.ts'
+import { faseDaCaixa } from '../colonia/fase.ts'
+import type { Fase } from '../colonia/fase.ts'
 import type { VivosDoParto, VivosNaCaixa } from '../colonia/consultas.ts'
-import type { MotivoDaLiberacao, PorSexo, Sexo } from '../colonia/tipos.ts'
+import type { PorSexo, Sexo } from '../colonia/tipos.ts'
 import { calcularCicloInicial, diasEntre } from '../reproducao/cadeiaTemporal.ts'
 
 // ------------------------------------------------------------ o casal
@@ -156,8 +156,6 @@ const selecaoDaCaixaDoCard = {
   sexo: true,
   idLinhagem: true,
   ativa: true,
-  dtLiberacao: true,
-  motivoLiberacao: true,
   estante: { select: { numeroVisivel: true } },
   linhagem: { select: { nome: true } },
   // o casal da caixa: o ativo, ou o mais recente
@@ -179,7 +177,7 @@ const selecaoDaCaixaDoCard = {
 
 type Leitura = Pick<Prisma.TransactionClient, 'caixa' | 'animal' | 'parto' | 'pedido'>
 
-/** Uma caixa com o card dela: o endereco, a coluna (a cor na grade) e o que mostra */
+/** Uma caixa com o card dela: o endereco, a fase (a cor na grade) e o que mostra */
 export type CardDaCaixa = {
   id: number
   face: number
@@ -187,8 +185,10 @@ export type CardDaCaixa = {
   coluna: number
   codigo: string
   numeroVisivel: string
-  /** a coluna da caixa (colunaDaCaixa); null na caixa liberada que nao foi enviada */
-  estado: Coluna | null
+  /** a fase da caixa (faseDaCaixa); null na liberada e na de casal sem ciclo aberto */
+  fase: Fase | null
+  /** o parto previsto passou sem nascimento, ou um filhote passou da idade de desmamar */
+  atrasado: boolean
   /** a linhagem da caixa de estoque, ou a do casal da caixa; null sem nenhuma */
   idLinhagem: number | null
   linhagem: string | null
@@ -224,14 +224,12 @@ export async function lerCards(banco: Leitura, onde: Prisma.CaixaWhereInput, hoj
       coluna: caixa.coluna,
       codigo: caixa.codigo,
       numeroVisivel: caixa.estante.numeroVisivel,
-      estado: colunaDaCaixa(
+      ...faseDaCaixa(
         {
           tipo: deEstoque ? 'estoque' : 'casal',
           ativa: caixa.ativa,
-          motivoLiberacao: caixa.motivoLiberacao as MotivoDaLiberacao | null,
-          dtLiberacao: caixa.dtLiberacao === null ? null : dataISO(caixa.dtLiberacao),
-          vivos: somaDe(naCaixa.vivos),
-          reservados: somaDe(naCaixa.reservados),
+          ninhadas: naCaixa.partos,
+          partoPrevisto: casal === undefined ? null : partoPrevisto(casal.partos),
         },
         hoje,
       ),

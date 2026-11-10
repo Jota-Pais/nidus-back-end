@@ -87,7 +87,17 @@ const caixa = (campos: Record<string, unknown> = {}) => ({
   especie: { nome: 'Rato' },
   linhagem: null,
   estante: { numeroVisivel: 'E1', sala: { nome: 'Sala 1' } },
-  casais: [{ id: 2 }, { id: 1 }],
+  // o casal ativo, com o 1o parto nascido e o 2o acasalado em 07/09 (parto previsto em 30/09), e o de antes
+  casais: [
+    {
+      id: 2,
+      partos: [
+        { ordem: 1, dtAcasalamento: d('2026-08-09'), dtPartoReal: d('2026-09-01'), dtSemNinhada: null },
+        { ordem: 2, dtAcasalamento: d('2026-09-07'), dtPartoReal: null, dtSemNinhada: null },
+      ],
+    },
+    { id: 1, partos: [] },
+  ],
   ...campos,
 })
 
@@ -112,7 +122,7 @@ beforeEach(() => {
 })
 
 describe('a ficha da caixa de casal', () => {
-  it('o casal da caixa com os partos, os casais de antes, a coluna e os eventos', async () => {
+  it('o casal da caixa com os partos, os casais de antes, a fase e os eventos', async () => {
     const ficha = await montarFicha(7)
 
     expect(ficha).toMatchObject({
@@ -124,7 +134,9 @@ describe('a ficha da caixa de casal', () => {
         especie: 'rato',
         linhagem: 'Wistar',
         idLinhagem: 3,
-        estado: 'livres',
+        // desmamados do 1o parto ainda na caixa, e o 2o passou da data prevista sem nascer
+        fase: 'pronto_estoque',
+        atrasado: true,
         ativa: true,
         dtLiberacao: null,
       },
@@ -161,12 +173,13 @@ describe('a ficha da caixa de casal', () => {
     expect((await montarFicha(7)).virarEstoque).toBeNull()
   })
 
-  it('a caixa liberada continua tendo ficha, fora do Kanban', async () => {
+  it('a caixa liberada continua tendo ficha, sem fase', async () => {
     banco.caixa = caixa({ ativa: false, dtLiberacao: d('2026-10-30'), motivoLiberacao: 'casal_encerrado' })
     banco.vivos = naCaixa([])
 
     expect((await montarFicha(7)).caixa).toMatchObject({
-      estado: null,
+      fase: null,
+      atrasado: false,
       ativa: false,
       dtLiberacao: '2026-10-30',
       motivoLiberacao: 'casal_encerrado',
@@ -215,7 +228,7 @@ describe('a ficha da caixa de estoque', () => {
 
     expect(ficha).toMatchObject({
       tipo: 'estoque',
-      caixa: { id: 7, linhagem: 'Wistar', idLinhagem: 3, sexo: 'M', estado: 'estoque' },
+      caixa: { id: 7, linhagem: 'Wistar', idLinhagem: 3, sexo: 'M', fase: 'estoque', atrasado: false },
       total: 8,
       reservado: 3,
       livre: 5,
@@ -286,7 +299,7 @@ describe('a ficha da caixa de estoque', () => {
     expect(ficha).toMatchObject({ casaisAnteriores: [{ casal: { identificacao: 'AB' }, partos: [{ id: 10 }] }] })
   })
 
-  it('a enviada aparece em Enviado na semana da entrega, sem vivo', async () => {
+  it('a esvaziada pela entrega continua tendo ficha, sem vivo e sem fase', async () => {
     banco.caixa = caixa({
       tipo: 'estoque',
       sexo: 'M',
@@ -299,6 +312,6 @@ describe('a ficha da caixa de estoque', () => {
     })
     banco.vivos = naCaixa([])
 
-    expect(await montarFicha(7)).toMatchObject({ caixa: { estado: 'enviado', ativa: false }, total: 0, grupos: [] })
+    expect(await montarFicha(7)).toMatchObject({ caixa: { fase: null, ativa: false }, total: 0, grupos: [] })
   })
 })

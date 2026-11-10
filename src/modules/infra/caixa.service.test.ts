@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { montarGrade } from './infra.service.ts'
 
 // A grade com o banco de mentira: as caixas que cada teste deixa em 'banco' e os vivos delas. A
-// coluna de cada caixa sai dos animais, nada vem gravado
+// fase de cada caixa sai dos animais, nada vem gravado
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 
@@ -78,7 +78,7 @@ beforeEach(() => {
 })
 
 describe('a grade da estante', () => {
-  it('cada posicao com o codigo da etiqueta; a ocupada traz a coluna, a linhagem e o card da caixa', async () => {
+  it('cada posicao com o codigo da etiqueta; a ocupada traz a fase, a linhagem e o card da caixa', async () => {
     banco.caixas = [caixa(2)]
     banco.linhas = [vivos(2, 'F', null, 3), vivos(2, 'F', 9, 1)]
 
@@ -90,7 +90,8 @@ describe('a grade da estante', () => {
     expect(face?.posicoes[0]?.caixa).toBeNull()
     expect(face?.posicoes[1]?.caixa).toEqual({
       id: 2,
-      estado: 'estoque',
+      fase: 'estoque',
+      atrasado: false,
       idLinhagem: 3,
       linhagem: 'Wistar',
       casal: null,
@@ -100,14 +101,16 @@ describe('a grade da estante', () => {
     expect(banco.onde).toEqual({ idEstante: 1, ativa: true })
   })
 
-  it('a caixa do casal traz a linhagem do casal, para a grade filtrar por ela', async () => {
+  it('a caixa do casal traz a linhagem do casal, para a grade filtrar por ela, e a fase dos animais dela', async () => {
     banco.caixas = [caixa(1, { tipo: 'casal', sexo: null, idLinhagem: null, linhagem: null, casais: [casal] })]
     banco.linhas = [vivos(1, 'M', 9, 5)]
 
     const grade = await montarGrade(1)
 
     expect(grade.faces[0]?.posicoes[0]?.caixa).toMatchObject({
-      estado: 'livres',
+      // os vivos do parto ja desmamaram e continuam na caixa do casal
+      fase: 'pronto_estoque',
+      atrasado: false,
       idLinhagem: 5,
       linhagem: 'Kyoto',
       casal: { identificacao: 'AB', reservado: 5 },

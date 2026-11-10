@@ -54,8 +54,11 @@ O que mora aqui:
   só os reservados dele. A reserva vai junto. A caixa do casal
   encerrado com desmamados de um sexo vira de estoque no lugar
   (`POST /api/caixas/:id/estoque`). A caixa que esvazia é liberada com a data e o
-  motivo do fato. A coluna da caixa (a cor na grade) não é gravada: sai do que a
-  caixa tem (`colunaDaCaixa`)
+  motivo do fato. A fase da caixa (a cor na grade e na ficha) não é gravada: sai
+  do que a caixa tem (`faseDaCaixa`). A de casal fica pronta para o estoque se
+  ainda tem desmamados; senão, mamando se tem filhotes; senão, acasalada se tem
+  parto pendente. A de estoque fica em estoque. `atrasado` marca o parto
+  previsto que passou sem nascimento e o filhote com mais de 22 dias sem desmame
 - **Pedidos** - o pedido do pesquisador, com o protocolo CEUA dele, sem
   depender de projeto cadastrado: machos, fêmeas e animais de qualquer sexo, com
   idade exata ou faixa de idade
