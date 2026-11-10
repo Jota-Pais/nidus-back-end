@@ -1,8 +1,32 @@
 import { describe, expect, it } from 'vitest'
-import { dePara, descricaoDaCorrecao, planoDaContagem } from './correcao.service.ts'
+import { acasalamentoQueAcompanha, dePara, descricaoDaCorrecao, planoDaContagem } from './correcao.service.ts'
 
 // O plano da correcao da contagem do nascimento. As regras da correcao contra os animais e a
 // trilha estao em reproducao.regras.test.ts
+
+const d =(iso: string) => new Date(`${iso}T00:00:00.000Z`)
+const pendente = (dtAcasalamento: string) => ({ id: 2, dtAcasalamento: d(dtAcasalamento), dtPartoReal: null, dtSemNinhada: null })
+
+describe('o acasalamento seguinte na correcao da data do nascimento', () => {
+  it('o que o sistema abriu (6 dias depois) acompanha a data nova', () => {
+    expect(acasalamentoQueAcompanha(pendente('2026-09-30'), '2026-09-24', '2026-09-26')).toEqual({
+      idParto: 2,
+      antes: '2026-09-30',
+      depois: '2026-10-02',
+    })
+  })
+
+  it('o corrigido a mao, o nascido e o fechado sem ninhada ficam', () => {
+    expect(acasalamentoQueAcompanha(pendente('2026-09-29'), '2026-09-24', '2026-09-26')).toBeNull()
+    expect(acasalamentoQueAcompanha({ ...pendente('2026-09-30'), dtPartoReal: d('2026-10-23') }, '2026-09-24', '2026-09-26')).toBeNull()
+    expect(acasalamentoQueAcompanha({ ...pendente('2026-09-30'), dtSemNinhada: d('2026-10-30') }, '2026-09-24', '2026-09-26')).toBeNull()
+  })
+
+  it('sem parto seguinte, ou com a mesma data, nada acompanha', () => {
+    expect(acasalamentoQueAcompanha(null, '2026-09-24', '2026-09-26')).toBeNull()
+    expect(acasalamentoQueAcompanha(pendente('2026-09-30'), '2026-09-24', '2026-09-24')).toBeNull()
+  })
+})
 
 describe('plano da correcao da contagem', () => {
   it('um sexo sobe e o outro desce: a diferenca comum e troca de sexo', () => {

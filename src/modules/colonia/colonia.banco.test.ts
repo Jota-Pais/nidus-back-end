@@ -15,7 +15,6 @@ import {
   encerrarCasal,
   fecharSemNinhada,
   formarCasal,
-  registrarAcasalamento,
   registrarDesmame,
   registrarNascimento,
   registrarSelecao,
@@ -143,6 +142,16 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
     return { idCaixa: formado.idCaixa, idCasal: formado.casal.id, idParto }
   }
 
+  /**
+   * O parto 2, que o nascimento do 1o abriu sozinho (6 dias depois), com o acasalamento na data do
+   * cenario. Direto na tabela: o caso nao e a correcao, que tem o caso dela
+   */
+  async function acasalamentoEm(idCasal: number, dtAcasalamento: string) {
+    const parto2 = await tx().parto.findFirstOrThrow({ where: { idCasal, ordem: 2 }, select: { id: true } })
+    await tx().parto.update({ where: { id: parto2.id }, data: { dtAcasalamento: new Date(`${dtAcasalamento}T00:00:00.000Z`) } })
+    return parto2
+  }
+
   // ------------------------------------------------------------------ casos
 
   it('o ciclo do casal: a caixa nasce na posicao, o nascimento cria os animais, a selecao se repete e o desmame da baixa na diferenca', async () => {
@@ -186,7 +195,7 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
 
   it('o parto seguinte nao nasce com a ninhada anterior viva na caixa do casal', async () => {
     const { idCasal } = await casalComNinhada({ linha: 1, coluna: 1 }, { m: 2, f: 2 })
-    const parto2 = await registrarAcasalamento(idCasal, { dtAcasalamento: daqui(-30) }, tecnico)
+    const parto2 = await acasalamentoEm(idCasal, daqui(-30))
 
     await expect(registrarNascimento(parto2.id, { dtPartoReal: daqui(-7), nascidoM: 3, nascidoF: 3 }, tecnico)).rejects.toEqual(
       expect.objectContaining({ codigo: 'CAIXA_COM_ANIMAIS' }),
@@ -290,7 +299,7 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
       tecnico,
     )
     const [machos, femeas] = caixas.map((c) => c.idCaixa)
-    const parto2 = await registrarAcasalamento(idCasal, { dtAcasalamento: daqui(-24) }, tecnico)
+    const parto2 = await acasalamentoEm(idCasal, daqui(-24))
     await registrarNascimento(parto2.id, { dtPartoReal: daqui(-2), nascidoM: 2, nascidoF: 2 }, tecnico)
     const [baixa] = await tx().$queryRawUnsafe<{ id: number }[]>(
       `SELECT id FROM colonia.ocorrencia WHERE tipo = 'baixa' AND id_parto = $1`,
@@ -457,9 +466,24 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
     expect(await caixa(femeas ?? 0)).toMatchObject({ ativa: false, motivo: 'baixa' })
   })
 
+  it('o nascimento abre o acasalamento seguinte 6 dias depois, e o encerramento antes dele o desfaz', async () => {
+    const { idCaixa, idCasal } = await casalComNinhada({ linha: 1, coluna: 1 }, { m: 1, f: 1 })
+    const aberto = await tx().parto.findFirstOrThrow({ where: { idCasal, ordem: 2 } })
+    expect(aberto).toMatchObject({ dtPartoReal: null, dtSemNinhada: null })
+    expect(aberto.dtAcasalamento.toISOString().slice(0, 10)).toBe(daqui(-44))
+    const ficha = await montarFicha(idCaixa)
+    expect(ficha.eventos.find((e) => e.tipo === 'acasalamento' && e.descricao.includes('2º parto'))).toMatchObject({
+      autor: 'Sistema',
+      descricao: 'Acasalamento do 2º parto do casal AB, aberto sozinho 6 dias depois do parto anterior.',
+    })
+
+    await encerrarCasal(idCasal, { dtEncerramento: daqui(-46), motivo: 'macho separado' }, tecnico)
+    expect(await tx().parto.findFirst({ where: { idCasal, ordem: 2 } })).toBeNull()
+  })
+
   it('o casal encerrado com parto pendente segura a caixa; o parto sem ninhada a libera', async () => {
     const { idCaixa, idCasal } = await casalComNinhada({ linha: 1, coluna: 1 }, { m: 1, f: 1 })
-    const parto2 = await registrarAcasalamento(idCasal, { dtAcasalamento: daqui(-30) }, tecnico)
+    const parto2 = await acasalamentoEm(idCasal, daqui(-30))
     await registrarMudanca(
       idCaixa,
       { dtFato: daqui(-20), machos: { qtd: 1, destino: { posicao: posicao(1, 2) } }, femeas: { qtd: 1, destino: { posicao: posicao(1, 3) } } },
@@ -480,6 +504,11 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
 
     await expect(virarCaixaDeEstoque(idCaixa, tecnico)).rejects.toEqual(expect.objectContaining({ status: 409 }))
     await encerrarCasal(idCasal, { dtEncerramento: daqui(-20), motivo: 'virou estoque' }, tecnico)
+    // o acasalamento que o nascimento abriu (6 dias depois dele) e de antes do encerramento: o
+    // parto 2 fica pendente ate fechar sem ninhada
+    const parto2 = await tx().parto.findFirstOrThrow({ where: { idCasal, ordem: 2 }, select: { id: true, dtAcasalamento: true } })
+    expect(parto2.dtAcasalamento.toISOString().slice(0, 10)).toBe(daqui(-44))
+    await fecharSemNinhada(parto2.id, { dtSemNinhada: daqui(-19), motivo: 'não emprenhou' }, tecnico)
     expect(await virarCaixaDeEstoque(idCaixa, tecnico)).toEqual({ idCaixa, sexo: 'M' })
 
     expect(await caixa(idCaixa)).toMatchObject({ tipo: 'estoque', ativa: true })
@@ -544,7 +573,7 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
 
   it('a correcao do acasalamento muda a data e a ficha diz de quanto para quanto', async () => {
     const { idCaixa, idCasal } = await casalComNinhada({ linha: 1, coluna: 1 }, { m: 1, f: 0 })
-    const parto2 = await registrarAcasalamento(idCasal, { dtAcasalamento: daqui(-30) }, tecnico)
+    const parto2 = await acasalamentoEm(idCasal, daqui(-30))
 
     expect(await corrigirAcasalamento(parto2.id, { dtAcasalamento: daqui(-32), motivo: 'digitado errado' }, tecnico)).toMatchObject({
       dtAcasalamento: daqui(-32),

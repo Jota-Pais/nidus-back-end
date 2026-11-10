@@ -1,5 +1,5 @@
-// Casais e o ciclo dos partos: formar casal, acasalamento, nascimento, eutanasia de selecao,
-// desmame, encerramento e o parto que fecha sem ninhada.
+// Casais e o ciclo dos partos: formar casal, nascimento (que abre sozinho o acasalamento
+// seguinte), eutanasia de selecao, desmame, encerramento e o parto que fecha sem ninhada.
 //
 // Os animais moram em colonia.animal e so mudam por lancarOcorrencia. As regras do casal, do
 // parto e da caixa ficam aqui, conferidas na mesma transacao da escrita e com as linhas travadas
@@ -7,7 +7,7 @@
 
 import type { Prisma } from '@prisma/client'
 import { ErroDeAplicacao, campoInvalido, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
-import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
+import { INTERVALO_ACASALAMENTO_DIAS, MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { dataISO, paraData } from '../../shared/traducao.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
@@ -29,6 +29,7 @@ import {
 } from '../colonia/tipos.ts'
 import type { PorSexo } from '../colonia/tipos.ts'
 import { travarCaixas, travarCasal, travarParto } from '../colonia/travas.ts'
+import { calcularProximoCiclo } from './cadeiaTemporal.ts'
 import { cicloFicha } from './cicloFicha.ts'
 import { exigirOrdem } from './ordemDasDatas.ts'
 import { contarNoDesmame, exigirDataDoDesmame } from './trilhaDoParto.ts'
@@ -311,71 +312,42 @@ export async function formarCasal(dados: NovoCasal, idUsuario: number) {
 
 // ------------------------------------------------------------ acasalamento
 
-export type Acasalamento = {
-  dtAcasalamento: string
+/**
+ * A descricao do acasalamento que o sistema abre sozinho, no historico. A migration
+ * 20261110120000_acasalamento_automatico escreve o mesmo texto para os casais de antes dela
+ */
+export function descricaoDoAcasalamentoAutomatico(casal: string, ordem: number, dtAcasalamento: string): string {
+  return `Acasalamento do ${ordem}º parto do casal ${casal} em ${dtAcasalamento}, aberto sozinho ${INTERVALO_ACASALAMENTO_DIAS} dias depois do ${ordem - 1}º parto`
 }
 
 /**
- * POST /api/casais/:id/acasalamento - abre o parto seguinte. So com o casal ativo, o parto
- * anterior nascido e menos de 5 partos
+ * O acasalamento seguinte abre sozinho no nascimento, 6 dias depois do parto (a regra do cliente,
+ * INTERVALO_ACASALAMENTO_DIAS): ninguem ve o casal acasalar, e a data so serve para prever o parto.
+ * Quem souber a data certa corrige na ficha. No historico e acao do sistema, sem usuario
  */
-export async function registrarAcasalamento(idCasal: number, dados: Acasalamento, idUsuario: number) {
-  const criado = await prisma.$transaction(async (tx) => {
-    await travarCasal(tx, idCasal)
+async function abrirAcasalamentoSeguinte(
+  tx: Transacao,
+  casal: { id: number; identificacao: string },
+  ordemDoNascido: number,
+  dtPartoReal: string,
+) {
+  const ordem = ordemDoNascido + 1
+  const jaAberto = await tx.parto.findFirst({ where: { idCasal: casal.id, ordem }, select: { id: true } })
+  if (jaAberto !== null) return
 
-    const casal = await tx.casal.findUnique({
-      where: { id: idCasal },
-      include: { partos: { orderBy: { ordem: 'desc' }, take: 1 } },
-    })
-
-    if (casal === null) {
-      throw naoEncontrado('Casal')
-    }
-
-    if (!casal.ativo) {
-      throw erroDeRegra('SEQUENCIA_INVALIDA', 'Este casal está encerrado e não recebe acasalamento novo.')
-    }
-
-    const [ultimo] = casal.partos
-
-    if (ultimo !== undefined && ultimo.dtPartoReal === null) {
-      throw erroDeRegra(
-        'SEQUENCIA_INVALIDA',
-        `Registre o ${ultimo.ordem}º parto antes do acasalamento seguinte. Se o acasalamento não pegou, corrija a data dele.`,
-      )
-    }
-
-    const ordem = (ultimo?.ordem ?? 0) + 1
-
-    if (ordem > MAX_PARTOS_POR_CASAL) {
-      throw erroDeRegra('SEQUENCIA_INVALIDA', `Este casal já teve os ${MAX_PARTOS_POR_CASAL} partos.`)
-    }
-
-    // no mesmo dia do parto anterior pode: a femea entra no cio logo depois de parir
-    exigirOrdem('dtAcasalamento', dados.dtAcasalamento, {
-      depoisDe: [
-        { evento: 'da formação do casal', data: casal.dtFormacao },
-        { evento: `do ${ultimo?.ordem}º parto`, data: ultimo?.dtPartoReal },
-      ],
-    })
-
-    const parto = await tx.parto.create({
-      data: { idCasal, ordem, dtAcasalamento: paraData(dados.dtAcasalamento) },
-    })
-
-    await registrarHistorico(tx, {
-      idUsuario,
-      entidade: 'parto',
-      idEntidade: parto.id,
-      acao: 'acasalamento',
-      descricao: `Acasalamento do ${ordem}º parto do casal ${casal.identificacao.trim()} em ${dados.dtAcasalamento}`,
-      dados: { ...dados },
-    })
-
-    return parto
+  const { dtAcasalamento } = calcularProximoCiclo(dtPartoReal)
+  const parto = await tx.parto.create({
+    data: { idCasal: casal.id, ordem, dtAcasalamento: paraData(dtAcasalamento) },
   })
 
-  return cicloFicha(criado.id)
+  await registrarHistorico(tx, {
+    idUsuario: null,
+    entidade: 'parto',
+    idEntidade: parto.id,
+    acao: 'acasalamento',
+    descricao: descricaoDoAcasalamentoAutomatico(casal.identificacao.trim(), ordem, dtAcasalamento),
+    dados: { dtAcasalamento, automatico: true },
+  })
 }
 
 // ------------------------------------------------------------ nascimento
@@ -389,7 +361,8 @@ export type Nascimento = {
 /**
  * POST /api/partos/:id/nascimento - grava a data e cria um animal vivo por filhote na caixa do
  * casal. Vale tambem para o parto pendente de casal ja encerrado: a femea pare o que carrega. A
- * caixa nao pode ter vivo de outra ninhada. No 5o parto o casal encerra na data do parto
+ * caixa nao pode ter vivo de outra ninhada. No 5o parto o casal encerra na data do parto; antes
+ * dele, o casal ativo ganha sozinho o acasalamento seguinte
  */
 export async function registrarNascimento(idParto: number, dados: Nascimento, idUsuario: number) {
   await prisma.$transaction(async (tx) => {
@@ -469,6 +442,8 @@ export async function registrarNascimento(idParto: number, dados: Nascimento, id
     // casal encerrado e parto sem filhote nenhum: a caixa ficou vazia
     if (encerrado) {
       await liberarSeVazia(tx, casal.idCaixa, dados.dtPartoReal, 'casal_encerrado', idUsuario)
+    } else {
+      await abrirAcasalamentoSeguinte(tx, casal, parto.ordem, dados.dtPartoReal)
     }
   })
 
@@ -683,8 +658,10 @@ export type Encerramento = {
 }
 
 /**
- * POST /api/casais/:id/encerramento - nada e apagado, so encerra. A caixa libera se ficou sem
- * vivo e sem parto pendente; o parto pendente continua aberto (nasce depois ou fecha sem ninhada)
+ * POST /api/casais/:id/encerramento - so encerra. A caixa libera se ficou sem vivo e sem parto
+ * pendente; o parto pendente continua aberto (nasce depois ou fecha sem ninhada). O acasalamento
+ * pendente com data depois do encerramento nao aconteceu, porque o casal ja estava separado: o
+ * parto dele sai, com o registro no historico
  */
 export async function encerrarCasal(idCasal: number, dados: Encerramento, idUsuario: number) {
   await prisma.$transaction(async (tx) => {
@@ -704,15 +681,42 @@ export async function encerrarCasal(idCasal: number, dados: Encerramento, idUsua
     }
 
     // o parto pode vir depois do encerramento, porque a femea separada do macho ainda pare a
-    // ninhada que carrega. O acasalamento nao
+    // ninhada que carrega. O acasalamento nao: o pendente marcado para depois do encerramento
+    // (o que o sistema abre 6 dias depois do parto) nao aconteceu, e o limite passa a ser o de antes
     const [ultimo] = casal.partos
+    const naoAconteceu =
+      ultimo !== undefined &&
+      ultimo.ordem > 1 &&
+      ultimo.dtPartoReal === null &&
+      ultimo.dtSemNinhada === null &&
+      dataISO(ultimo.dtAcasalamento) > dados.dtEncerramento
+    const limite = naoAconteceu
+      ? await tx.parto.findFirst({
+          where: { idCasal, ordem: ultimo.ordem - 1 },
+          select: { ordem: true, dtAcasalamento: true },
+        })
+      : ultimo
 
     exigirOrdem('dtEncerramento', dados.dtEncerramento, {
       depoisDe: [
         { evento: 'da formação do casal', data: casal.dtFormacao },
-        { evento: `do acasalamento do ${ultimo?.ordem}º parto`, data: ultimo?.dtAcasalamento },
+        { evento: `do acasalamento do ${limite?.ordem}º parto`, data: limite?.dtAcasalamento },
       ],
     })
+
+    if (naoAconteceu) {
+      const dtAcasalamento = dataISO(ultimo.dtAcasalamento)
+      await tx.parto.delete({ where: { id: ultimo.id } })
+
+      await registrarHistorico(tx, {
+        idUsuario,
+        entidade: 'parto',
+        idEntidade: ultimo.id,
+        acao: 'acasalamento_desfeito',
+        descricao: `Acasalamento do ${ultimo.ordem}º parto do casal ${casal.identificacao.trim()} em ${dtAcasalamento} desfeito: o casal foi encerrado antes, em ${dados.dtEncerramento}`,
+        dados: { dtAcasalamento, dtEncerramento: dados.dtEncerramento },
+      })
+    }
 
     await tx.casal.update({
       where: { id: idCasal },

@@ -7,7 +7,6 @@ import {
   encerrarCasal,
   fecharSemNinhada,
   formarCasal,
-  registrarAcasalamento,
   registrarDesmame,
   registrarNascimento,
   registrarSelecao,
@@ -193,6 +192,9 @@ const db = {
     },
     update: async ({ where, data }: { where: { id: number }; data: Partial<Parto> }) => {
       Object.assign(banco.partos.get(where.id) as Parto, data)
+    },
+    delete: async ({ where }: { where: { id: number } }) => {
+      banco.partos.delete(where.id)
     },
   },
   ocorrencia: {
@@ -497,39 +499,89 @@ describe('formar casal', () => {
   })
 })
 
-describe('acasalamento', () => {
-  it('abre o parto seguinte depois do parto anterior, e o mesmo dia vale', async () => {
-    nascido()
+/** O parto de ordem 'ordem' do casal 1, se existir */
+const partoDeOrdem = (ordem: number) => [...banco.partos.values()].find((p) => p.idCasal === 1 && p.ordem === ordem)
 
-    const ciclo = await registrarAcasalamento(1, { dtAcasalamento: '2026-09-24' }, 4)
+describe('acasalamento automatico', () => {
+  it('o nascimento abre o parto seguinte 6 dias depois, como acao do sistema', async () => {
+    const ciclo = await registrarNascimento(1, { dtPartoReal: '2026-09-24', nascidoM: 5, nascidoF: 5 }, 4)
 
-    expect(ciclo).toMatchObject({ ordem: 2, dtAcasalamento: '2026-09-24', dtPartoPrevisto: '2026-10-17' })
-    expect(banco.historicos.at(-1)).toMatchObject({ acao: 'acasalamento' })
+    expect(partoDeOrdem(2)).toMatchObject({ dtAcasalamento: d('2026-09-30'), dtPartoReal: null })
+    expect(banco.historicos.at(-1)).toEqual({
+      idUsuario: null,
+      entidade: 'parto',
+      idEntidade: partoDeOrdem(2)?.id,
+      acao: 'acasalamento',
+      descricao: 'Acasalamento do 2º parto do casal AB em 2026-09-30, aberto sozinho 6 dias depois do 1º parto',
+      dados: { dtAcasalamento: '2026-09-30', automatico: true },
+    })
+    // a ficha que volta e a do parto que nasceu
+    expect(ciclo).toMatchObject({ ordem: 1, dtPartoReal: '2026-09-24' })
   })
 
-  it('com o parto anterior pendente, recusa e lembra que o acasalamento se corrige', async () => {
-    await expect(registrarAcasalamento(1, { dtAcasalamento: '2026-10-01' }, 4)).rejects.toEqual(
-      expect.objectContaining({ codigo: 'SEQUENCIA_INVALIDA', message: expect.stringContaining('corrija a data') }),
-    )
+  it('o parto seguinte que ja existe nao se abre de novo', async () => {
+    parto({ id: 2, ordem: 2, dtAcasalamento: d('2026-09-28') })
+
+    await registrarNascimento(1, { dtPartoReal: '2026-09-24', nascidoM: 1, nascidoF: 1 }, 4)
+
+    expect([...banco.partos.values()].filter((p) => p.ordem === 2)).toEqual([expect.objectContaining({ id: 2, dtAcasalamento: d('2026-09-28') })])
   })
 
-  it('nao pode ser antes do parto anterior', async () => {
-    nascido()
+  it('o 5o parto nao abre o 6o: o casal encerra', async () => {
+    banco.partos.delete(1)
+    parto({ id: 5, ordem: 5, dtAcasalamento: d('2026-09-01') })
 
-    await expect(registrarAcasalamento(1, { dtAcasalamento: '2026-09-23' }, 4)).rejects.toEqual(
-      noCampo('dtAcasalamento', 'Não pode ser antes do 1º parto (24/09/2026).'),
-    )
+    await registrarNascimento(5, { dtPartoReal: '2026-09-24', nascidoM: 3, nascidoF: 3 }, 4)
+
+    expect(partoDeOrdem(6)).toBeUndefined()
+    expect(banco.historicos.some((h) => h.acao === 'acasalamento')).toBe(false)
   })
 
-  it('nao passa de 5 partos', async () => {
-    nascido()
-    for (const ordem of [2, 3, 4, 5]) {
-      parto({ id: ordem, ordem, dtAcasalamento: d('2026-09-24'), dtPartoReal: d('2026-10-17') })
-    }
+  it('o casal encerrado nao acasala de novo: o parto pendente nasce e nada abre', async () => {
+    Object.assign(banco.casais.get(1) as Casal, { ativo: false, dtEncerramento: d('2026-09-10') })
 
-    await expect(registrarAcasalamento(1, { dtAcasalamento: '2026-10-20' }, 4)).rejects.toEqual(
-      recusa(409, 'SEQUENCIA_INVALIDA'),
+    await registrarNascimento(1, { dtPartoReal: '2026-09-24', nascidoM: 4, nascidoF: 4 }, 4)
+
+    expect(partoDeOrdem(2)).toBeUndefined()
+  })
+
+  it('o encerramento antes do acasalamento que o sistema abriu o desfaz, e a data passa a contar do de antes', async () => {
+    nascido()
+    parto({ id: 2, ordem: 2, dtAcasalamento: d('2026-09-30') })
+
+    await encerrarCasal(1, { dtEncerramento: '2026-09-27', motivo: 'macho morreu' }, 4)
+
+    expect(partoDeOrdem(2)).toBeUndefined()
+    expect(banco.casais.get(1)).toMatchObject({ ativo: false, dtEncerramento: d('2026-09-27') })
+    expect(banco.historicos.find((h) => h.acao === 'acasalamento_desfeito')).toMatchObject({
+      idUsuario: 4,
+      entidade: 'parto',
+      idEntidade: 2,
+      descricao: 'Acasalamento do 2º parto do casal AB em 2026-09-30 desfeito: o casal foi encerrado antes, em 2026-09-27',
+    })
+    // a ninhada do 1o parto continua na caixa: ela nao libera
+    expect(banco.liberadas).toEqual([])
+  })
+
+  it('encerrado no dia do acasalamento ou depois, o parto pendente fica: a femea pode estar prenhe', async () => {
+    nascido()
+    parto({ id: 2, ordem: 2, dtAcasalamento: d('2026-09-30') })
+
+    await encerrarCasal(1, { dtEncerramento: '2026-09-30', motivo: 'idade' }, 4)
+
+    expect(partoDeOrdem(2)).toMatchObject({ id: 2, dtAcasalamento: d('2026-09-30') })
+  })
+
+  it('o encerramento desfeito nao volta antes do acasalamento do parto de antes', async () => {
+    banco.partos.delete(1)
+    parto({ id: 1, ordem: 1, dtAcasalamento: d('2026-09-01'), dtPartoReal: d('2026-09-24') })
+    parto({ id: 2, ordem: 2, dtAcasalamento: d('2026-09-30'), dtPartoReal: d('2026-10-23') })
+    parto({ id: 3, ordem: 3, dtAcasalamento: d('2026-10-29') })
+
+    await expect(encerrarCasal(1, { dtEncerramento: '2026-09-29', motivo: 'x' }, 4)).rejects.toEqual(
+      noCampo('dtEncerramento', 'Não pode ser antes do acasalamento do 2º parto (30/09/2026).'),
     )
+    expect(partoDeOrdem(3)).toBeDefined()
   })
 })
 
@@ -908,13 +960,65 @@ describe('correcao do nascimento', () => {
     expect(banco.partos.get(1)?.dtPartoReal).toEqual(d('2026-09-26'))
   })
 
-  it('nem passa do desmame ou do acasalamento seguinte', async () => {
+  it('nem passa do desmame ou do acasalamento seguinte corrigido a mao, que fica onde esta', async () => {
+    nascido()
+    // 29/09 nao e 24/09 + 6: alguem corrigiu o acasalamento que o sistema abriu
+    parto({ id: 2, ordem: 2, dtAcasalamento: d('2026-09-29') })
+
+    await expect(corrigirNascimento(1, correcao({ dtPartoReal: '2026-09-30' }), 4)).rejects.toEqual(
+      noCampo('dtPartoReal', 'acasalamento do 2º parto'),
+    )
+
+    await corrigirNascimento(1, correcao({ dtPartoReal: '2026-09-26' }), 4)
+    expect(banco.partos.get(2)?.dtAcasalamento).toEqual(d('2026-09-29'))
+    expect(banco.historicos.some((h) => h.acao === 'correcao_acasalamento')).toBe(false)
+  })
+
+  it('o acasalamento que o sistema abriu acompanha a data nova, e o historico diz', async () => {
     nascido()
     parto({ id: 2, ordem: 2, dtAcasalamento: d('2026-09-30') })
 
-    await expect(corrigirNascimento(1, correcao({ dtPartoReal: '2026-10-01' }), 4)).rejects.toEqual(
-      noCampo('dtPartoReal', 'acasalamento do 2º parto'),
+    // depois do acasalamento de antes tambem pode: ele vai junto
+    await corrigirNascimento(1, correcao({ dtPartoReal: '2026-10-01' }), 4)
+
+    expect(banco.partos.get(1)?.dtPartoReal).toEqual(d('2026-10-01'))
+    expect(banco.partos.get(2)?.dtAcasalamento).toEqual(d('2026-10-07'))
+    expect(banco.historicos.find((h) => h.acao === 'correcao_acasalamento')).toEqual({
+      idUsuario: 4,
+      entidade: 'parto',
+      idEntidade: 2,
+      acao: 'correcao_acasalamento',
+      descricao: 'Correção do acasalamento do 2º parto (de 30/09/2026 para 07/10/2026): acompanha a correção do 1º parto',
+      dados: {
+        motivo: 'contagem errada',
+        antes: { dtAcasalamento: '2026-09-30' },
+        depois: { dtAcasalamento: '2026-10-07' },
+        automatico: true,
+      },
+    })
+  })
+
+  it('o parto seguinte que ja nasceu nao acompanha', async () => {
+    nascido()
+    parto({ id: 2, ordem: 2, dtAcasalamento: d('2026-09-30'), dtPartoReal: d('2026-10-23') })
+
+    await corrigirNascimento(1, correcao({ dtPartoReal: '2026-09-22' }), 4)
+
+    expect(banco.partos.get(2)?.dtAcasalamento).toEqual(d('2026-09-30'))
+  })
+
+  it('o acasalamento que acompanha nao passa do encerramento do casal', async () => {
+    nascido()
+    parto({ id: 2, ordem: 2, dtAcasalamento: d('2026-09-30') })
+    Object.assign(banco.casais.get(1) as Casal, { ativo: false, dtEncerramento: d('2026-10-03') })
+
+    await expect(corrigirNascimento(1, correcao({ dtPartoReal: '2026-09-28' }), 4)).rejects.toEqual(
+      noCampo('dtPartoReal', 'passaria do encerramento do casal (03/10/2026)'),
     )
+    expect(banco.partos.get(2)?.dtAcasalamento).toEqual(d('2026-09-30'))
+
+    await corrigirNascimento(1, correcao({ dtPartoReal: '2026-09-27' }), 4)
+    expect(banco.partos.get(2)?.dtAcasalamento).toEqual(d('2026-10-03'))
   })
 
   it('macho registrado como femea: troca o sexo de um vivo livre na caixa do casal', async () => {

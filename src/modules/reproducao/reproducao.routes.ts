@@ -11,7 +11,6 @@ import {
   encerrarCasal,
   fecharSemNinhada,
   formarCasal,
-  registrarAcasalamento,
   registrarDesmame,
   registrarNascimento,
   registrarSelecao,
@@ -72,15 +71,6 @@ casalRoutes.post('/:id/encerramento', exigirPerfil(...OPERA_A_COLONIA), async (r
   const dados = encerramento.parse(req.body)
 
   res.json(await encerrarCasal(id, dados, usuarioDaRequisicao(req).id))
-})
-
-const acasalamento = z.object({ dtAcasalamento: dataDoFato })
-
-casalRoutes.post('/:id/acasalamento', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
-  const { id } = idNaRota.parse(req.params)
-  const dados = acasalamento.parse(req.body)
-
-  res.status(201).json(await registrarAcasalamento(id, dados, usuarioDaRequisicao(req).id))
 })
 
 const nascimento = z.object({

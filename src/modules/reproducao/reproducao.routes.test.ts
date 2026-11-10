@@ -139,9 +139,8 @@ describe('validacao de entrada - nada se registra no futuro', () => {
     expect(casalNovo.safeParse({ ...corpoValido, dtFormacao: amanha }).success).toBe(false)
   })
 
-  it('acasalamento, parto, selecao, desmame e encerramento com data de amanha voltam 400', async () => {
+  it('parto, selecao, desmame e encerramento com data de amanha voltam 400', async () => {
     const rotas = [
-      ['post', '/api/casais/1/acasalamento', { dtAcasalamento: amanha }, 'dtAcasalamento'],
       [
         'post',
         '/api/partos/1/nascimento',
@@ -188,6 +187,12 @@ describe('validacao de entrada - nada se registra no futuro', () => {
       expect(resposta.status, caminho).toBe(400)
       expect(resposta.body.erro.campos[campo], caminho).toBe('A data não pode ser depois de hoje.')
     }
+  })
+
+  it('o acasalamento nao se registra mais: abre sozinho no nascimento, e so se corrige', async () => {
+    const resposta = await request(app('tecnico')).post('/api/casais/1/acasalamento').send({ dtAcasalamento: hojeISO() })
+
+    expect(resposta.status).toBe(404)
   })
 
   it('o desmame de hoje passa', () => {

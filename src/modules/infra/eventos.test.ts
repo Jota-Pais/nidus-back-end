@@ -181,6 +181,34 @@ describe('os eventos da ficha', () => {
     ])
   })
 
+  it('o acasalamento que o nascimento abriu sozinho diz isso, com o Sistema de autor', async () => {
+    const [casal] = banco.casais as { partos: unknown[] }[]
+    casal?.partos.push({
+      id: 11,
+      ordem: 2,
+      dtAcasalamento: d('2026-09-07'),
+      dtDesmameReal: null,
+      dtRegistroDesmame: null,
+      dtSemNinhada: null,
+      motivoSemNinhada: null,
+      usuarioDesmame: null,
+    })
+    banco.historico.push(
+      historico('parto', 'acasalamento', 11, '2026-09-01', {
+        usuario: null,
+        dados: { dtAcasalamento: '2026-09-07', automatico: true },
+      }),
+    )
+
+    const eventos = await eventosDaCaixa(7, new Map())
+
+    expect(eventos.find((e) => e.dataHora.startsWith('2026-09-07'))).toMatchObject({
+      tipo: 'acasalamento',
+      descricao: 'Acasalamento do 2º parto do casal AB, aberto sozinho 6 dias depois do parto anterior.',
+      autor: 'Sistema',
+    })
+  })
+
   it('a baixa traz a ocorrencia e se ainda pode ser anulada; o que nao e da trilha, nao', async () => {
     const eventos = await eventosDaCaixa(7, new Map())
     const daTrilha = eventos.filter((e) => e.idOcorrencia !== null)

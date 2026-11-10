@@ -6,6 +6,7 @@
 // animais de outra, a do nascimento ou do desmame dos partos desses animais registrada depois que
 // eles chegaram, que pode ter criado, anulado ou trocado de sexo animais daqui
 
+import { INTERVALO_ACASALAMENTO_DIAS } from '../../shared/parametros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { dataISO, hojeISO } from '../../shared/traducao.ts'
 import { descreverOcorrencia, selecaoDaDescricao } from '../colonia/descricao.ts'
@@ -64,6 +65,11 @@ const DA_CAIXA = ['mudanca_de_posicao', 'virar_estoque', VIRAR_ESTOQUE_ANTIGO, '
 const TIPO_DO_EVENTO_DA_CAIXA: Record<string, string> = {
   mudanca_de_posicao: 'posicao',
   [VIRAR_ESTOQUE_ANTIGO]: 'virar_estoque',
+}
+
+/** Se o registro e de algo que o sistema fez sozinho, como o acasalamento aberto no nascimento */
+function ehAutomatico(dados: unknown): boolean {
+  return typeof dados === 'object' && dados !== null && 'automatico' in dados && dados.automatico === true
 }
 
 /** Se os dados do registro tem o parto: a passagem antiga para o estoque, e nao o virar estoque */
@@ -291,12 +297,14 @@ export async function eventosDaCaixa(idCaixa: number, desmamados: Map<number, Po
       // o 1o acasalamento e o da formacao do casal
       const acasalamento =
         parto.ordem === 1 ? primeiro('casal', 'formacao', casal.id) : primeiro('parto', 'acasalamento', parto.id)
+      // o que o nascimento do parto anterior abriu sozinho diz isso, e o autor e o Sistema
+      const sozinho = ehAutomatico(acasalamento?.dados) ? `, aberto sozinho ${INTERVALO_ACASALAMENTO_DIAS} dias depois do parto anterior` : ''
 
       eventos.push(
         evento(
           dataISO(parto.dtAcasalamento),
           'acasalamento',
-          `Acasalamento ${doParto}.`,
+          `Acasalamento ${doParto}${sozinho}.`,
           autorDo(acasalamento),
           acasalamento?.dtHora ?? null,
         ),

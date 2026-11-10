@@ -33,8 +33,11 @@ O que mora aqui:
   (`409 SALA_COM_ESTANTE`), e a estante, sem caixa ativa (`409 ESTANTE_OCUPADA`)
 - **Ficha da caixa** - casal (cruzamento AB, BC, CD, DE, EA), do 1º ao 5º parto,
   com parto, eutanásia de seleção e desmame. As datas previstas saem sozinhas:
-  parto = acasalamento + 23 dias, desmame = parto + 22, próximo acasalamento =
-  parto real + 6
+  parto = acasalamento + 23 dias, desmame = parto + 22. O acasalamento seguinte
+  abre sozinho no nascimento, 6 dias depois do parto real (ninguém vê o casal
+  acasalar; a data só prevê o parto) e se corrige na ficha. A correção da data do
+  nascimento leva junto o acasalamento que o sistema abriu, se ele ainda não deu
+  parto, e o encerramento antes dele o desfaz
 - **Animais** - cada filhote que nasce vira uma linha anônima em `colonia.animal`,
   com o parto de origem, o sexo, a caixa onde está e a situação (vivo, morto,
   entregue ou anulado). Toda contagem da ficha é contada nos animais. Morte e

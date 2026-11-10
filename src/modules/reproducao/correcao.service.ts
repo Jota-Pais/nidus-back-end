@@ -27,6 +27,7 @@ import {
 } from '../colonia/tipos.ts'
 import type { PorSexo, Sexo } from '../colonia/tipos.ts'
 import { travarCaixas } from '../colonia/travas.ts'
+import { calcularProximoCiclo } from './cadeiaTemporal.ts'
 import { cicloFicha } from './cicloFicha.ts'
 import { exigirOrdem } from './ordemDasDatas.ts'
 import { contagemInvalida, travarELerParto } from './reproducao.service.ts'
@@ -255,7 +256,9 @@ export type CorrecaoDoNascimento = ComMotivo<Nascimento> & {
 
 /**
  * PATCH /api/partos/:id/nascimento - corrige a data e a contagem do parto. A data muda no parto e
- * na ocorrencia do nascimento, e com ela a idade de todos os animais do parto, onde estiverem.
+ * na ocorrencia do nascimento, e com ela a idade de todos os animais do parto, onde estiverem. O
+ * acasalamento seguinte que o sistema abriu (6 dias depois do parto) e ainda nao deu parto
+ * acompanha a data nova; o que foi corrigido a mao fica onde esta e limita a data, como antes.
  * Na contagem: troca de sexo de vivos livres na caixa do casal, animais a mais onde a ninhada esta
  * e anulacao de registros (livres primeiro; nunca morto ou entregue)
  */
@@ -270,18 +273,35 @@ export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNasci
     // uma consulta de cada vez: a transacao e uma conexao so
     const seguinte = await tx.parto.findFirst({
       where: { idCasal: parto.idCasal, ordem: parto.ordem + 1 },
-      select: { dtAcasalamento: true },
+      select: { id: true, dtAcasalamento: true, dtPartoReal: true, dtSemNinhada: true },
     })
     const fato = await primeiroFatoDoNascimento(tx, idParto)
+    const dataAntiga = dataISO(parto.dtPartoReal)
+    const acasalamentoSeguinte = acasalamentoQueAcompanha(seguinte, dataAntiga, dados.dtPartoReal)
 
     exigirOrdem('dtPartoReal', dados.dtPartoReal, {
       depoisDe: [{ evento: 'do acasalamento', data: parto.dtAcasalamento }],
       antesDe: [
         { evento: 'do desmame', data: parto.dtDesmameReal },
-        { evento: `do acasalamento do ${parto.ordem + 1}º parto`, data: seguinte?.dtAcasalamento },
+        {
+          evento: `do acasalamento do ${parto.ordem + 1}º parto`,
+          data: acasalamentoSeguinte === null ? seguinte?.dtAcasalamento : null,
+        },
         { evento: rotuloDoFato(fato), data: fato?.dtFato },
       ],
     })
+
+    // o acasalamento que acompanha nao passa do encerramento do casal, que veio depois dele
+    if (
+      acasalamentoSeguinte !== null &&
+      parto.casal.dtEncerramento !== null &&
+      acasalamentoSeguinte.depois > dataISO(parto.casal.dtEncerramento)
+    ) {
+      throw campoInvalido(
+        'dtPartoReal',
+        `Com esta data, o acasalamento do ${parto.ordem + 1}º parto, que acompanha este parto, passaria do encerramento do casal (${dataLegivel(dataISO(parto.casal.dtEncerramento))}). Corrija antes o acasalamento dele.`,
+      )
+    }
 
     const animais = await animaisDoParto(tx, idParto)
     const nascidos = contarPorSexo(animais.filter((animal) => animal.situacao !== 'anulado'))
@@ -350,8 +370,6 @@ export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNasci
       )
     }
 
-    const dataAntiga = dataISO(parto.dtPartoReal)
-
     if (dados.dtPartoReal !== dataAntiga) {
       await tx.parto.update({
         where: { id: idParto },
@@ -362,6 +380,31 @@ export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNasci
         where: { idParto, tipo: 'nascimento' },
         data: { dtFato: paraData(dados.dtPartoReal) },
       })
+
+      if (acasalamentoSeguinte !== null) {
+        await tx.parto.update({
+          where: { id: acasalamentoSeguinte.idParto },
+          data: { dtAcasalamento: paraData(acasalamentoSeguinte.depois), dtManutencao: new Date() },
+        })
+
+        await registrarHistorico(tx, {
+          idUsuario,
+          entidade: 'parto',
+          idEntidade: acasalamentoSeguinte.idParto,
+          acao: 'correcao_acasalamento',
+          descricao: descricaoDaCorrecao(
+            `Correção do acasalamento do ${parto.ordem + 1}º parto`,
+            [dePara(dataLegivel(acasalamentoSeguinte.antes), dataLegivel(acasalamentoSeguinte.depois))],
+            `acompanha a correção do ${parto.ordem}º parto`,
+          ),
+          dados: {
+            motivo: dados.motivo,
+            antes: { dtAcasalamento: acasalamentoSeguinte.antes },
+            depois: { dtAcasalamento: acasalamentoSeguinte.depois },
+            automatico: true,
+          },
+        })
+      }
 
       // o 5o parto encerrou o casal na data dele: o encerramento acompanha a data corrigida
       if (
@@ -434,6 +477,28 @@ export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNasci
   })
 
   return { parto: await cicloFicha(idParto), faltas }
+}
+
+/** O parto seguinte, como a correcao do nascimento le */
+type PartoSeguinte = { id: number; dtAcasalamento: Date; dtPartoReal: Date | null; dtSemNinhada: Date | null }
+
+/**
+ * O acasalamento seguinte que acompanha a correcao da data do nascimento: o que o sistema abriu
+ * (exatamente 6 dias depois do parto) e ainda esta pendente. O que foi corrigido a mao, o que ja
+ * deu parto e o que fechou sem ninhada nao acompanham. Null quando nao acompanha ou a data nao muda
+ */
+export function acasalamentoQueAcompanha(
+  seguinte: PartoSeguinte | null,
+  nascimentoAntes: string,
+  nascimentoDepois: string,
+): { idParto: number; antes: string; depois: string } | null {
+  if (seguinte === null || seguinte.dtPartoReal !== null || seguinte.dtSemNinhada !== null) return null
+  if (nascimentoAntes === nascimentoDepois) return null
+
+  const antes = dataISO(seguinte.dtAcasalamento)
+  if (antes !== calcularProximoCiclo(nascimentoAntes).dtAcasalamento) return null
+
+  return { idParto: seguinte.id, antes, depois: calcularProximoCiclo(nascimentoDepois).dtAcasalamento }
 }
 
 // ------------------------------------------------------------ desmame
