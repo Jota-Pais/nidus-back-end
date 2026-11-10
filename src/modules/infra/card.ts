@@ -1,4 +1,4 @@
-// O card de cada caixa, como o Kanban e a grade da estante mostram (spec do cliente, secao 1.13).
+// O card de cada caixa, como a grade da estante mostra (spec do cliente, secao 1.13).
 // A caixa de casal mostra o casal, o parto em curso, a previsao do proximo e os vivos dela por
 // ninhada; a de estoque, o sexo, a linhagem e os vivos por data de nascimento. Os numeros sao
 // todos contados nos animais (vivosNasCaixas), e a coluna sai de colunaDaCaixa
@@ -167,6 +167,7 @@ const selecaoDaCaixaDoCard = {
     select: {
       identificacao: true,
       ativo: true,
+      idLinhagem: true,
       linhagem: { select: { nome: true } },
       partos: {
         orderBy: { ordem: 'asc' },
@@ -178,7 +179,7 @@ const selecaoDaCaixaDoCard = {
 
 type Leitura = Pick<Prisma.TransactionClient, 'caixa' | 'animal' | 'parto' | 'pedido'>
 
-/** Uma caixa com o card dela: o endereco, a coluna do Kanban e o que mostra */
+/** Uma caixa com o card dela: o endereco, a coluna (a cor na grade) e o que mostra */
 export type CardDaCaixa = {
   id: number
   face: number
@@ -186,8 +187,10 @@ export type CardDaCaixa = {
   coluna: number
   codigo: string
   numeroVisivel: string
-  /** a coluna do Kanban; null quando a caixa nao aparece nele */
+  /** a coluna da caixa (colunaDaCaixa); null na caixa liberada que nao foi enviada */
   estado: Coluna | null
+  /** a linhagem da caixa de estoque, ou a do casal da caixa; null sem nenhuma */
+  idLinhagem: number | null
   linhagem: string | null
   casal: ReturnType<typeof casalNoCard>
   estoque: ReturnType<typeof estoqueNoCard> | null
@@ -232,6 +235,7 @@ export async function lerCards(banco: Leitura, onde: Prisma.CaixaWhereInput, hoj
         },
         hoje,
       ),
+      idLinhagem: deEstoque ? caixa.idLinhagem : (casal?.idLinhagem ?? null),
       linhagem: deEstoque ? (caixa.linhagem?.nome ?? null) : (casal?.linhagem.nome ?? null),
       casal: deEstoque ? null : casalNoCard(casal, naCaixa, hoje),
       estoque: deEstoque ? estoqueNoCard(caixa, naCaixa, hoje) : null,

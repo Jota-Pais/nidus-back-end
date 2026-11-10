@@ -17,19 +17,11 @@ const como = (perfil: Perfil): RequestHandler => (req, _res, next) => {
 const app = (perfil?: Perfil) =>
   criarApp(perfil === undefined ? {} : { autenticacao: como(perfil) })
 
-describe('autorizacao do kanban e da ficha', () => {
-  it('kanban sem sessao devolve 401', async () => {
-    const resposta = await request(app()).get('/api/quadro').query({ especie: 'rato' })
+describe('autorizacao da ficha e da posicao', () => {
+  it('o kanban saiu: /api/quadro nao existe mais', async () => {
+    const resposta = await request(app('tecnico')).get('/api/quadro').query({ especie: 'rato' })
 
-    expect(resposta.status).toBe(401)
-    expect(resposta.body.erro.codigo).toBe('NAO_AUTENTICADO')
-  })
-
-  it('pesquisador nao enxerga o kanban', async () => {
-    const resposta = await request(app('pesquisador')).get('/api/quadro').query({ especie: 'rato' })
-
-    expect(resposta.status).toBe(403)
-    expect(resposta.body.erro.codigo).toBe('SEM_PERMISSAO')
+    expect(resposta.status).toBe(404)
   })
 
   it('pesquisador nao muda caixa de posicao', async () => {
@@ -48,13 +40,6 @@ describe('autorizacao do kanban e da ficha', () => {
 })
 
 describe('validacao de entrada', () => {
-  it('kanban sem `especie` e VALIDACAO, nao kanban vazio', async () => {
-    const resposta = await request(app('tecnico')).get('/api/quadro')
-
-    expect(resposta.status).toBe(400)
-    expect(resposta.body.erro.codigo).toBe('VALIDACAO')
-  })
-
   it('posicao com face que nao existe e VALIDACAO', async () => {
     const resposta = await request(app('tecnico'))
       .patch('/api/caixas/1/posicao')

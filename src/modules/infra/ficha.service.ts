@@ -84,8 +84,8 @@ function daIdade(vivos: VivoUmAUm[], dtNascimento: string) {
 }
 
 /**
- * GET /api/caixas/:id - a ficha da caixa, de casal ou de estoque. 'estado' e a coluna do Kanban
- * (null na caixa liberada que nao aparece nele)
+ * GET /api/caixas/:id - a ficha da caixa, de casal ou de estoque. 'estado' e a coluna da caixa
+ * (colunaDaCaixa; null na caixa liberada que nao foi enviada)
  */
 export async function montarFicha(idCaixa: number) {
   const caixa = await prisma.caixa.findUnique({

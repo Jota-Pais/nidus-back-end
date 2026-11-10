@@ -61,8 +61,9 @@ export async function listarEstantes() {
 
 /**
  * GET /api/estantes/:id/grade - as duas faces, com posicao vazia como 'caixa: null'. Cada caixa
- * vem com a coluna do Kanban e o card: o casal, ou o sexo, a linhagem e os vivos da caixa de
- * estoque (a MiniGrade filtra os destinos da mudanca pelo sexo e pela linhagem)
+ * vem com a coluna (a cor), a linhagem (o id, para a grade filtrar por ela, e o nome) e o card: o
+ * casal, ou o sexo e os vivos da caixa de estoque (a MiniGrade filtra os destinos da mudanca pelo
+ * sexo e pela linhagem)
  */
 export async function montarGrade(id: number) {
   const estante = await prisma.estante.findFirst({ where: { id, ativa: true } })
@@ -92,6 +93,7 @@ export async function montarGrade(id: number) {
               : {
                   id: caixa.id,
                   estado: caixa.estado,
+                  idLinhagem: caixa.idLinhagem,
                   linhagem: caixa.linhagem,
                   casal: caixa.casal,
                   estoque: caixa.estoque,

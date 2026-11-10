@@ -7,13 +7,21 @@ import {
 } from '../../shared/middlewares/autorizacao.ts'
 import { dataDoFato, idNaRota, idNoCorpo } from '../../shared/validacao.ts'
 import { anularBaixa, registrarBaixa } from './baixa.service.ts'
+import { lerVisaoGeral } from './visaoGeral.service.ts'
 
 /**
  * As acoes sobre animais que nao sao de um parto: a baixa em qualquer caixa (montada em
- * /api/caixas, ao lado das rotas de infra) e a anulacao de uma baixa (/api/ocorrencias)
+ * /api/caixas, ao lado das rotas de infra) e a anulacao de uma baixa (/api/ocorrencias). E a
+ * visao geral da colonia (/api/visao-geral)
  */
 export const baixaRoutes = Router()
 export const ocorrenciaRoutes = Router()
+export const visaoGeralRoutes = Router()
+
+/** GET /api/visao-geral - a colonia por especie e linhagem, so para quem opera a colonia */
+visaoGeralRoutes.get('/', exigirPerfil(...OPERA_A_COLONIA), async (_req, res) => {
+  res.json(await lerVisaoGeral())
+})
 
 const itemDaBaixa = z.object({
   sexo: z.enum(['M', 'F']),

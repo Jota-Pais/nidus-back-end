@@ -16,12 +16,14 @@ tem, a gente não faz.
 
 O que mora aqui:
 
-- **Kanban** - um quadro por espécie, só de leitura, quatro colunas (`livres`,
-  `estoque`, `reserva`, `enviado`). Não existe Pré-reserva: o animal está
-  reservado ou não, e a caixa do casal fica em `livres` dizendo quantos reservados
-  ainda tem. A caixa de estoque muda de coluna sozinha, pelo que tem reservado
+- **Visão geral** (`GET /api/visao-geral`) - a colônia por espécie e linhagem:
+  casais ativos, vivos, quantos mamam, quantos estão reservados, quantos estão
+  livres e a idade dos livres em quatro faixas (até 21 dias, 22 a 35, 36 a 60 e
+  mais de 60). Tudo é contado nos animais; nada fica gravado. Não existe
+  Pré-reserva: o animal está reservado ou não
 - **Estantes** - a grade das duas faces, com a posição vazia como `caixa: null`.
-  O endereço segue a etiqueta do cliente: face, linha e letra (`F1A`, `T2K`)
+  O endereço segue a etiqueta do cliente: face, linha e letra (`F1A`, `T2K`).
+  Cada caixa traz a linhagem (`idLinhagem`), para a grade filtrar por ela
 - **Salas e estantes** (`/api/salas` e `/api/estantes`, escrita só do gestor) - a
   sala é tabela própria e existe sem estante; renomear muda num lugar só. O nome
   da sala é único entre as ativas, sem diferenciar maiúscula (`409 SALA_DUPLICADA`),
@@ -52,8 +54,8 @@ O que mora aqui:
   só os reservados dele. A reserva vai junto. A caixa do casal
   encerrado com desmamados de um sexo vira de estoque no lugar
   (`POST /api/caixas/:id/estoque`). A caixa que esvazia é liberada com a data e o
-  motivo do fato. A coluna do Kanban não é gravada: sai do que a caixa tem
-  (`colunaDaCaixa`), e a de estoque esvaziada pela entrega fica 7 dias em Enviado
+  motivo do fato. A coluna da caixa (a cor na grade) não é gravada: sai do que a
+  caixa tem (`colunaDaCaixa`)
 - **Pedidos** - o pedido do pesquisador, com o protocolo CEUA dele, sem
   depender de projeto cadastrado: machos, fêmeas e animais de qualquer sexo, com
   idade exata ou faixa de idade
@@ -162,8 +164,8 @@ arquivos `*.banco.test.ts` saem do `npm test` e entram no `npm run test:banco`
 - `src/shared/regras.banco.test.ts`: cada recusa dos triggers e dos CHECKs, em SQL puro;
 - `src/modules/colonia/colonia.banco.test.ts`: os serviços da colônia de ponta a
   ponta (formar casal, nascer, selecionar, desmamar, mudar de caixa, baixa e
-  anulação, encerrar, sem ninhada, virar estoque, correções), com o quadro, a
-  grade, a ficha e o estoque lendo os mesmos animais;
+  anulação, encerrar, sem ninhada, virar estoque, correções), com a grade, a
+  ficha e a visão geral lendo os mesmos animais;
 - `src/modules/demanda/pedido.banco.test.ts`: os serviços do pedido (reservar,
   completar, desfazer, recusar, entregar);
 - `src/modules/demanda/reserva-concorrente.banco.test.ts`: duas reservas ao mesmo
@@ -209,9 +211,9 @@ src/
   shared/              prisma, erros, tradução dos códigos do banco, autorização,
                        parâmetros biológicos, envio de e-mail
   modules/
-    infra/             salas, estantes, grade, kanban, ficha e a mudanca de animais entre caixas
+    infra/             salas, estantes, grade, ficha e a mudanca de animais entre caixas
     reproducao/        casais e partos
-    colonia/           os animais: escolha, baixa, anulacao, liberacao da caixa e a trilha
+    colonia/           os animais: escolha, baixa, anulacao, liberacao da caixa, a trilha e a visao geral
     demanda/           projetos CEUA e pedidos: aprovação, reserva, entrega e recusa
     motor/             busca de atendimento
     catalogo/          espécies, linhagens e pares genéticos

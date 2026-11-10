@@ -1,13 +1,15 @@
 import type { RequestHandler } from 'express'
 import request from 'supertest'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { criarApp } from '../../app.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
 import { hojeISO } from '../../shared/traducao.ts'
 import type { Perfil } from '../../shared/traducao.ts'
 import { anulacao, baixa } from './colonia.routes.ts'
 
-// Autorizacao e validacao de forma, como nas outras suites de rota: o servico nao e chamado
+// Autorizacao e validacao de forma, como nas outras suites de rota: o servico nao e chamado. A
+// leitura da visao geral e trocada por uma vazia, para a rota responder sem banco
+vi.mock('./visaoGeral.service.ts', () => ({ lerVisaoGeral: async () => ({ especies: [] }) }))
 
 const como = (perfil: Perfil): RequestHandler => (req, _res, next) => {
   req.usuario = { id: 1, nome: 'Teste', email: 'teste@ufsc.br', perfil }
@@ -17,6 +19,27 @@ const como = (perfil: Perfil): RequestHandler => (req, _res, next) => {
 const app = (perfil?: Perfil) => criarApp(perfil === undefined ? {} : { autenticacao: como(perfil) })
 
 const baixaValida = { dtFato: '2026-11-02', itens: [{ sexo: 'M', qtd: 2 }] }
+
+describe('autorizacao da visao geral', () => {
+  it('sem sessao e 401; pesquisador e 403', async () => {
+    const semSessao = await request(app()).get('/api/visao-geral')
+    expect(semSessao.status).toBe(401)
+    expect(semSessao.body.erro.codigo).toBe('NAO_AUTENTICADO')
+
+    const pesquisador = await request(app('pesquisador')).get('/api/visao-geral')
+    expect(pesquisador.status).toBe(403)
+    expect(pesquisador.body.erro.codigo).toBe('SEM_PERMISSAO')
+  })
+
+  it('tecnico e gestor leem a visao geral', async () => {
+    for (const perfil of ['tecnico', 'gestor'] as const) {
+      const resposta = await request(app(perfil)).get('/api/visao-geral')
+
+      expect(resposta.status).toBe(200)
+      expect(resposta.body).toEqual({ especies: [] })
+    }
+  })
+})
 
 describe('autorizacao da baixa e da anulacao', () => {
   it('sem sessao e 401; pesquisador e 403', async () => {

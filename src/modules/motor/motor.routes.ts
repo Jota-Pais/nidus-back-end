@@ -2,12 +2,10 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { OPERA_A_COLONIA, exigirPerfil } from '../../shared/middlewares/autorizacao.ts'
 import { pedidoNovo } from '../demanda/demanda.routes.ts'
-import { consultarEstoque } from './estoque.service.ts'
 import { buscarAtendimento } from './motor.service.ts'
 import { avaliarViabilidade } from './viabilidade.service.ts'
 
 export const buscaRoutes = Router()
-export const estoqueRoutes = Router()
 export const viabilidadeRoutes = Router()
 
 /** query string chega sempre como texto: 'z.coerce' faz a conversao */
@@ -31,13 +29,6 @@ export const filtroDaBusca = z
 /** GET /api/busca - a busca de atendimento do tecnico */
 buscaRoutes.get('/', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   res.json(await buscarAtendimento(filtroDaBusca.parse(req.query)))
-})
-
-const filtroDoEstoque = z.object({ especie: z.string().trim().min(1) })
-
-/** GET /api/estoque - o que a colonia tem livre, so para quem opera a colonia */
-estoqueRoutes.get('/', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
-  res.json(await consultarEstoque(filtroDoEstoque.parse(req.query).especie))
 })
 
 /**

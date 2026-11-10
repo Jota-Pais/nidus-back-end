@@ -55,7 +55,7 @@ function somarNo(contagem: PorSexo, sexo: string, qtd: number): void {
 
 /**
  * Os vivos de cada caixa, numa leitura so: o total e os reservados por sexo, por parto de origem
- * e por pedido. E de onde o Kanban, a grade, o card e as fichas tiram os numeros. Caixa sem vivo
+ * e por pedido. E de onde a grade, o card e as fichas tiram os numeros. Caixa sem vivo
  * fica zerada
  */
 export async function vivosNasCaixas(banco: Leitura, idsCaixa: number[]): Promise<Map<number, VivosNaCaixa>> {

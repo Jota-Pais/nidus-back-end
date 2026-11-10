@@ -1,54 +1,12 @@
-// Kanban (um por especie, so de leitura) e a mudanca de posicao de uma caixa
+// A mudanca de posicao de uma caixa na estante
 
 import { erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
-import { hojeISO, paraData } from '../../shared/traducao.ts'
-import { COLUNAS, inicioDoEnviado } from '../colonia/coluna.ts'
 import { caixaLiberada } from '../colonia/liberacao.ts'
 import { travarCaixas } from '../colonia/travas.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
-import { lerCards } from './card.ts'
-import type { CardDaCaixa } from './card.ts'
-import { idDaEspecie } from './infra.service.ts'
 import { lerPosicao } from './posicao.ts'
 import type { PosicaoNaEstante } from './posicao.ts'
-
-/** O card como o Kanban o mostra */
-function cardDoKanban(caixa: CardDaCaixa) {
-  return {
-    idCaixa: caixa.id,
-    codigo: caixa.codigo,
-    numeroVisivel: caixa.numeroVisivel,
-    linhagem: caixa.linhagem,
-    casal: caixa.casal,
-    estoque: caixa.estoque,
-  }
-}
-
-/**
- * GET /api/quadro?especie= - o Kanban de uma especie, com as quatro colunas sempre presentes e
- * nada gravado: a coluna de cada caixa sai do que ela tem (colunaDaCaixa). Entram as caixas
- * ativas e as de estoque que a entrega esvaziou ha menos de uma semana (Enviado)
- */
-export async function montarQuadro(codigoEspecie: string, hoje: string = hojeISO()) {
-  const idEspecie = await idDaEspecie(codigoEspecie)
-
-  const caixas = await lerCards(
-    prisma,
-    {
-      idEspecie,
-      OR: [{ ativa: true }, { motivoLiberacao: 'entrega', dtLiberacao: { gte: paraData(inicioDoEnviado(hoje)) } }],
-    },
-    hoje,
-  )
-
-  return {
-    colunas: COLUNAS.map((estado) => ({
-      estado,
-      cards: caixas.filter((caixa) => caixa.estado === estado).map(cardDoKanban),
-    })),
-  }
-}
 
 /**
  * PATCH /api/caixas/:id/posicao - a caixa muda de lugar na estante, com tudo o que tem: os animais

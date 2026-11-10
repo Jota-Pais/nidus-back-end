@@ -2,15 +2,15 @@ import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import express, { type Express, type RequestHandler } from 'express'
 import { catalogoRoutes } from './modules/catalogo/catalogo.routes.ts'
-import { baixaRoutes, ocorrenciaRoutes } from './modules/colonia/colonia.routes.ts'
+import { baixaRoutes, ocorrenciaRoutes, visaoGeralRoutes } from './modules/colonia/colonia.routes.ts'
 import { pedidoRoutes, projetoRoutes } from './modules/demanda/demanda.routes.ts'
-import { caixaRoutes, quadroRoutes } from './modules/infra/caixa.routes.ts'
+import { caixaRoutes } from './modules/infra/caixa.routes.ts'
 import { historicoRoutes } from './modules/historico/historico.routes.ts'
 import { estanteRoutes } from './modules/infra/infra.routes.ts'
 import { salaRoutes } from './modules/infra/sala.routes.ts'
 import { autenticacaoPorCookie } from './modules/login/autenticacao.ts'
 import { acessoRoutes, sessaoRoutes } from './modules/login/login.routes.ts'
-import { buscaRoutes, estoqueRoutes, viabilidadeRoutes } from './modules/motor/motor.routes.ts'
+import { buscaRoutes, viabilidadeRoutes } from './modules/motor/motor.routes.ts'
 import { casalRoutes, partoRoutes } from './modules/reproducao/reproducao.routes.ts'
 import { usuarioRoutes } from './modules/usuarios/usuarios.routes.ts'
 import { rotaNaoEncontrada, tratadorDeErros } from './shared/middlewares/erro.ts'
@@ -65,7 +65,7 @@ export function criarApp({
   app.use('/api/estantes', estanteRoutes)
   app.use('/api/casais', casalRoutes)
   app.use('/api/partos', partoRoutes)
-  app.use('/api/quadro', quadroRoutes)
+  app.use('/api/visao-geral', visaoGeralRoutes)
   app.use('/api/caixas', caixaRoutes)
   app.use('/api/caixas', baixaRoutes)
   app.use('/api/ocorrencias', ocorrenciaRoutes)
@@ -75,7 +75,6 @@ export function criarApp({
   app.use('/api/pedidos', pedidoRoutes)
   app.use('/api/busca', buscaRoutes)
   app.use('/api/historico', historicoRoutes)
-  app.use('/api/estoque', estoqueRoutes)
   app.use('/api/usuarios', usuarioRoutes)
 
   app.use(rotaNaoEncontrada)

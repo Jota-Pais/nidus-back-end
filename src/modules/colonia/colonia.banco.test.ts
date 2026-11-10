@@ -2,11 +2,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { abrirCaso, abrirTransacaoDoTeste, desfazerCaso } from '../../shared/testes/transacao.ts'
 import { dataLegivel, hojeISO } from '../../shared/traducao.ts'
 import { listarHistorico } from '../historico/historico.service.ts'
-import { montarQuadro, mudarDePosicao } from '../infra/caixa.service.ts'
+import { mudarDePosicao } from '../infra/caixa.service.ts'
 import { montarFicha } from '../infra/ficha.service.ts'
 import { montarGrade } from '../infra/infra.service.ts'
 import { registrarMudanca, virarCaixaDeEstoque } from '../infra/mudanca.service.ts'
-import { consultarEstoque } from '../motor/estoque.service.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
 import { registrarEntrega } from '../demanda/entrega.service.ts'
 import { aprovarPedido, criarPedido } from '../demanda/pedido.service.ts'
@@ -22,11 +21,12 @@ import {
   registrarSelecao,
 } from '../reproducao/reproducao.service.ts'
 import { anularBaixa, registrarBaixa } from './baixa.service.ts'
+import { lerVisaoGeral } from './visaoGeral.service.ts'
 
 // Os servicos da colonia contra um banco de verdade, com os triggers e os CHECKs da migration
 // 20261108200000_colonia_por_animal: formar casal, nascer, selecionar, desmamar, mudar de caixa,
-// dar baixa, anular, encerrar, fechar sem ninhada, virar estoque e corrigir, e o quadro, a grade,
-// a ficha e o estoque lendo os mesmos animais. As regras, caso a caso, ficam nos testes de cada
+// dar baixa, anular, encerrar, fechar sem ninhada, virar estoque e corrigir, e a grade, a ficha e
+// a visao geral lendo os mesmos animais. As regras, caso a caso, ficam nos testes de cada
 // modulo, contra a colonia de mentira; aqui so o caminho inteiro de cada uma, com o SQL das travas
 // e da escolha e o trigger do animal conferindo cada escrita.
 //
@@ -555,7 +555,7 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
     )
   })
 
-  it('quadro, grade, ficha e estoque contam os mesmos animais', async () => {
+  it('grade, ficha e visao geral contam os mesmos animais', async () => {
     const { idCaixa, idParto } = await casalComNinhada({ linha: 1, coluna: 1 }, { m: 3, f: 3 })
     const { caixas } = await registrarMudanca(
       idCaixa,
@@ -565,19 +565,13 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
     const estoque = caixas[0]?.idCaixa ?? 0
     await registrarBaixa(estoque, { dtFato: daqui(-10), itens: [{ sexo: 'M', qtd: 1 }] }, tecnico)
 
-    const quadro = await montarQuadro(ESPECIE)
-    const coluna = (id: number) => quadro.colunas.find((c) => c.cards.some((card) => card.idCaixa === id))
-    expect(coluna(idCaixa)?.estado).toBe('livres')
-    expect(coluna(estoque)?.estado).toBe('estoque')
-    const cardDoEstoque = coluna(estoque)?.cards.find((card) => card.idCaixa === estoque)
-    expect(cardDoEstoque?.estoque).toMatchObject({ sexo: 'M', total: 1, reservado: 0 })
-
     const grade = await montarGrade(idEstante)
     const naGrade = grade.faces.flatMap((face) => face.posicoes).filter((p) => p.caixa !== null)
-    expect(naGrade.map((p) => [p.codigo, p.caixa?.estado])).toEqual([
-      ['F1A', 'livres'],
-      ['F1B', 'estoque'],
+    expect(naGrade.map((p) => [p.codigo, p.caixa?.estado, p.caixa?.idLinhagem])).toEqual([
+      ['F1A', 'livres', idLinhagem],
+      ['F1B', 'estoque', idLinhagem],
     ])
+    expect(naGrade[1]?.caixa?.estoque).toMatchObject({ sexo: 'M', total: 1, reservado: 0 })
 
     const ficha = await montarFicha(idCaixa)
     const parto = ficha.partos?.find((p) => p.id === idParto)
@@ -587,10 +581,16 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
       ['F1B', 1, 0],
     ])
 
-    const { linhagens } = await consultarEstoque(ESPECIE)
-    expect(linhagens.find((l) => l.idLinhagem === idLinhagem)).toMatchObject({
-      confirmado: { m: 2, f: 3 },
-      previsto: { m: 0, f: 0 },
+    const { especies } = await lerVisaoGeral()
+    const linhagem = especies.find((e) => e.codigo === ESPECIE)?.linhagens.find((l) => l.idLinhagem === idLinhagem)
+    expect(linhagem).toMatchObject({
+      casais: 1,
+      vivos: { m: 2, f: 3 },
+      mamando: { m: 0, f: 0 },
+      reservados: { m: 0, f: 0 },
+      livres: { m: 2, f: 3 },
     })
+    // nasceram ha 50 dias: todos os livres na faixa de 36 a 60
+    expect(linhagem?.livresPorIdade.find((faixa) => faixa.de === 36)).toMatchObject({ m: 2, f: 3 })
   })
 })

@@ -1,11 +1,11 @@
-// A coluna do Kanban de cada caixa, calculada do que ela tem. Nada e gravado: a caixa muda de
-// coluna quando os animais mudam.
+// A coluna de cada caixa (a cor dela na grade e o estado na ficha), calculada do que ela tem. Nada
+// e gravado: a caixa muda de coluna quando os animais mudam. O Kanban saiu; os nomes ficaram.
 
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
 import { hojeISO } from '../../shared/traducao.ts'
 import type { MotivoDaLiberacao } from './tipos.ts'
 
-/** As 4 colunas, na ordem da tela */
+/** As 4 colunas */
 export const COLUNAS = ['livres', 'estoque', 'reserva', 'enviado'] as const
 
 export type Coluna = (typeof COLUNAS)[number]
@@ -31,7 +31,7 @@ export function inicioDoEnviado(hoje: string = hojeISO()): string {
 }
 
 /**
- * A coluna da caixa, ou null quando ela nao aparece no Kanban. A de casal ativa fica em Livres
+ * A coluna da caixa, ou null na caixa liberada que nao foi enviada. A de casal ativa fica em Livres
  * (o card diz quantos reservados tem). A de estoque ativa fica em Reserva se tem vivos e todos
  * estao reservados; senao, em Estoque. A de estoque que a entrega esvaziou fica em Enviado por
  * 7 dias contados da data da entrega

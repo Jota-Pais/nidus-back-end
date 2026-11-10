@@ -6,24 +6,12 @@ import {
   usuarioDaRequisicao,
 } from '../../shared/middlewares/autorizacao.ts'
 import { dataDoFato, idNaRota, idNoCorpo } from '../../shared/validacao.ts'
-import { montarQuadro, mudarDePosicao } from './caixa.service.ts'
+import { mudarDePosicao } from './caixa.service.ts'
 import { montarFicha } from './ficha.service.ts'
 import { registrarMudanca, virarCaixaDeEstoque } from './mudanca.service.ts'
 
-/** /api/quadro e o kanban de uma especie; /api/caixas e a ficha, a posicao e os animais que mudam */
-export const quadroRoutes = Router()
+/** /api/caixas e a ficha, a posicao e os animais que mudam */
 export const caixaRoutes = Router()
-
-const filtroDoQuadro = z.object({
-  // um kanban por especie: nao existe "todas as especies"
-  especie: z.string().trim().min(1),
-})
-
-quadroRoutes.get('/', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
-  const { especie } = filtroDoQuadro.parse(req.query)
-
-  res.json(await montarQuadro(especie))
-})
 
 /** GET /api/caixas/:id - a ficha da caixa */
 caixaRoutes.get('/:id', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {

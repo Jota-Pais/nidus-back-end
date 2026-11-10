@@ -1,12 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { montarQuadro } from './caixa.service.ts'
 import { montarGrade } from './infra.service.ts'
 
-// O Kanban e a grade com o banco de mentira: as caixas que cada teste deixa em 'banco' e os vivos
-// delas. A coluna de cada caixa sai dos animais, nada vem gravado
+// A grade com o banco de mentira: as caixas que cada teste deixa em 'banco' e os vivos delas. A
+// coluna de cada caixa sai dos animais, nada vem gravado
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
-const hoje = '2026-11-08'
 
 const banco = vi.hoisted(() => ({
   caixas: [] as Record<string, unknown>[],
@@ -60,7 +58,8 @@ const caixa = (id: number, campos: Record<string, unknown> = {}) => ({
 const casal = {
   identificacao: 'AB',
   ativo: true,
-  linhagem: { nome: 'Wistar' },
+  idLinhagem: 5,
+  linhagem: { nome: 'Kyoto' },
   partos: [{ ordem: 1, dtAcasalamento: d('2026-08-09'), dtPartoReal: d('2026-09-01'), dtSemNinhada: null }],
 }
 
@@ -78,55 +77,6 @@ beforeEach(() => {
   banco.onde = null
 })
 
-describe('o Kanban', () => {
-  it('as quatro colunas sempre aparecem, na ordem da tela, mesmo vazias', async () => {
-    const quadro = await montarQuadro('rato', hoje)
-
-    expect(quadro.colunas.map((coluna) => coluna.estado)).toEqual(['livres', 'estoque', 'reserva', 'enviado'])
-    expect(quadro.colunas.every((coluna) => coluna.cards.length === 0)).toBe(true)
-  })
-
-  it('le as caixas ativas da especie e as que a entrega esvaziou desde o comeco da semana de Enviado', async () => {
-    await montarQuadro('rato', hoje)
-
-    expect(banco.onde).toEqual({
-      idEspecie: 1,
-      OR: [{ ativa: true }, { motivoLiberacao: 'entrega', dtLiberacao: { gte: d('2026-11-01') } }],
-    })
-  })
-
-  it('cada caixa na coluna que os animais dela dao', async () => {
-    banco.caixas = [
-      caixa(1, { tipo: 'casal', sexo: null, idLinhagem: null, linhagem: null, casais: [casal] }),
-      caixa(2),
-      caixa(3, { ativa: false, motivoLiberacao: 'entrega', dtLiberacao: d('2026-11-03') }),
-    ]
-    banco.linhas = [vivos(1, 'M', 9, 5), vivos(2, 'F', 9, 4)]
-
-    const quadro = await montarQuadro('rato', hoje)
-    const porColuna = Object.fromEntries(quadro.colunas.map((c) => [c.estado, c.cards.map((card) => card.codigo)]))
-
-    // a de casal fica em Livres mesmo com todos reservados; a de estoque toda reservada, em Reserva
-    expect(porColuna).toEqual({ livres: ['F1A'], estoque: [], reserva: ['F1B'], enviado: ['F1C'] })
-    expect(quadro.colunas[0]?.cards[0]).toMatchObject({
-      idCaixa: 1,
-      numeroVisivel: 'E1',
-      linhagem: 'Wistar',
-      casal: { identificacao: 'AB', reservado: 5 },
-      estoque: null,
-    })
-    expect(quadro.colunas[2]?.cards[0]).toMatchObject({ casal: null, estoque: { sexo: 'F', total: 4, reservado: 4 } })
-  })
-
-  it('a caixa liberada por baixa ou mudanca nao aparece', async () => {
-    banco.caixas = [caixa(1, { ativa: false, motivoLiberacao: 'mudanca', dtLiberacao: d('2026-11-07') })]
-
-    const quadro = await montarQuadro('rato', hoje)
-
-    expect(quadro.colunas.flatMap((c) => c.cards)).toEqual([])
-  })
-})
-
 describe('a grade da estante', () => {
   it('cada posicao com o codigo da etiqueta; a ocupada traz a coluna, a linhagem e o card da caixa', async () => {
     banco.caixas = [caixa(2)]
@@ -141,11 +91,27 @@ describe('a grade da estante', () => {
     expect(face?.posicoes[1]?.caixa).toEqual({
       id: 2,
       estado: 'estoque',
+      idLinhagem: 3,
       linhagem: 'Wistar',
       casal: null,
       // a MiniGrade filtra os destinos da mudanca pelo sexo e pela linhagem
       estoque: expect.objectContaining({ sexo: 'F', idLinhagem: 3, total: 4, reservado: 1 }),
     })
     expect(banco.onde).toEqual({ idEstante: 1, ativa: true })
+  })
+
+  it('a caixa do casal traz a linhagem do casal, para a grade filtrar por ela', async () => {
+    banco.caixas = [caixa(1, { tipo: 'casal', sexo: null, idLinhagem: null, linhagem: null, casais: [casal] })]
+    banco.linhas = [vivos(1, 'M', 9, 5)]
+
+    const grade = await montarGrade(1)
+
+    expect(grade.faces[0]?.posicoes[0]?.caixa).toMatchObject({
+      estado: 'livres',
+      idLinhagem: 5,
+      linhagem: 'Kyoto',
+      casal: { identificacao: 'AB', reservado: 5 },
+      estoque: null,
+    })
   })
 })
