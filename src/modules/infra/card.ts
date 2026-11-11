@@ -34,6 +34,25 @@ export function partoAtual(partos: PartoDoCard[]): number {
 }
 
 /**
+ * O numero do parto que a celula mostra, coerente com a fase da caixa: pronto para o estoque, o
+ * parto da ninhada desmamada na caixa; mamando, o da ninhada que mama; acasalado, o do parto
+ * pendente. Com mais de uma ninhada na mesma fase vale a mais antiga (menor ordem). Sem fase
+ * (ou sem o parto da fase), o parto em curso
+ */
+export function partoDaFase(fase: Fase | null, partos: PartoDoCard[], ninhadas: VivosDoParto[]): number {
+  const maisAntiga = (lista: VivosDoParto[]) => (lista.length === 0 ? null : Math.min(...lista.map((n) => n.ordem)))
+  let ordem: number | null = null
+
+  if (fase === 'pronto_estoque') ordem = maisAntiga(ninhadas.filter((ninhada) => ninhada.desmamado))
+  else if (fase === 'mamando') ordem = maisAntiga(ninhadas.filter((ninhada) => !ninhada.desmamado))
+  else if (fase === 'acasalado') {
+    ordem = partos.find((parto) => parto.dtPartoReal === null && parto.dtSemNinhada === null)?.ordem ?? null
+  }
+
+  return ordem ?? partoAtual(partos)
+}
+
+/**
  * A previsao do parto pendente (nem nasceu, nem foi fechado sem ninhada), ou null quando nao ha.
  * Vale tambem para o casal encerrado: a femea ainda pare o que carrega
  */
@@ -65,10 +84,15 @@ export function casalNoCard(casal: CasalDoCard | undefined, naCaixa: VivosNaCaix
   if (casal === undefined) return null
 
   const ninhadas = naCaixa.partos.map((parto) => ninhadaNoCard(parto, hoje))
+  const { fase } = faseDaCaixa(
+    { tipo: 'casal', ativa: true, ninhadas: naCaixa.partos, partoPrevisto: partoPrevisto(casal.partos) },
+    hoje,
+  )
 
   return {
     identificacao: casal.identificacao.trim(),
     partoAtual: partoAtual(casal.partos),
+    partoDaFase: partoDaFase(fase, casal.partos, naCaixa.partos),
     partoPrevisto: partoPrevisto(casal.partos),
     encerrado: !casal.ativo,
     aguardandoDesmame: !casal.ativo && ninhadas.some((ninhada) => ninhada.mamando),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { VivosDoParto, VivosNaCaixa } from '../colonia/consultas.ts'
-import { casalNoCard, estoqueNoCard, gruposPorNascimento, lerCards, partoAtual, partoPrevisto } from './card.ts'
+import { casalNoCard, estoqueNoCard, gruposPorNascimento, lerCards, partoAtual, partoDaFase, partoPrevisto } from './card.ts'
 
 const hoje = '2026-11-08'
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
@@ -57,6 +57,7 @@ describe('o casal no card', () => {
     expect(card).toEqual({
       identificacao: 'AB',
       partoAtual: 2,
+      partoDaFase: 1,
       partoPrevisto: '2026-11-12',
       encerrado: false,
       aguardandoDesmame: false,
@@ -85,6 +86,29 @@ describe('o casal no card', () => {
   it('caixa sem vivo mostra o casal sem ninhada; sem casal, nao ha card de casal', () => {
     expect(casalNoCard(casal, naCaixa([]), hoje)).toMatchObject({ ninhadas: [], reservado: 0 })
     expect(casalNoCard(undefined, naCaixa([]), hoje)).toBeNull()
+  })
+})
+
+describe('o numero do parto na celula acompanha a fase', () => {
+  const partos = [parto(1, '2026-08-01', '2026-08-24'), parto(2, '2026-08-30')]
+  const casal = { identificacao: 'AB', ativo: true, partos }
+
+  it('parto 1 nascido e acasalamento 2 pendente: em aleitamento, numero 1', () => {
+    const mamando = [doParto(4, 1, '2026-10-25', [5, 4], [0, 0], false)]
+
+    expect(casalNoCard(casal, naCaixa(mamando), hoje)?.partoDaFase).toBe(1)
+    expect(partoDaFase('mamando', partos, mamando)).toBe(1)
+  })
+
+  it('desmamado na caixa: numero do parto desmamado, o mais antigo se houver mais de um', () => {
+    const desmamados = [doParto(5, 2, '2026-09-20', [2, 2]), doParto(4, 1, '2026-09-01', [3, 1])]
+
+    expect(casalNoCard(casal, naCaixa(desmamados.slice(1)), hoje)?.partoDaFase).toBe(1)
+    expect(partoDaFase('pronto_estoque', partos, desmamados)).toBe(1)
+  })
+
+  it('so o parto 2 pendente: acasalado, numero 2', () => {
+    expect(casalNoCard(casal, naCaixa([]), hoje)?.partoDaFase).toBe(2)
   })
 })
 
