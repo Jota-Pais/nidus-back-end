@@ -126,6 +126,40 @@ describe('a visao geral', () => {
   })
 })
 
+describe('os livres por idade em dias', () => {
+  const dias = (grupos: GrupoDeVivos[]) => wistar(grupos)?.livresPorIdadeDias
+
+  it('agrupa por idade, soma os sexos de partos diferentes do mesmo dia e ordena', () => {
+    expect(
+      dias([
+        grupo({ dtNascimento: nascidoHa(40), sexo: 'M', qtd: 2 }),
+        grupo({ dtNascimento: nascidoHa(10), sexo: 'F', qtd: 3 }),
+        grupo({ dtNascimento: nascidoHa(40), sexo: 'F', qtd: 1 }),
+        grupo({ dtNascimento: nascidoHa(40), sexo: 'M', qtd: 4 }),
+      ]),
+    ).toEqual([
+      { idade: 10, m: 0, f: 3 },
+      { idade: 40, m: 6, f: 1 },
+    ])
+  })
+
+  it('reservados, sem data e idade negativa', () => {
+    expect(
+      dias([
+        grupo({ reservado: true, qtd: 5 }),
+        grupo({ dtNascimento: null, qtd: 2 }),
+        grupo({ dtNascimento: nascidoHa(-3), qtd: 1 }),
+        grupo({ dtNascimento: nascidoHa(0), sexo: 'F', qtd: 1 }),
+      ]),
+    ).toEqual([{ idade: 0, m: 1, f: 1 }])
+  })
+
+  it('sem livres, lista vazia; sem itens zerados', () => {
+    expect(dias([])).toEqual([])
+    expect(dias([grupo({ qtd: 0 })])).toEqual([])
+  })
+})
+
 // ------------------------------------------------------------ a leitura
 
 const banco = vi.hoisted(() => ({

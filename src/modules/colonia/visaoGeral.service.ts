@@ -20,6 +20,9 @@ export const FAIXAS_DE_IDADE_DOS_LIVRES = [
 
 export type LivresNaFaixa = PorSexo & { de: number; ate: number | null }
 
+/** Os livres de uma idade em dias, por sexo */
+export type LivresNaIdade = PorSexo & { idade: number }
+
 export type LinhagemNaVisaoGeral = {
   idLinhagem: number
   linhagem: string
@@ -33,6 +36,8 @@ export type LinhagemNaVisaoGeral = {
   /** os vivos sem pedido, os que mamam inclusive */
   livres: PorSexo
   livresPorIdade: LivresNaFaixa[]
+  /** os livres por idade em dias, uma entrada por idade, da menor para a maior, sem entrada zerada */
+  livresPorIdadeDias: LivresNaIdade[]
 }
 
 export type VisaoGeral = {
@@ -79,6 +84,7 @@ function linhagemZerada(linhagem: { id: number; nome: string }): LinhagemNaVisao
     reservados: zero(),
     livres: zero(),
     livresPorIdade: FAIXAS_DE_IDADE_DOS_LIVRES.map((faixa) => ({ de: faixa.de, ate: faixa.ate, m: 0, f: 0 })),
+    livresPorIdadeDias: [],
   }
 }
 
@@ -116,9 +122,20 @@ export function montarVisaoGeral(
           if (grupo.dtNascimento === null) continue
 
           const faixa = contagem.livresPorIdade[faixaDaIdade(diasEntre(grupo.dtNascimento, hoje))]
+          const idade = diasEntre(grupo.dtNascimento, hoje)
           if (faixa !== undefined) somar(faixa, grupo.sexo, grupo.qtd)
+
+          if (grupo.qtd <= 0) continue
+          const dias = Math.max(0, idade)
+          let naIdade = contagem.livresPorIdadeDias.find((item) => item.idade === dias)
+          if (naIdade === undefined) {
+            naIdade = { idade: dias, m: 0, f: 0 }
+            contagem.livresPorIdadeDias.push(naIdade)
+          }
+          somar(naIdade, grupo.sexo, grupo.qtd)
         }
 
+        contagem.livresPorIdadeDias.sort((a, b) => a.idade - b.idade)
         return { ativa: linhagem.ativa, contagem }
       })
 
