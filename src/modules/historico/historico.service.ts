@@ -5,6 +5,7 @@
 
 import type { Prisma } from '@prisma/client'
 import { prisma } from '../../shared/prisma.ts'
+import { agora } from '../../shared/relogio.ts'
 import { dataISO, dataLegivel } from '../../shared/traducao.ts'
 import { descreverOcorrencia, selecaoDaDescricao } from '../colonia/descricao.ts'
 import { MOTIVO_SELECAO } from '../colonia/tipos.ts'
@@ -30,6 +31,7 @@ export function registrarHistorico(banco: BancoComHistorico, alteracao: Alteraca
   return banco.historico.create({
     data: {
       idUsuario: alteracao.idUsuario,
+      dtHora: agora(),
       entidade: alteracao.entidade,
       idEntidade: alteracao.idEntidade,
       acao: alteracao.acao,

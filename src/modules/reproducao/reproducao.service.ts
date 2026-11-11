@@ -5,6 +5,7 @@
 // parto e da caixa ficam aqui, conferidas na mesma transacao da escrita e com as linhas travadas
 // (colonia/travas.ts): casal -> parto -> caixa.
 
+import { agora } from '../../shared/relogio.ts'
 import type { Prisma } from '@prisma/client'
 import { ErroDeAplicacao, campoInvalido, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { INTERVALO_ACASALAMENTO_DIAS, MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
@@ -400,7 +401,7 @@ export async function registrarNascimento(idParto: number, dados: Nascimento, id
       data: {
         dtPartoReal: paraData(dados.dtPartoReal),
         idUsuarioParto: idUsuario,
-        dtRegistroParto: new Date(),
+        dtRegistroParto: agora(),
       },
     })
 
@@ -423,7 +424,7 @@ export async function registrarNascimento(idParto: number, dados: Nascimento, id
           ativo: false,
           dtEncerramento: paraData(dados.dtPartoReal),
           motivoEncerramento: `Limite de ${MAX_PARTOS_POR_CASAL} partos atingido`,
-          dtManutencao: new Date(),
+          dtManutencao: agora(),
         },
       })
 
@@ -618,7 +619,7 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
       data: {
         dtDesmameReal: paraData(dados.dtDesmameReal),
         idUsuarioDesmame: idUsuario,
-        dtRegistroDesmame: new Date(),
+        dtRegistroDesmame: agora(),
       },
     })
 
@@ -724,7 +725,7 @@ export async function encerrarCasal(idCasal: number, dados: Encerramento, idUsua
         ativo: false,
         dtEncerramento: paraData(dados.dtEncerramento),
         motivoEncerramento: dados.motivo,
-        dtManutencao: new Date(),
+        dtManutencao: agora(),
       },
     })
 
@@ -781,7 +782,7 @@ export async function fecharSemNinhada(idParto: number, dados: SemNinhada, idUsu
       data: {
         dtSemNinhada: paraData(dados.dtSemNinhada),
         motivoSemNinhada: dados.motivo,
-        dtManutencao: new Date(),
+        dtManutencao: agora(),
       },
     })
 

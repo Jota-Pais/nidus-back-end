@@ -1,5 +1,6 @@
 // Estantes: lista, grade das duas faces, cadastro, edicao e remocao
 
+import { agora } from '../../shared/relogio.ts'
 import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { codigoDaEspecie, face as faceDic } from '../../shared/traducao.ts'
@@ -218,7 +219,7 @@ export async function alterarEstante(id: number, dados: AlteracaoDeEstante, idUs
   const salva = await prisma.$transaction(async (tx) => {
     const atualizada = await tx.estante.update({
       where: { id },
-      data: { numeroVisivel, idSala: sala.id, dtManutencao: new Date() },
+      data: { numeroVisivel, idSala: sala.id, dtManutencao: agora() },
       include: comASala,
     })
 
@@ -256,7 +257,7 @@ export async function removerEstante(id: number, idUsuario: number) {
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.estante.update({ where: { id }, data: { ativa: false, dtManutencao: new Date() } })
+    await tx.estante.update({ where: { id }, data: { ativa: false, dtManutencao: agora() } })
 
     await registrarHistorico(tx, {
       idUsuario,

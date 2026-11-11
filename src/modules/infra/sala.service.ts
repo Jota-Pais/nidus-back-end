@@ -1,6 +1,7 @@
 // Salas: lista, cadastro, renomeacao e remocao. Remover e 'ativa = false', e so sai a sala
 // sem estante ativa: a estante removida continua apontando para ela
 
+import { agora } from '../../shared/relogio.ts'
 import { erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
@@ -76,7 +77,7 @@ export async function renomearSala(id: number, dados: { nome: string }, idUsuari
   const salva = await prisma.$transaction(async (tx) => {
     const atualizada = await tx.sala.update({
       where: { id },
-      data: { nome: dados.nome, dtManutencao: new Date() },
+      data: { nome: dados.nome, dtManutencao: agora() },
     })
 
     await registrarHistorico(tx, {
@@ -107,7 +108,7 @@ export async function removerSala(id: number, idUsuario: number) {
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.sala.update({ where: { id }, data: { ativa: false, dtManutencao: new Date() } })
+    await tx.sala.update({ where: { id }, data: { ativa: false, dtManutencao: agora() } })
 
     await registrarHistorico(tx, {
       idUsuario,

@@ -1,5 +1,6 @@
 // A mudanca de posicao de uma caixa na estante
 
+import { agora } from '../../shared/relogio.ts'
 import { erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { caixaLiberada } from '../colonia/liberacao.ts'
@@ -37,7 +38,7 @@ export async function mudarDePosicao(idCaixa: number, destino: PosicaoNaEstante,
         face: posicao.face,
         linha: posicao.linha,
         coluna: posicao.coluna,
-        dtManutencao: new Date(),
+        dtManutencao: agora(),
       },
       select: { codigo: true },
     })

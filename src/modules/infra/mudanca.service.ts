@@ -5,6 +5,7 @@
 // Tudo numa transacao, com as caixas travadas (colonia/travas.ts) e os animais escolhidos e
 // travados (colonia/escolha.ts): o que se confere e o que se grava e a mesma coisa.
 
+import { agora } from '../../shared/relogio.ts'
 import type { Prisma } from '@prisma/client'
 import { campoInvalido, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import type { CodigoErro } from '../../shared/erros.ts'
@@ -323,7 +324,7 @@ export async function virarCaixaDeEstoque(idCaixa: number, idUsuario: number) {
 
     await tx.caixa.update({
       where: { id: idCaixa },
-      data: { tipo: 'estoque', sexo: virada.sexo, idLinhagem: virada.idLinhagem, dtManutencao: new Date() },
+      data: { tipo: 'estoque', sexo: virada.sexo, idLinhagem: virada.idLinhagem, dtManutencao: agora() },
     })
 
     const total = caixa.ninhadas.reduce((soma, ninhada) => soma + ninhada.vivos.m + ninhada.vivos.f, 0)

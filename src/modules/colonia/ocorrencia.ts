@@ -6,6 +6,7 @@
 // em que o animal tem de estar (vivo para a baixa, morto para a anulacao...), e se algum nao
 // estiver, nada fica: o animal mudou no meio do caminho.
 
+import { agora } from '../../shared/relogio.ts'
 import type { Prisma } from '@prisma/client'
 import { erroDeRegra } from '../../shared/erros.ts'
 import { paraData } from '../../shared/traducao.ts'
@@ -119,7 +120,7 @@ async function atualizar(
 
   const { count } = await tx.animal.updateMany({
     where: { ...esperado, id: { in: ids } },
-    data: { ...data, dtManutencao: new Date() },
+    data: { ...data, dtManutencao: agora() },
   })
 
   if (count !== ids.length) throw animaisMudaram()
@@ -281,6 +282,7 @@ export async function lancarOcorrencia(tx: Transacao, lancamento: Lancamento): P
       tipo: lancamento.tipo,
       dtFato: paraData(lancamento.dtFato),
       idUsuario: lancamento.idUsuario,
+      dtRegistro: agora(),
       motivo: lancamento.motivo ?? null,
       ...camposDaOcorrencia(lancamento),
       animais: { createMany: { data: ids.map((idAnimal) => ({ idAnimal })) } },

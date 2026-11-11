@@ -1,6 +1,7 @@
 // A viabilidade do pedido para quem pede: a mesma busca de atendimento do tecnico, resumida em
 // "da ou nao da". A resposta nao leva numero de estoque, so o veredito e o motivo
 
+import { agora as instanteAtual } from '../../shared/relogio.ts'
 import { naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { codigoDaEspecie } from '../../shared/traducao.ts'
@@ -45,7 +46,7 @@ export function resumirBusca(busca: {
 /** POST /api/pedidos/viabilidade */
 export async function avaliarViabilidade(
   pedido: PedidoDeViabilidade,
-  agora: Date = new Date(),
+  agora: Date = instanteAtual(),
 ): Promise<Viabilidade> {
   const linhagem = await prisma.linhagem.findUnique({
     where: { id: pedido.idLinhagem },

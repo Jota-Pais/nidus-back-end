@@ -13,6 +13,8 @@ import { acessoRoutes, sessaoRoutes } from './modules/login/login.routes.ts'
 import { buscaRoutes, viabilidadeRoutes } from './modules/motor/motor.routes.ts'
 import { casalRoutes, partoRoutes } from './modules/reproducao/reproducao.routes.ts'
 import { usuarioRoutes } from './modules/usuarios/usuarios.routes.ts'
+import { relogioLigado } from './shared/relogio.ts'
+import { relogioRoutes } from './shared/relogio.routes.ts'
 import { rotaNaoEncontrada, tratadorDeErros } from './shared/middlewares/erro.ts'
 
 type OpcoesApp = {
@@ -52,6 +54,11 @@ export function criarApp({
   app.get('/saude', (_req, res) => {
     res.json({ status: 'ok', ambiente, versao })
   })
+
+  // O relogio de teste: so existe com RELOGIO_DE_TESTE=ligado, e por isso fica antes da autenticacao
+  if (relogioLigado()) {
+    app.use('/api/relogio', relogioRoutes)
+  }
 
   // Daqui para baixo tudo passa pela autenticacao. Ela nunca recusa por conta propria: preenche
   // req.usuario quando ha sessao e segue.

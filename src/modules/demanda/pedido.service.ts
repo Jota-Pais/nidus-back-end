@@ -2,6 +2,7 @@
 // ou automatica para o pedido sem resposta). A reserva e a entrega ficam em reserva.service.ts e
 // entrega.service.ts
 
+import { agora as instanteAtual } from '../../shared/relogio.ts'
 import { avisarPedidoDecidido } from '../../shared/email.ts'
 import { ErroDeAplicacao, campoInvalido, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
@@ -136,7 +137,7 @@ export type PedidoNovo = {
 }
 
 /** POST /api/pedidos - o pedido do pesquisador. Nasce enviado, aguardando a analise da equipe */
-export async function criarPedido(dados: PedidoNovo, usuario: UsuarioDaSessao, agora: Date = new Date()) {
+export async function criarPedido(dados: PedidoNovo, usuario: UsuarioDaSessao, agora: Date = instanteAtual()) {
   // O protocolo vale pelo formato, que a rota ja conferiu: o pedido nao depende de projeto
   // cadastrado, e a equipe tecnica confere com a CEUA ao analisar. Quando o numero ja esta no
   // cadastro, o pedido fica ligado ao projeto
@@ -166,6 +167,7 @@ export async function criarPedido(dados: PedidoNovo, usuario: UsuarioDaSessao, a
         idadeMaxDias: dados.idadeMax,
         dtDesejada: paraData(dados.dataEntrega),
         status: 'enviado',
+        dtCriacao: agora,
         observacoes: dados.observacoes,
       },
     })
@@ -209,7 +211,7 @@ export async function aprovarPedido(idPedido: number, usuario: UsuarioDaSessao) 
       throw erroDeRegra('SEQUENCIA_INVALIDA', `O pedido #${idPedido} não está aguardando análise e não pode ser aprovado.`)
     }
 
-    await tx.pedido.update({ where: { id: idPedido }, data: { status: 'aprovado', dtManutencao: new Date() } })
+    await tx.pedido.update({ where: { id: idPedido }, data: { status: 'aprovado', dtManutencao: instanteAtual() } })
 
     await registrarHistorico(tx, {
       idUsuario: usuario.id,
@@ -255,7 +257,7 @@ async function recusar(
     const soltos: PorSexo =
       status === 'reservado' ? await soltarReservados(tx, idPedido, `Pedido recusado: ${motivo}`, idUsuario) : { m: 0, f: 0 }
 
-    await tx.pedido.update({ where: { id: idPedido }, data: { status: 'recusado', dtManutencao: new Date() } })
+    await tx.pedido.update({ where: { id: idPedido }, data: { status: 'recusado', dtManutencao: instanteAtual() } })
 
     await registrarHistorico(tx, {
       idUsuario,
@@ -286,7 +288,7 @@ export function recusarPedido(idPedido: number, motivo: string, idUsuario: numbe
  * Recusa o pedido que ficou sem resposta por PRAZO_DE_RESPOSTA_EM_DIAS. So o enviado: o aprovado ja
  * foi respondido, mesmo que os animais ainda nao estejam reservados. Devolve quantos recusou
  */
-export async function recusarSemResposta(agora: Date = new Date()): Promise<number> {
+export async function recusarSemResposta(agora: Date = instanteAtual()): Promise<number> {
   const limite = new Date(agora.getTime() - PRAZO_DE_RESPOSTA_EM_DIAS * 24 * 60 * 60 * 1000)
   const vencidos = await prisma.pedido.findMany({
     where: { status: 'enviado', dtCriacao: { lte: limite } },

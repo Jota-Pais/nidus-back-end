@@ -8,6 +8,7 @@
 //
 // As travas seguem a ordem de colonia/travas.ts: o pedido, depois os animais.
 
+import { agora } from '../../shared/relogio.ts'
 import type { Prisma } from '@prisma/client'
 import { avisarAnimaisReservados } from '../../shared/email.ts'
 import { erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
@@ -204,7 +205,7 @@ export async function reservarAnimais(idPedido: number, itensPedidos: ItemDaRese
 
     // o banco (demanda.pedido_coerente) confere que os reservados cobrem o pedido exatamente
     if (status === 'aprovado') {
-      await tx.pedido.update({ where: { id: idPedido }, data: { status: 'reservado', dtManutencao: new Date() } })
+      await tx.pedido.update({ where: { id: idPedido }, data: { status: 'reservado', dtManutencao: agora() } })
     }
 
     return { pedido, passouAReservado: status === 'aprovado', novos, falta: faltaDaReserva(pedido, { m: tem.m + novos.m, f: tem.f + novos.f }) }
@@ -270,7 +271,7 @@ export async function desfazerReserva(idPedido: number, usuario: UsuarioDaSessao
     const soltos = await soltarReservados(tx, idPedido, MOTIVO_DA_RESERVA_DESFEITA, usuario.id)
 
     // o banco confere que nenhum vivo ficou reservado
-    await tx.pedido.update({ where: { id: idPedido }, data: { status: 'aprovado', dtManutencao: new Date() } })
+    await tx.pedido.update({ where: { id: idPedido }, data: { status: 'aprovado', dtManutencao: agora() } })
 
     return soltos
   })

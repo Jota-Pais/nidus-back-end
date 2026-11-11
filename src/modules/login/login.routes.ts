@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { env } from '../../env.ts'
 import { exigirPerfil, usuarioDaRequisicao } from '../../shared/middlewares/autorizacao.ts'
 import { ErroDeAplicacao } from '../../shared/erros.ts'
+import { lerRelogio, relogioLigado } from '../../shared/relogio.ts'
 import { definirSenha, pedirCodigo, verificarCodigo } from './acesso.service.ts'
 import { autenticar } from './login.service.ts'
 import { NOME_COOKIE, revogarSessao } from './sessao.ts'
@@ -60,7 +61,13 @@ sessaoRoutes.post('/', async (req, res) => {
 
 /** Autenticado, qualquer perfil - 'exigirPerfil()' sem lista exige so a sessao. */
 sessaoRoutes.get('/', exigirPerfil(), (req, res) => {
-  res.json({ usuario: usuarioDaRequisicao(req) })
+  const { hoje, deslocamentoDias } = lerRelogio()
+
+  res.json({
+    usuario: usuarioDaRequisicao(req),
+    hoje,
+    relogioDeTeste: relogioLigado() ? { deslocamentoDias } : null,
+  })
 })
 
 sessaoRoutes.delete('/', exigirPerfil(), (req, res) => {

@@ -3,6 +3,7 @@
 // entram os lugares que, na data da entrega, servem ao pedido pela regra de motor.porQueNaoServe,
 // a mesma que a reserva confere
 
+import { agora as instanteAtual } from '../../shared/relogio.ts'
 import {
   ALEITAMENTO_DIAS,
   CIO_DIAS,
@@ -165,7 +166,7 @@ async function lerLivres(idEspecie: number, idLinhagem: number): Promise<LivresD
 }
 
 /** GET /api/busca */
-export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = new Date()) {
+export async function buscarAtendimento(pedido: PedidoDeBusca, agora: Date = instanteAtual()) {
   const hoje = hojeISO(agora)
   const referencia = pedido.dataEntrega ?? hoje
   const idEspecie = await idDaEspecie(pedido.especie)

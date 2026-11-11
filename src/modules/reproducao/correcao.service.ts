@@ -5,6 +5,7 @@
 // Corrigir uma data nunca deixa um fato dos animais fora de ordem: a trilha (colonia.ocorrencia)
 // diz quando cada um morreu, mudou de caixa ou foi entregue.
 
+import { agora } from '../../shared/relogio.ts'
 import type { Prisma } from '@prisma/client'
 import { campoInvalido, erroDeRegra } from '../../shared/erros.ts'
 import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
@@ -101,7 +102,7 @@ export async function corrigirAcasalamento(
 
     await tx.parto.update({
       where: { id: idParto },
-      data: { dtAcasalamento: paraData(dados.dtAcasalamento), dtManutencao: new Date() },
+      data: { dtAcasalamento: paraData(dados.dtAcasalamento), dtManutencao: agora() },
     })
 
     await registrarHistorico(tx, {
@@ -382,7 +383,7 @@ export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNasci
     if (dados.dtPartoReal !== dataAntiga) {
       await tx.parto.update({
         where: { id: idParto },
-        data: { dtPartoReal: paraData(dados.dtPartoReal), dtManutencao: new Date() },
+        data: { dtPartoReal: paraData(dados.dtPartoReal), dtManutencao: agora() },
       })
 
       await tx.ocorrencia.updateMany({
@@ -393,7 +394,7 @@ export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNasci
       if (acasalamentoSeguinte !== null) {
         await tx.parto.update({
           where: { id: acasalamentoSeguinte.idParto },
-          data: { dtAcasalamento: paraData(acasalamentoSeguinte.depois), dtManutencao: new Date() },
+          data: { dtAcasalamento: paraData(acasalamentoSeguinte.depois), dtManutencao: agora() },
         })
 
         await registrarHistorico(tx, {
@@ -423,7 +424,7 @@ export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNasci
       ) {
         await tx.casal.update({
           where: { id: parto.casal.id },
-          data: { dtEncerramento: paraData(dados.dtPartoReal), dtManutencao: new Date() },
+          data: { dtEncerramento: paraData(dados.dtPartoReal), dtManutencao: agora() },
         })
       }
     }
@@ -538,7 +539,7 @@ export async function corrigirDesmame(
 
     await tx.parto.update({
       where: { id: idParto },
-      data: { dtDesmameReal: paraData(dados.dtDesmameReal), dtManutencao: new Date() },
+      data: { dtDesmameReal: paraData(dados.dtDesmameReal), dtManutencao: agora() },
     })
 
     if (naoChegaram !== null) {

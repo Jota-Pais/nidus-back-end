@@ -1,5 +1,6 @@
 // A liberacao da caixa que esvaziou, no fim de toda operacao que tira animal dela
 
+import { agora } from '../../shared/relogio.ts'
 import type { Prisma } from '@prisma/client'
 import { erroDeRegra } from '../../shared/erros.ts'
 import { dataISO, dataLegivel, paraData } from '../../shared/traducao.ts'
@@ -100,7 +101,7 @@ export async function liberarSeVazia(
 
   await tx.caixa.update({
     where: { id: idCaixa },
-    data: { ativa: false, dtLiberacao: paraData(dtLiberacao), motivoLiberacao: motivo, dtManutencao: new Date() },
+    data: { ativa: false, dtLiberacao: paraData(dtLiberacao), motivoLiberacao: motivo, dtManutencao: agora() },
   })
 
   await registrarHistorico(tx, {

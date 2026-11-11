@@ -1,5 +1,6 @@
 // Os projetos aprovados na CEUA e as linhagens do catalogo, que so o gestor cadastra
 
+import { agora as instanteAtual } from '../../shared/relogio.ts'
 import { campoInvalido, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import { prisma } from '../../shared/prisma.ts'
@@ -26,7 +27,7 @@ export type DadosDoProjeto = {
 }
 
 /** GET /api/projetos - o pesquisador so ve os proprios; tecnico e gestor veem todos */
-export async function listarProjetos(usuario: UsuarioDaSessao, agora: Date = new Date()) {
+export async function listarProjetos(usuario: UsuarioDaSessao, agora: Date = instanteAtual()) {
   const hoje = hojeISO(agora)
   const projetos = await prisma.projeto.findMany({
     where: usuario.perfil === 'pesquisador' ? { idUsuarioResponsavel: usuario.id } : {},
@@ -111,7 +112,7 @@ export async function alterarProjeto(id: number, dados: DadosDoProjeto, gestor: 
   await conferir(dados, id)
 
   await prisma.$transaction(async (tx) => {
-    await tx.projeto.update({ where: { id }, data: { ...paraBanco(dados), dtManutencao: new Date() } })
+    await tx.projeto.update({ where: { id }, data: { ...paraBanco(dados), dtManutencao: instanteAtual() } })
 
     await registrarHistorico(tx, {
       idUsuario: gestor.id,

@@ -1,6 +1,7 @@
 // A entrega do pedido: os animais reservados saem da colonia, das caixas onde estao de fato, e o
 // pedido fica entregue. A caixa que esvaziou e liberada com a data da entrega
 
+import { agora } from '../../shared/relogio.ts'
 import type { Prisma } from '@prisma/client'
 import { campoInvalido, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
@@ -150,7 +151,7 @@ export async function registrarEntrega(idPedido: number, dtEntrega: string, idUs
 
     await tx.pedido.update({
       where: { id: idPedido },
-      data: { status: 'entregue', dtEntrega: paraData(dtEntrega), dtManutencao: new Date() },
+      data: { status: 'entregue', dtEntrega: paraData(dtEntrega), dtManutencao: agora() },
     })
 
     const codigos = new Map(reservados.map((animal) => [animal.idCaixa, animal.codigo]))

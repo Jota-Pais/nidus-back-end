@@ -3,6 +3,7 @@
 // dominio continua letra, como o perfil e a face.
 
 import { naoEncontrado } from './erros.ts'
+import { agora } from './relogio.ts'
 
 /** Constroi o par de mapas de um dominio a partir de um unico literal. */
 function dicionario<Codigo extends string, Termo extends string>(
@@ -77,14 +78,14 @@ export function paraData(iso: string): Date {
  * meia-noite o dia em UTC ja virou, e a entrega para hoje seria recusada. O front usa o dia do
  * navegador, que so e o mesmo com o navegador no horario de Brasilia
  */
-export function hojeISO(agora: Date = new Date()): string {
+export function hojeISO(instante: Date = agora()): string {
   // monta pelas partes, sem depender do padrao de data de um idioma, que muda com o ICU
   const partes = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Sao_Paulo',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).formatToParts(agora)
+  }).formatToParts(instante)
   const parte = (tipo: Intl.DateTimeFormatPartTypes) => partes.find((p) => p.type === tipo)?.value
   return `${parte('year')}-${parte('month')}-${parte('day')}`
 }

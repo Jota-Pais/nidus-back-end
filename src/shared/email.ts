@@ -3,6 +3,7 @@
 // e sem rede
 
 import { env } from '../env.ts'
+import { agora, relogioLigado } from './relogio.ts'
 
 /** Envio transacional da Brevo: 201 com { messageId } no sucesso, 400 com { code, message } no erro */
 const URL_DA_BREVO = 'https://api.brevo.com/v3/smtp/email'
@@ -20,6 +21,40 @@ type Mensagem = {
   texto: string
   /** O que nao pode ir para o log se o envio falhar, alem da chave: o codigo */
   segredos?: string[]
+}
+
+/** Um e-mail que o sistema mandaria, guardado em memoria com o relogio de teste ligado */
+export type EmailCapturado = { quando: Date; para: string; assunto: string; texto: string }
+
+const MAXIMO_CAPTURADO = 50
+const capturados: EmailCapturado[] = []
+
+/** Os ultimos e-mails capturados, do mais novo para o mais antigo */
+export function emailsCapturados(): EmailCapturado[] {
+  return [...capturados].reverse()
+}
+
+export function limparEmailsCapturados(): void {
+  capturados.length = 0
+}
+
+/**
+ * Com o relogio de teste ligado nada sai de verdade: o e-mail fica guardado (os 50 ultimos) para a
+ * tela de teste mostrar. Devolve true quando capturou
+ */
+function capturar({ para, assunto, texto }: Mensagem): boolean {
+  if (!relogioLigado()) {
+    return false
+  }
+
+  capturados.push({ quando: agora(), para, assunto, texto })
+
+  if (capturados.length > MAXIMO_CAPTURADO) {
+    capturados.splice(0, capturados.length - MAXIMO_CAPTURADO)
+  }
+
+  console.log(`[email de teste] para ${para}: ${assunto}`)
+  return true
 }
 
 /** O corpo de erro da Brevo em uma linha: '{ code, message }' quando vem assim */
@@ -114,12 +149,7 @@ export async function enviarCodigoDeAcesso(
   codigo: string,
   validadeEmMinutos: number,
 ): Promise<void> {
-  if (env.NODE_ENV !== 'production') {
-    console.log(`[acesso] codigo para ${email}: ${codigo}`)
-    return
-  }
-
-  await enviarPelaBrevo({
+  const mensagem: Mensagem = {
     para: email,
     assunto: 'Seu código para definir a senha do Nidus',
     texto: [
@@ -136,7 +166,18 @@ export async function enviarCodigoDeAcesso(
       NOME_DO_REMETENTE,
     ].join('\n'),
     segredos: [codigo],
-  })
+  }
+
+  if (capturar(mensagem)) {
+    return
+  }
+
+  if (env.NODE_ENV !== 'production') {
+    console.log(`[acesso] codigo para ${email}: ${codigo}`)
+    return
+  }
+
+  await enviarPelaBrevo(mensagem)
 }
 
 /** O horario do aviso, como a pessoa le no relogio dela */
@@ -147,11 +188,6 @@ const FUSO_DO_CPMR = 'America/Sao_Paulo'
  * troca um jeito de reagir. Nao leva codigo nenhum
  */
 export async function avisarSenhaAlterada(email: string, quando: Date): Promise<void> {
-  if (env.NODE_ENV !== 'production') {
-    console.log(`[acesso] aviso de senha alterada para ${email}`)
-    return
-  }
-
   const dia = quando.toLocaleDateString('pt-BR', { timeZone: FUSO_DO_CPMR })
   const hora = quando.toLocaleTimeString('pt-BR', {
     timeZone: FUSO_DO_CPMR,
@@ -159,7 +195,7 @@ export async function avisarSenhaAlterada(email: string, quando: Date): Promise<
     minute: '2-digit',
   })
 
-  await enviarPelaBrevo({
+  const mensagem: Mensagem = {
     para: email,
     assunto: 'Sua senha do Nidus foi alterada',
     texto: [
@@ -174,7 +210,18 @@ export async function avisarSenhaAlterada(email: string, quando: Date): Promise<
       '',
       NOME_DO_REMETENTE,
     ].join('\n'),
-  })
+  }
+
+  if (capturar(mensagem)) {
+    return
+  }
+
+  if (env.NODE_ENV !== 'production') {
+    console.log(`[acesso] aviso de senha alterada para ${email}`)
+    return
+  }
+
+  await enviarPelaBrevo(mensagem)
 }
 
 /** O que o aviso conta do pedido: o mesmo resumo que o pesquisador ve na lista */
@@ -236,12 +283,7 @@ export async function avisarPedidoDecidido(
 ): Promise<void> {
   const aprovado = motivoDaRecusa === undefined
 
-  if (env.NODE_ENV !== 'production') {
-    console.log(`[pedido] aviso de pedido ${aprovado ? 'aprovado' : 'recusado'} para ${email}`)
-    return
-  }
-
-  await enviarPelaBrevo({
+  const mensagem: Mensagem = {
     para: email,
     assunto: `Seu pedido de animais foi ${aprovado ? 'aprovado' : 'recusado'}`,
     texto: [
@@ -259,17 +301,23 @@ export async function avisarPedidoDecidido(
       '',
       NOME_DO_REMETENTE,
     ].join('\n'),
-  })
+  }
+
+  if (capturar(mensagem)) {
+    return
+  }
+
+  if (env.NODE_ENV !== 'production') {
+    console.log(`[pedido] aviso de pedido ${aprovado ? 'aprovado' : 'recusado'} para ${email}`)
+    return
+  }
+
+  await enviarPelaBrevo(mensagem)
 }
 
 /** O aviso de que os animais do pedido aprovado foram separados para a entrega */
 export async function avisarAnimaisReservados(email: string, pedido: ResumoDoPedido): Promise<void> {
-  if (env.NODE_ENV !== 'production') {
-    console.log(`[pedido] aviso de animais reservados para ${email}`)
-    return
-  }
-
-  await enviarPelaBrevo({
+  const mensagem: Mensagem = {
     para: email,
     assunto: 'Os animais do seu pedido estão reservados',
     texto: [
@@ -283,5 +331,16 @@ export async function avisarAnimaisReservados(email: string, pedido: ResumoDoPed
       '',
       NOME_DO_REMETENTE,
     ].join('\n'),
-  })
+  }
+
+  if (capturar(mensagem)) {
+    return
+  }
+
+  if (env.NODE_ENV !== 'production') {
+    console.log(`[pedido] aviso de animais reservados para ${email}`)
+    return
+  }
+
+  await enviarPelaBrevo(mensagem)
 }

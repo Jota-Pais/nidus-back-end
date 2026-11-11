@@ -509,6 +509,7 @@ describe('acasalamento automatico', () => {
     expect(partoDeOrdem(2)).toMatchObject({ dtAcasalamento: d('2026-09-30'), dtPartoReal: null })
     expect(banco.historicos.at(-1)).toEqual({
       idUsuario: null,
+      dtHora: expect.any(Date),
       entidade: 'parto',
       idEntidade: partoDeOrdem(2)?.id,
       acao: 'acasalamento',
@@ -896,6 +897,7 @@ describe('correcao do acasalamento', () => {
     expect(ciclo).toMatchObject({ dtAcasalamento: '2026-09-03', dtPartoPrevisto: '2026-09-26' })
     expect(banco.historicos.at(-1)).toEqual({
       idUsuario: 4,
+      dtHora: expect.any(Date),
       entidade: 'parto',
       idEntidade: 1,
       acao: 'correcao_acasalamento',
@@ -1017,6 +1019,7 @@ describe('correcao do nascimento', () => {
     expect(banco.partos.get(2)?.dtAcasalamento).toEqual(d('2026-10-07'))
     expect(banco.historicos.find((h) => h.acao === 'correcao_acasalamento')).toEqual({
       idUsuario: 4,
+      dtHora: expect.any(Date),
       entidade: 'parto',
       idEntidade: 2,
       acao: 'correcao_acasalamento',
