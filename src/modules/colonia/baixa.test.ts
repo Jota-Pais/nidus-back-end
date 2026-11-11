@@ -50,6 +50,7 @@ vi.mock('../../shared/prisma.ts', () => ({
           return []
         },
         caixa: { findUnique: async ({ where }: { where: { id: number } }) => banco.caixas.get(where.id) ?? null },
+        animal: { count: async ({ where }: { where: { id: { in: number[] } } }) => where.id.in.length },
         ocorrencia: {
           findUnique: async () => {
             banco.ordem.push('le a baixa')
@@ -181,11 +182,26 @@ describe('baixa em qualquer caixa', () => {
 
     const resultado = await registrarBaixa(6, { dtFato: '2026-11-02', motivo: 'morte', itens: [{ sexo: 'M', qtd: 2 }] }, 4)
 
-    expect(resultado).toEqual({ baixas: { m: 2, f: 0 }, liberada: true, faltas: [] })
+    expect(resultado).toEqual({ idOcorrencia: 77, baixas: { m: 2, f: 0 }, liberada: true, faltas: [] })
     expect(banco.lancados).toEqual([
       { tipo: 'baixa', dtFato: '2026-11-02', idUsuario: 4, idCaixa: 6, motivo: 'morte', ids: [1, 2] },
     ])
     expect(banco.liberadas).toEqual([{ idCaixa: 6, dtFato: '2026-11-02', motivo: 'baixa' }])
+  })
+
+  it('o tipo grava o motivo: morte e eutanasia; a eutanasia de um parto e a selecao dele', async () => {
+    banco.animais = [vivo(1), vivo(2), vivo(3), vivo(4)]
+    const itens = [{ sexo: 'M' as const, qtd: 1 }]
+
+    await registrarBaixa(6, { dtFato: '2026-11-02', tipo: 'morte', itens }, 4)
+    await registrarBaixa(6, { dtFato: '2026-11-02', tipo: 'eutanasia', itens }, 4)
+    await registrarBaixa(6, { dtFato: '2026-11-02', tipo: 'eutanasia', idParto: 9, itens }, 4)
+
+    expect(banco.lancados.map((l) => ({ motivo: l.motivo, idParto: 'idParto' in l ? l.idParto : undefined }))).toEqual([
+      { motivo: 'morte', idParto: undefined },
+      { motivo: 'eutanásia', idParto: undefined },
+      { motivo: 'eutanasia de selecao', idParto: 9 },
+    ])
   })
 
   it('com vivos sobrando, a caixa continua ativa', async () => {

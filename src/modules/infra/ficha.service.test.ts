@@ -4,7 +4,7 @@ import { exigirDepoisDaChegada } from '../colonia/escolha.ts'
 import { montarFicha } from './ficha.service.ts'
 
 // A ficha junta o que outros modulos ja sabem contar: a ficha de cada parto (cicloFicha), a do
-// casal (casalFicha), os vivos da caixa (vivosNasCaixas) e as baixas (baixasDaCaixa). Aqui eles
+// casal (casalFicha), os vivos da caixa (vivosNasCaixas). Aqui eles
 // sao de mentira, e o teste confere como a ficha os junta
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
@@ -35,12 +35,6 @@ vi.mock('../reproducao/reproducao.service.ts', () => ({ casalFicha: async (id: n
 vi.mock('../colonia/consultas.ts', async (original) => ({
   ...(await original<typeof import('../colonia/consultas.ts')>()),
   vivosNasCaixas: async (_banco: unknown, ids: number[]) => new Map(ids.map((id) => [id, banco.vivos])),
-}))
-
-vi.mock('./baixasDaFicha.ts', () => ({
-  baixasDaCaixa: async () => [
-    { dataHora: '2026-10-01T00:00:00.000Z', tipo: 'baixa', descricao: 'x', autor: 'Ana', idOcorrencia: 1, anulavel: true, baixa: null },
-  ],
 }))
 
 const doParto = (idParto: number, dtNascimento: string, vivos: [number, number], reservados: [number, number] = [0, 0], campos: Partial<VivosDoParto> = {}): VivosDoParto => ({
@@ -119,7 +113,7 @@ beforeEach(() => {
 })
 
 describe('a ficha da caixa de casal', () => {
-  it('o casal da caixa com os partos, os casais de antes, a fase e as baixas', async () => {
+  it('o casal da caixa com os partos, os casais de antes, a fase', async () => {
     const ficha = await montarFicha(7)
 
     expect(ficha).toMatchObject({
@@ -140,7 +134,6 @@ describe('a ficha da caixa de casal', () => {
       casal: { identificacao: 'CD' },
       partos: [{ id: 20 }, { id: 21 }],
       anteriores: [{ casal: { identificacao: 'AB' }, partos: [{ id: 10 }] }],
-      baixas: [expect.objectContaining({ tipo: 'baixa', idOcorrencia: 1 })],
     })
   })
 

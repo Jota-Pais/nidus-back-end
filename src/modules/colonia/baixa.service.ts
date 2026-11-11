@@ -12,7 +12,7 @@ import type { Escolhido } from './escolha.ts'
 import { caixaLiberada, liberarSeVazia } from './liberacao.ts'
 import { lancarOcorrencia } from './ocorrencia.ts'
 import { soltosNaAnulacao } from './reserva.ts'
-import { ROTULO_DO_SEXO, SEXOS, contarPorSexo, noNumero, quantosDoSexo, sexoDe } from './tipos.ts'
+import { MOTIVO_SELECAO, ROTULO_DO_SEXO, SEXOS, contarPorSexo, noNumero, quantosDoSexo, sexoDe } from './tipos.ts'
 import type { PorSexo, Sexo } from './tipos.ts'
 import { travarCaixas, travarOcorrencia, travarPedidos } from './travas.ts'
 
@@ -27,7 +27,19 @@ export type ItemDaBaixa = {
   idPedido?: number | undefined
 }
 
-export type Baixa = { dtFato: string; motivo?: string | undefined; itens: ItemDaBaixa[] }
+export type TipoDaBaixa = 'morte' | 'eutanasia'
+
+export type Baixa = {
+  dtFato: string
+  /** Sem tipo, vale o motivo escrito (se houver) */
+  tipo?: TipoDaBaixa | undefined
+  /** So na eutanasia: a baixa e a selecao deste parto, a mesma que a ficha da ninhada sempre gravou */
+  idParto?: number | undefined
+  motivo?: string | undefined
+  itens: ItemDaBaixa[]
+}
+
+const MOTIVO_DO_TIPO: Record<TipoDaBaixa, string> = { morte: 'morte', eutanasia: 'eutanásia' }
 
 /**
  * POST /api/caixas/:id/baixa - morte ou eutanasia de animais da caixa, de qualquer tipo. Saem
@@ -63,18 +75,29 @@ export async function registrarBaixa(idCaixa: number, dados: Baixa, idUsuario: n
 
     exigirDepoisDaChegada('dtFato', dados.dtFato, escolhidos)
 
-    await lancarOcorrencia(tx, {
+    const ids = escolhidos.map((animal) => animal.id)
+    const selecao = dados.tipo === 'eutanasia' && dados.idParto !== undefined
+
+    if (selecao) {
+      const doParto = await tx.animal.count({ where: { id: { in: ids }, idParto: dados.idParto } })
+      if (doParto !== ids.length) throw campoInvalido('idParto', 'Os animais não são deste parto.')
+    }
+
+    const lancada = await lancarOcorrencia(tx, {
       tipo: 'baixa',
       dtFato: dados.dtFato,
       idUsuario,
       idCaixa,
-      motivo: dados.motivo,
-      ids: escolhidos.map((animal) => animal.id),
+      idParto: selecao ? dados.idParto : undefined,
+      motivo: selecao
+        ? MOTIVO_SELECAO
+        : (dados.motivo ?? (dados.tipo === undefined ? undefined : MOTIVO_DO_TIPO[dados.tipo])),
+      ids,
     })
 
     const liberada = await liberarSeVazia(tx, idCaixa, dados.dtFato, 'baixa', idUsuario)
 
-    return { baixas, liberada, faltas: await faltasDosPedidos(tx, pedidosTocados(escolhidos)) }
+    return { idOcorrencia: lancada.idOcorrencia, baixas, liberada, faltas: await faltasDosPedidos(tx, pedidosTocados(escolhidos)) }
   })
 }
 
@@ -166,23 +189,6 @@ async function porQueNaoVolta(
   const cabem = animais.every((animal) => animal.desmamado && recusaDoEstoque(origem, animal) === null)
 
   return cabem ? null : `virou caixa de estoque de ${ROTULO_DO_SEXO[sexoDe({ sexo: origem.sexo ?? '' })]}`
-}
-
-/**
- * Se a caixa da baixa ainda recebe a volta de todos os animais dela, cada sexo pela regra da
- * anulacao (porQueNaoVolta): a ficha diz antes se a anulacao vai pedir caixa de estoque
- */
-export async function voltaNaOrigem(
-  tx: Prisma.TransactionClient,
-  origem: CaixaDaBaixa,
-  animais: AnimalDaBaixa[],
-): Promise<boolean> {
-  for (const sexo of SEXOS) {
-    const doSexo = animais.filter((animal) => animal.sexo === sexo)
-    if (doSexo.length > 0 && (await porQueNaoVolta(tx, origem, doSexo)) !== null) return false
-  }
-
-  return true
 }
 
 /**

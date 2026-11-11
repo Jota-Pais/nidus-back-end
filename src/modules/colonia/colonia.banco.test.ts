@@ -335,8 +335,7 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
       { destino: femeas, n: 1 },
     ])
 
-    // a baixa anulada sai das baixas lancadas da ficha; o historico diz para onde voltou cada sexo
-    expect((await montarFicha(idCaixa)).baixas).toEqual([])
+    // o historico diz para onde voltou cada sexo
     const descricoesDa = async (id: number) =>
       (await listarHistorico({ entidade: 'caixa', idEntidade: id, limite: 50 })).historico.map((linha) => linha.descricao)
     expect(await descricoesDa(machos ?? 0)).toEqual(
