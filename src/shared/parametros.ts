@@ -15,6 +15,12 @@ export const INTERVALO_ACASALAMENTO_DIAS = 6
 export const MAX_PARTOS_POR_CASAL = 5
 
 /**
+ * A menor idade que entra numa caixa de estoque no cadastro inicial: estoque e de desmamados, e
+ * 21 dias e a menor idade que um pedido aceita (FAIXAS_IDADE)
+ */
+export const IDADE_MINIMA_DO_ESTOQUE_DIAS = 21
+
+/**
  * 5 machos e 5 femeas nascidos, menos 1 de cada na selecao: o que se espera de um parto
  * que ainda nao nasceu
  */

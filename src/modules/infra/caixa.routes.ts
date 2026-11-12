@@ -7,10 +7,11 @@ import {
 } from '../../shared/middlewares/autorizacao.ts'
 import { dataDoFato, idNaRota, idNoCorpo } from '../../shared/validacao.ts'
 import { mudarDePosicao } from './caixa.service.ts'
+import { criarCaixaDeEstoque, registrarEntrada } from './entrada.service.ts'
 import { montarFicha } from './ficha.service.ts'
 import { registrarMudanca, virarCaixaDeEstoque } from './mudanca.service.ts'
 
-/** /api/caixas e a ficha, a posicao e os animais que mudam */
+/** /api/caixas e a ficha, a posicao, os animais que mudam e o cadastro inicial do estoque */
 export const caixaRoutes = Router()
 
 /** GET /api/caixas/:id - a ficha da caixa */
@@ -20,12 +21,49 @@ caixaRoutes.get('/:id', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   res.json(await montarFicha(id))
 })
 
-/** Uma posicao da estante */
+/** Uma posicao da estante, como no formar casal */
 const posicao = z.object({
   idEstante: idNoCorpo,
   face: z.enum(['frontal', 'traseira']),
   linha: idNoCorpo,
   coluna: idNoCorpo,
+})
+
+/**
+ * Um grupo de idade do cadastro inicial: quantos e quando nasceram (hoje ou antes). A idade minima
+ * do estoque e conferida no servico
+ */
+const entrada = z.object({
+  quantidade: z.number().int('Informe quantos animais.').min(1, 'Informe ao menos 1 animal.').max(999, 'No máximo 999 animais.'),
+  dtNascimento: dataDoFato,
+})
+
+/** Corpo de POST /api/caixas/estoque: a caixa de estoque nova numa posicao vazia, com o primeiro grupo */
+export const caixaDeEstoqueNova = entrada.extend({
+  posicao,
+  idLinhagem: idNoCorpo,
+  sexo: z.enum(['M', 'F'], { error: 'Escolha machos ou fêmeas.' }),
+})
+
+/**
+ * POST /api/caixas/estoque - o cadastro inicial: a caixa de estoque nasce na posicao vazia com
+ * animais de idade conhecida e casal desconhecido. Devolve { idCaixa, codigo }
+ */
+caixaRoutes.post('/estoque', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+  const dados = caixaDeEstoqueNova.parse(req.body)
+
+  res.status(201).json(await criarCaixaDeEstoque(dados, usuarioDaRequisicao(req).id))
+})
+
+/** Corpo de POST /api/caixas/:id/entrada: o sexo e a linhagem sao os da caixa */
+export const entradaNaCaixa = entrada
+
+/** POST /api/caixas/:id/entrada - mais um grupo de idade do cadastro inicial na caixa de estoque */
+caixaRoutes.post('/:id/entrada', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+  const { id } = idNaRota.parse(req.params)
+  const dados = entradaNaCaixa.parse(req.body)
+
+  res.status(201).json(await registrarEntrada(id, dados, usuarioDaRequisicao(req).id))
 })
 
 caixaRoutes.patch('/:id/posicao', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {

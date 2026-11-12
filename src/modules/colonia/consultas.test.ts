@@ -9,9 +9,20 @@ const linha = (campos: Record<string, unknown>, qtd: number) => ({ ...campos, _c
 const parto = (id: number, ordem: number, nascimento: string, desmame: string | null, casal = 'AB') => ({
   id,
   ordem,
+  idLinhagem: 3,
   dtPartoReal: d(nascimento),
   dtDesmameReal: desmame === null ? null : d(desmame),
-  casal: { identificacao: casal, idLinhagem: 3, caixa: { id: 1, codigo: 'F1A', estante: { numeroVisivel: 'E1' } } },
+  casal: { identificacao: casal, caixa: { id: 1, codigo: 'F1A', estante: { numeroVisivel: 'E1' } } },
+})
+
+/** a ninhada sem casal conhecido, do cadastro inicial: sem ordem e sem casal, desmamada na entrada */
+const doCadastroInicial = (id: number, nascimento: string, desmame: string) => ({
+  id,
+  ordem: null,
+  idLinhagem: 3,
+  dtPartoReal: d(nascimento),
+  dtDesmameReal: d(desmame),
+  casal: null,
 })
 
 describe('vivos nas caixas', () => {
@@ -67,6 +78,30 @@ describe('vivos nas caixas', () => {
 
   it('sem caixa, sem consulta', async () => {
     expect((await vivosNasCaixas({} as never, [])).size).toBe(0)
+  })
+
+  it('a ninhada do cadastro inicial vem sem ordem, sem casal e sem caixa do casal, com a linhagem do parto', async () => {
+    const comEntrada = {
+      animal: { groupBy: async () => [linha({ idCaixa: 8, idParto: 20, sexo: 'M', idPedido: null }, 6)] },
+      parto: { findMany: async () => [doCadastroInicial(20, '2026-10-07', '2026-11-11')] },
+    }
+
+    expect((await vivosNasCaixas(comEntrada as never, [8])).get(8)?.partos).toEqual([
+      {
+        idParto: 20,
+        ordem: null,
+        casal: null,
+        idLinhagem: 3,
+        dtNascimento: '2026-10-07',
+        desmamado: true,
+        caixaDoCasal: null,
+        vivos: { m: 6, f: 0 },
+        reservados: { m: 0, f: 0 },
+      },
+    ])
+    expect(await ninhadasNaCaixa(comEntrada as never, 8)).toEqual([
+      { idParto: 20, ordem: null, casal: null, m: 6, f: 0, desmamado: true },
+    ])
   })
 })
 

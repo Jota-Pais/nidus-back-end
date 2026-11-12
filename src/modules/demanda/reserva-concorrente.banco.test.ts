@@ -167,9 +167,9 @@ async function gravarOMundo(banco: pg.Client): Promise<Mundo> {
       [caixaDoCasal, idLinhagem, par.macho, par.femea, `${par.macho}${par.femea}`, daqui(-83)],
     )
     const parto = await id(
-      `INSERT INTO reproducao.parto (id_casal, ordem, dt_acasalamento, dt_parto_real, dt_desmame_real)
-       VALUES ($1, 1, $2::date, $3::date, $4::date) RETURNING id`,
-      [casal, daqui(-83), NASCIMENTO, daqui(-38)],
+      `INSERT INTO reproducao.parto (id_casal, id_linhagem, ordem, dt_acasalamento, dt_parto_real, dt_desmame_real)
+       VALUES ($1, $2, 1, $3::date, $4::date, $5::date) RETURNING id`,
+      [casal, idLinhagem, daqui(-83), NASCIMENTO, daqui(-38)],
     )
 
     // nascem na caixa do casal e mudam para o estoque depois do desmame

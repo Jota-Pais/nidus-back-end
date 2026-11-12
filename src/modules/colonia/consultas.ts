@@ -19,18 +19,22 @@ function contar(linhas: { sexo: string; _count: { _all: number } }[]): PorSexo {
 
 // ------------------------------------------------------------ por caixa
 
-/** Os vivos de um parto dentro de uma caixa: a menor parte que as telas mostram */
+/**
+ * Os vivos de um parto dentro de uma caixa: a menor parte que as telas mostram. A ninhada sem casal
+ * conhecido (a do cadastro inicial) tem ordem, casal e caixa do casal nulos
+ */
 export type VivosDoParto = {
   idParto: number
-  ordem: number
-  /** a identificacao do casal que teve o parto */
-  casal: string
+  /** a ordem do parto; null na ninhada do cadastro inicial */
+  ordem: number | null
+  /** a identificacao do casal que teve o parto; null na ninhada do cadastro inicial */
+  casal: string | null
   idLinhagem: number
   /** 'aaaa-mm-dd' */
   dtNascimento: string
   desmamado: boolean
-  /** a caixa do casal, de onde a ninhada saiu (ou onde ainda esta) */
-  caixaDoCasal: { idCaixa: number; codigo: string; numeroVisivel: string }
+  /** a caixa do casal, de onde a ninhada saiu (ou onde ainda esta); null na do cadastro inicial */
+  caixaDoCasal: { idCaixa: number; codigo: string; numeroVisivel: string } | null
   vivos: PorSexo
   reservados: PorSexo
 }
@@ -75,12 +79,12 @@ export async function vivosNasCaixas(banco: Leitura, idsCaixa: number[]): Promis
     select: {
       id: true,
       ordem: true,
+      idLinhagem: true,
       dtPartoReal: true,
       dtDesmameReal: true,
       casal: {
         select: {
           identificacao: true,
-          idLinhagem: true,
           caixa: { select: { id: true, codigo: true, estante: { select: { numeroVisivel: true } } } },
         },
       },
@@ -109,19 +113,20 @@ export async function vivosNasCaixas(banco: Leitura, idsCaixa: number[]): Promis
       const doParto = daCaixa.filter((linha) => linha.idParto === parto.id)
       if (doParto.length === 0 || parto.dtPartoReal === null) return []
 
+      const { casal } = parto
+
       return [
         {
           idParto: parto.id,
           ordem: parto.ordem,
-          casal: parto.casal.identificacao.trim(),
-          idLinhagem: parto.casal.idLinhagem,
+          casal: casal === null ? null : casal.identificacao.trim(),
+          idLinhagem: parto.idLinhagem,
           dtNascimento: dataISO(parto.dtPartoReal),
           desmamado: parto.dtDesmameReal !== null,
-          caixaDoCasal: {
-            idCaixa: parto.casal.caixa.id,
-            codigo: parto.casal.caixa.codigo,
-            numeroVisivel: parto.casal.caixa.estante.numeroVisivel,
-          },
+          caixaDoCasal:
+            casal === null
+              ? null
+              : { idCaixa: casal.caixa.id, codigo: casal.caixa.codigo, numeroVisivel: casal.caixa.estante.numeroVisivel },
           vivos: contar(doParto),
           reservados: contar(doParto.filter((linha) => linha.idPedido !== null)),
         },
@@ -132,11 +137,14 @@ export async function vivosNasCaixas(banco: Leitura, idsCaixa: number[]): Promis
   return porCaixa
 }
 
-/** Uma ninhada que ainda esta numa caixa: os vivos de um parto, mamando ou desmamados */
+/**
+ * Uma ninhada que ainda esta numa caixa: os vivos de um parto, mamando ou desmamados. Ordem e casal
+ * nulos na ninhada do cadastro inicial (origemDaNinhada diz de onde ela veio)
+ */
 export type NinhadaNaCaixa = {
   idParto: number
-  ordem: number
-  casal: string
+  ordem: number | null
+  casal: string | null
   m: number
   f: number
   desmamado: boolean

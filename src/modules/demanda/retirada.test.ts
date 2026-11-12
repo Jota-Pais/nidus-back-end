@@ -31,6 +31,8 @@ vi.mock('../../shared/prisma.ts', () => ({
         { id: 4, ordem: 1, dtPartoReal: d('2026-09-01'), casal: { identificacao: 'AB' } },
         { id: 5, ordem: 2, dtPartoReal: d('2026-09-01'), casal: { identificacao: 'CD' } },
         { id: 6, ordem: 3, dtPartoReal: d('2026-10-01'), casal: { identificacao: 'AB' } },
+        // a ninhada do cadastro inicial: sem ordem e sem casal
+        { id: 7, ordem: null, dtPartoReal: d('2026-10-04'), casal: null },
       ],
     },
   },
@@ -66,6 +68,16 @@ describe('retirada do pedido', () => {
       ],
     })
     expect(banco.ondeAnimais).toEqual({ idPedido: 3, situacao: 'vivo' })
+  })
+
+  it('o animal do cadastro inicial sai com ordem e casal nulos na origem', async () => {
+    banco.linhas = [linha(2, 7, 'M', 4)]
+
+    expect(await retiradaDoPedido(3)).toEqual({
+      retirada: [
+        { tipo: 'estoque', codigo: 'F2B', numeroVisivel: 'E1', sexo: 'M', dtNascimento: '2026-10-04', qtd: 4, partos: [{ ordem: null, casal: null }] },
+      ],
+    })
   })
 
   it('sem reservado vivo, a retirada fica vazia', async () => {

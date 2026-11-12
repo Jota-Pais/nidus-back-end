@@ -15,7 +15,13 @@ import { calcularCicloInicial, diasEntre } from '../reproducao/cadeiaTemporal.ts
 
 // ------------------------------------------------------------ o casal
 
-type PartoDoCard = { ordem: number; dtAcasalamento: Date; dtPartoReal: Date | null; dtSemNinhada: Date | null }
+/** Um parto do casal. Ordem e acasalamento sao nulos so na ninhada sem casal, que nao vem aqui */
+type PartoDoCard = {
+  ordem: number | null
+  dtAcasalamento: Date | null
+  dtPartoReal: Date | null
+  dtSemNinhada: Date | null
+}
 
 type CasalDoCard = {
   identificacao: string
@@ -25,12 +31,14 @@ type CasalDoCard = {
 }
 
 /**
- * O parto em curso: o ultimo aberto. O 1o nasce com o casal e cada seguinte no acasalamento dele,
- * entao com o acasalamento do 2o registrado o casal ja esta no 2o, mesmo antes do nascimento.
- * Nunca passa de 5
+ * O parto em curso: o ultimo aberto, o de maior ordem. O primeiro nasce com o casal (o 1o, ou o Nº
+ * do casal que ja estava nele quando foi cadastrado) e cada seguinte no acasalamento dele, entao
+ * com o acasalamento do 2o registrado o casal ja esta no 2o, mesmo antes do nascimento. Nunca
+ * passa de 5
  */
 export function partoAtual(partos: PartoDoCard[]): number {
-  return Math.max(1, Math.min(partos.length, MAX_PARTOS_POR_CASAL))
+  const ultimo = Math.max(1, ...partos.flatMap((parto) => (parto.ordem === null ? [] : [parto.ordem])))
+  return Math.min(ultimo, MAX_PARTOS_POR_CASAL)
 }
 
 /**
@@ -40,7 +48,10 @@ export function partoAtual(partos: PartoDoCard[]): number {
  * (ou sem o parto da fase), o parto em curso
  */
 export function partoDaFase(fase: Fase | null, partos: PartoDoCard[], ninhadas: VivosDoParto[]): number {
-  const maisAntiga = (lista: VivosDoParto[]) => (lista.length === 0 ? null : Math.min(...lista.map((n) => n.ordem)))
+  const maisAntiga = (lista: VivosDoParto[]) => {
+    const ordens = lista.flatMap((ninhada) => (ninhada.ordem === null ? [] : [ninhada.ordem]))
+    return ordens.length === 0 ? null : Math.min(...ordens)
+  }
   let ordem: number | null = null
 
   if (fase === 'pronto_estoque') ordem = maisAntiga(ninhadas.filter((ninhada) => ninhada.desmamado))
@@ -58,21 +69,30 @@ export function partoDaFase(fase: Fase | null, partos: PartoDoCard[], ninhadas: 
  */
 export function partoPrevisto(partos: PartoDoCard[]): string | null {
   const pendente = partos.find((parto) => parto.dtPartoReal === null && parto.dtSemNinhada === null)
-  return pendente === undefined ? null : calcularCicloInicial(dataISO(pendente.dtAcasalamento)).dtPartoPrevisto
+  if (pendente === undefined || pendente.dtAcasalamento === null) return null
+  return calcularCicloInicial(dataISO(pendente.dtAcasalamento)).dtPartoPrevisto
 }
 
 /** Uma ninhada no card: os vivos de um parto que estao nesta caixa, com a idade de hoje */
 export type NinhadaNoCard = PorSexo & { casal: string; parto: number; idadeDias: number; mamando: boolean }
 
-function ninhadaNoCard(parto: VivosDoParto, hoje: string): NinhadaNoCard {
-  return {
-    casal: parto.casal,
-    parto: parto.ordem,
-    m: parto.vivos.m,
-    f: parto.vivos.f,
-    idadeDias: diasEntre(parto.dtNascimento, hoje),
-    mamando: !parto.desmamado,
-  }
+/**
+ * A ninhada de um casal no card. A caixa de casal so guarda a ninhada do proprio casal (o trigger
+ * colonia.lugar_recusado recusa a sem casal nela), entao a sem casal nunca chega aqui: fica de fora
+ */
+function ninhadaNoCard(parto: VivosDoParto, hoje: string): NinhadaNoCard[] {
+  if (parto.casal === null || parto.ordem === null) return []
+
+  return [
+    {
+      casal: parto.casal,
+      parto: parto.ordem,
+      m: parto.vivos.m,
+      f: parto.vivos.f,
+      idadeDias: diasEntre(parto.dtNascimento, hoje),
+      mamando: !parto.desmamado,
+    },
+  ]
 }
 
 /**
@@ -83,7 +103,7 @@ function ninhadaNoCard(parto: VivosDoParto, hoje: string): NinhadaNoCard {
 export function casalNoCard(casal: CasalDoCard | undefined, naCaixa: VivosNaCaixa, hoje: string = hojeISO()) {
   if (casal === undefined) return null
 
-  const ninhadas = naCaixa.partos.map((parto) => ninhadaNoCard(parto, hoje))
+  const ninhadas = naCaixa.partos.flatMap((parto) => ninhadaNoCard(parto, hoje))
   const { fase } = faseDaCaixa(
     { tipo: 'casal', ativa: true, ninhadas: naCaixa.partos, partoPrevisto: partoPrevisto(casal.partos) },
     hoje,

@@ -270,6 +270,37 @@ describe('a ficha da caixa de estoque', () => {
     expect(ficha.grupos.map((grupo) => grupo.dtChegada)).toEqual([null, null])
   })
 
+  it('o grupo do cadastro inicial tem a origem com ordem, casal e caixa de origem nulos', async () => {
+    banco.umAUm = [vivo('2026-10-04', '2026-11-08'), vivo('2026-10-04', '2026-11-08'), vivo('2026-09-19', '2026-11-09', 9)]
+    banco.vivos = naCaixa(
+      [
+        doParto(40, '2026-09-19', [1, 0], [1, 0], { ordem: null, casal: null, caixaDoCasal: null }),
+        doParto(41, '2026-10-04', [2, 0], [0, 0], { ordem: null, casal: null, caixaDoCasal: null }),
+      ],
+      [{ idPedido: 9, m: 1, f: 0 }],
+    )
+
+    const ficha = await montarFicha(7)
+    if (ficha.tipo !== 'estoque') throw new Error('ficha de casal')
+
+    expect(ficha).toMatchObject({ total: 3, reservado: 1, livre: 2, nascimentoDe: '2026-09-19', nascimentoAte: '2026-10-04' })
+    expect(ficha.grupos).toEqual([
+      expect.objectContaining({
+        dtNascimento: '2026-09-19',
+        pedidos: [{ idPedido: 9, qtd: 1 }],
+        dtChegada: '2026-11-09',
+        origens: [{ idParto: 40, ordem: null, casal: null, codigoOrigem: null, numeroVisivelOrigem: null, qtd: 1 }],
+      }),
+      expect.objectContaining({
+        dtNascimento: '2026-10-04',
+        total: 2,
+        livres: 2,
+        dtChegada: '2026-11-08',
+        origens: [{ idParto: 41, ordem: null, casal: null, codigoOrigem: null, numeroVisivelOrigem: null, qtd: 2 }],
+      }),
+    ])
+  })
+
   it('a caixa que era de casal antes de virar de estoque mostra os casais dela', async () => {
     banco.caixa = caixa({ tipo: 'estoque', sexo: 'M', idLinhagem: 3, linhagem: { nome: 'Wistar' }, casais: [{ id: 1 }] })
 

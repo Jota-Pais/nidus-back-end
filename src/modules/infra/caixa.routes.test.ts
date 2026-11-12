@@ -5,7 +5,7 @@ import { criarApp } from '../../app.ts'
 import { hojeISO } from '../../shared/traducao.ts'
 import type { Perfil } from '../../shared/traducao.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
-import { mudanca } from './caixa.routes.ts'
+import { caixaDeEstoqueNova, entradaNaCaixa, mudanca } from './caixa.routes.ts'
 
 // Autorizacao e validacao de forma. Nenhum teste aqui chega ao banco
 
@@ -126,5 +126,49 @@ describe('mudanca de animais', () => {
       mudanca.safeParse({ dtFato: ontem, machos: { qtd: 1, destino: { posicao: { idEstante: 1, face: 'lateral', linha: 1, coluna: 1 } } } })
         .success,
     ).toBe(false)
+  })
+})
+
+describe('o cadastro inicial do estoque', () => {
+  const nascimento = somarDias(hojeISO(), -35)
+  const nova = {
+    posicao: { idEstante: 1, face: 'frontal', linha: 2, coluna: 1 },
+    idLinhagem: 3,
+    sexo: 'M',
+    quantidade: 6,
+    dtNascimento: nascimento,
+  }
+
+  it('so tecnico e gestor: o pesquisador recebe 403, sem sessao 401', async () => {
+    expect((await request(app('pesquisador')).post('/api/caixas/estoque').send(nova)).status).toBe(403)
+    expect((await request(app()).post('/api/caixas/estoque').send(nova)).status).toBe(401)
+    expect(
+      (await request(app('pesquisador')).post('/api/caixas/1/entrada').send({ quantidade: 3, dtNascimento: nascimento })).status,
+    ).toBe(403)
+  })
+
+  it('a posicao no formato do formar casal, o sexo, a quantidade de 1 a 999 e o nascimento ate hoje', () => {
+    expect(caixaDeEstoqueNova.safeParse(nova).success).toBe(true)
+    expect(caixaDeEstoqueNova.safeParse({ ...nova, sexo: 'F', quantidade: 999 }).success).toBe(true)
+
+    const campos = (corpo: Record<string, unknown>) =>
+      caixaDeEstoqueNova.safeParse(corpo).error?.issues.map((issue) => issue.path.join('.'))
+
+    expect(campos({ ...nova, quantidade: 0 })).toEqual(['quantidade'])
+    expect(campos({ ...nova, quantidade: 1000 })).toEqual(['quantidade'])
+    expect(campos({ ...nova, quantidade: 1.5 })).toEqual(['quantidade'])
+    expect(campos({ ...nova, sexo: 'X' })).toEqual(['sexo'])
+    expect(campos({ ...nova, dtNascimento: somarDias(hojeISO(), 1) })).toEqual(['dtNascimento'])
+    expect(campos({ ...nova, posicao: { ...nova.posicao, face: 'lateral' } })).toEqual(['posicao.face'])
+    expect(campos({ ...nova, posicao: undefined })).toEqual(['posicao'])
+  })
+
+  it('a entrada numa caixa que existe so pede a quantidade e o nascimento', async () => {
+    expect(entradaNaCaixa.safeParse({ quantidade: 3, dtNascimento: nascimento }).success).toBe(true)
+    expect(entradaNaCaixa.safeParse({ quantidade: 3 }).success).toBe(false)
+
+    const resposta = await request(app('tecnico')).post('/api/caixas/1/entrada').send({ quantidade: 0, dtNascimento: nascimento })
+    expect(resposta.status).toBe(400)
+    expect(resposta.body.erro.campos).toHaveProperty('quantidade')
   })
 })

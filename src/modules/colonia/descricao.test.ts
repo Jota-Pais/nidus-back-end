@@ -26,7 +26,14 @@ const ocorrencia = (tipo: string, campos: Partial<OcorrenciaDescrita> = {}): Oco
   ...campos,
 })
 
-const doParto = { parto: { ordem: 2, casal: { identificacao: 'AB' } } }
+const doParto = {
+  parto: { ordem: 2, dtPartoReal: new Date('2026-09-24T00:00:00.000Z'), linhagem: { nome: 'Wistar' }, casal: { identificacao: 'AB' } },
+}
+
+/** A ninhada sem casal conhecido, do cadastro inicial */
+const doCadastroInicial = {
+  parto: { ordem: null, dtPartoReal: new Date('2026-10-07T00:00:00.000Z'), linhagem: { nome: 'Wistar' }, casal: null },
+}
 
 describe('o texto da ocorrencia, sem ponto de vista', () => {
   it('nascimento, baixa e mudanca dizem as caixas', () => {
@@ -92,6 +99,24 @@ describe('o texto da ocorrencia, sem ponto de vista', () => {
     ).toBe('Baixa da caixa F1A anulada: 2 machos voltaram para a caixa E03. Motivo: engano')
     expect(descreverOcorrencia(ocorrencia('correcao', { ...doParto, motivo: 'contagem errada', animais: animais(1, 0) }))).toBe(
       'Correção do 2º parto do casal AB que mudou 1 macho: contagem errada.',
+    )
+  })
+
+  it('a entrada do cadastro inicial diz quantos, a linhagem, o nascimento e a caixa', () => {
+    const entrada = (m: number, f: number) =>
+      ocorrencia('entrada', { ...doCadastroInicial, idCaixaDestino: 2, caixaDestino: { codigo: 'F2A' }, animais: animais(m, f) })
+
+    expect(descreverOcorrencia(entrada(6, 0))).toBe('Entrada de 6 machos Wistar nascidos em 07/10/2026 na caixa F2A (cadastro inicial).')
+    expect(descreverOcorrencia(entrada(1, 0))).toBe('Entrada de 1 macho Wistar nascido em 07/10/2026 na caixa F2A (cadastro inicial).')
+    expect(descreverOcorrencia(entrada(0, 3))).toBe('Entrada de 3 fêmeas Wistar nascidas em 07/10/2026 na caixa F2A (cadastro inicial).')
+    expect(descreverOcorrencia(entrada(0, 1))).toBe('Entrada de 1 fêmea Wistar nascida em 07/10/2026 na caixa F2A (cadastro inicial).')
+    // vista da propria caixa, sem repetir a caixa
+    expect(descreverOcorrencia(entrada(6, 0), 2)).toBe('Entrada de 6 machos Wistar nascidos em 07/10/2026 (cadastro inicial).')
+  })
+
+  it('a baixa de animal do cadastro inicial diz cadastro inicial no lugar do casal e do parto', () => {
+    expect(descreverOcorrencia(ocorrencia('baixa', { ...doCadastroInicial, motivo: 'eutanasia de selecao', animais: animais(1, 0) }))).toBe(
+      'Eutanásia de seleção do cadastro inicial: 1 macho.',
     )
   })
 })

@@ -80,7 +80,7 @@ async function lerLugar(tx: Transacao, item: ItemDaReserva): Promise<Lugar> {
       ? []
       : await tx.parto.findMany({
           where: { id: { in: [...new Set(linhas.map((linha) => linha.idParto))] } },
-          select: { dtDesmameReal: true, casal: { select: { idLinhagem: true } } },
+          select: { dtDesmameReal: true, idLinhagem: true },
         })
 
   const desmames = partos.map((parto) =>
@@ -90,7 +90,7 @@ async function lerLugar(tx: Transacao, item: ItemDaReserva): Promise<Lugar> {
   return {
     codigo: caixa.codigo,
     ninhada: { dtNascimento: item.dtNascimento, dtDesmame: desmames.reduce((maior, d) => (d > maior ? d : maior), item.dtNascimento) },
-    linhagens: [...new Set(partos.map((parto) => parto.casal.idLinhagem))],
+    linhagens: [...new Set(partos.map((parto) => parto.idLinhagem))],
     livres: linhas.reduce<PorSexo>(
       (soma, linha) =>
         linha.sexo === 'M' ? { ...soma, m: soma.m + linha._count._all } : { ...soma, f: soma.f + linha._count._all },

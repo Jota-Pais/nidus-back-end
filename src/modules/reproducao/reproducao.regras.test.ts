@@ -40,7 +40,9 @@ type Casal = {
 }
 type Parto = {
   id: number
-  idCasal: number
+  /** null na ninhada do cadastro inicial (sem casal conhecido) */
+  idCasal: number | null
+  idLinhagem: number
   ordem: number
   dtAcasalamento: Date
   dtPartoReal: Date | null
@@ -92,8 +94,8 @@ const iso = (data: Date | null) => (data === null ? null : data.toISOString().sl
 // ------------------------------------------------------------------ o Prisma de mentira
 
 function partoComCasal(parto: Parto) {
-  const casal = banco.casais.get(parto.idCasal) as Casal
-  return { ...parto, casal: { ...casal, caixa: banco.caixas.get(casal.idCaixa) } }
+  const casal = parto.idCasal === null ? undefined : banco.casais.get(parto.idCasal)
+  return { ...parto, casal: casal === undefined ? null : { ...casal, caixa: banco.caixas.get(casal.idCaixa) } }
 }
 
 type FiltroDeOcorrencia = {
@@ -156,11 +158,20 @@ const db = {
     },
   },
   casal: {
-    findUnique: async ({ where }: { where: { id: number } }) => {
+    findUnique: async ({
+      where,
+      include,
+    }: {
+      where: { id: number }
+      include?: { partos?: { orderBy: { ordem: 'asc' | 'desc' }; take: number } }
+    }) => {
       const casal = banco.casais.get(where.id)
       if (casal === undefined) return null
-      const partos = [...banco.partos.values()].filter((p) => p.idCasal === casal.id).sort((a, b) => b.ordem - a.ordem)
-      return { ...casal, linhagem: { nome: 'Wistar' }, partos: partos.slice(0, 1) }
+      const { orderBy, take } = include?.partos ?? { orderBy: { ordem: 'desc' }, take: 1 }
+      const partos = [...banco.partos.values()]
+        .filter((p) => p.idCasal === casal.id)
+        .sort((a, b) => (orderBy.ordem === 'asc' ? a.ordem - b.ordem : b.ordem - a.ordem))
+      return { ...casal, linhagem: { nome: 'Wistar' }, partos: partos.slice(0, take) }
     },
     create: async ({ data }: { data: Omit<Casal, 'id' | 'ativo' | 'dtEncerramento'> }) => {
       const casal = { id: banco.proximoId++, ativo: true, dtEncerramento: null, ...data }
@@ -178,7 +189,7 @@ const db = {
     },
     findFirst: async ({ where }: { where: { idCasal: number; ordem: number } }) =>
       [...banco.partos.values()].find((p) => p.idCasal === where.idCasal && p.ordem === where.ordem) ?? null,
-    create: async ({ data }: { data: Pick<Parto, 'idCasal' | 'ordem' | 'dtAcasalamento'> }) => {
+    create: async ({ data }: { data: Pick<Parto, 'idCasal' | 'idLinhagem' | 'ordem' | 'dtAcasalamento'> }) => {
       const parto = {
         id: banco.proximoId++,
         dtPartoReal: null,
@@ -403,6 +414,7 @@ function cenario() {
 function parto(campos: Partial<Parto> & Pick<Parto, 'id' | 'ordem' | 'dtAcasalamento'>) {
   banco.partos.set(campos.id, {
     idCasal: 1,
+    idLinhagem: 3,
     dtPartoReal: null,
     dtDesmameReal: null,
     dtSemNinhada: null,
@@ -496,6 +508,130 @@ describe('formar casal', () => {
     banco.linhagem = { ...banco.linhagem, ativa: false }
 
     await expect(formarCasal({ ...novo, idCaixa: 1 }, 4)).rejects.toEqual(noCampo('idLinhagem', 'inativa'))
+  })
+
+  it('sem o parto atual, o casal entra no 1o, e o historico continua o mesmo', async () => {
+    const { casal } = await formarCasal({ ...novo, posicao: { idEstante: 1, face: 'frontal', linha: 2, coluna: 1 } }, 4)
+
+    expect([...banco.partos.values()].filter((p) => p.idCasal === casal.id)).toEqual([
+      expect.objectContaining({ ordem: 1, idLinhagem: 3, dtAcasalamento: d('2026-11-01') }),
+    ])
+    expect(casal.partoInicial).toBe(1)
+    expect(banco.historicos.at(-1)).toMatchObject({
+      acao: 'formacao',
+      descricao: 'Casal AB formado, com acasalamento em 01/11/2026 (Wistar)',
+      dados: { partoAtual: 1 },
+    })
+  })
+})
+
+// ------------------------------------------------------------------ o casal que ja estava no Nº parto
+
+describe('casal formado no Nº parto (o que ja existia antes do Nidus)', () => {
+  const novo = { idLinhagem: 3, grupoMacho: 'A', grupoFemea: 'B', dtFormacao: '2026-09-01' }
+  const posicao = { idEstante: 1, face: 'frontal' as const, linha: 2, coluna: 1 }
+
+  /** O casal formado no Nº parto numa posicao vazia, e o parto aberto dele */
+  async function formadoNo(partoAtual: number) {
+    const { casal, idCaixa } = await formarCasal({ ...novo, posicao, partoAtual }, 4)
+    const [aberto] = [...banco.partos.values()].filter((p) => p.idCasal === casal.id)
+    return { casal, idCaixa, aberto: aberto as Parto }
+  }
+
+  it('nasce com o Nº parto aberto, com o acasalamento informado; os de antes nao existem', async () => {
+    const { casal, aberto } = await formadoNo(3)
+
+    expect([...banco.partos.values()].filter((p) => p.idCasal === casal.id)).toHaveLength(1)
+    expect(aberto).toMatchObject({ ordem: 3, idLinhagem: 3, dtAcasalamento: d('2026-09-01'), dtPartoReal: null })
+    // a ficha diz em que parto o casal entrou: os de antes foram anteriores ao Nidus
+    expect(casal.partoInicial).toBe(3)
+    expect(banco.historicos.at(-1)).toMatchObject({
+      idUsuario: 4,
+      entidade: 'casal',
+      acao: 'formacao',
+      descricao: 'Casal AB formado no 3º parto, com acasalamento em 01/09/2026 (Wistar)',
+      dados: { partoAtual: 3, dtFormacao: '2026-09-01' },
+    })
+  })
+
+  it('o nascimento do Nº parto abre o seguinte automaticamente, contando dele', async () => {
+    const { casal, aberto } = await formadoNo(3)
+
+    await registrarNascimento(aberto.id, { dtPartoReal: '2026-09-24', nascidoM: 4, nascidoF: 4 }, 4)
+
+    const quarto = [...banco.partos.values()].find((p) => p.idCasal === casal.id && p.ordem === 4)
+    expect(quarto).toMatchObject({ idLinhagem: 3, dtAcasalamento: d('2026-09-30'), dtPartoReal: null })
+    expect(banco.historicos.at(-1)).toMatchObject({
+      idUsuario: null,
+      acao: 'acasalamento',
+      descricao: 'Acasalamento do 4º parto do casal AB em 30/09/2026, aberto automaticamente 6 dias depois do 3º parto',
+    })
+  })
+
+  it('formado no 5o, o nascimento encerra o casal e nao abre o 6o', async () => {
+    const { casal, aberto } = await formadoNo(5)
+
+    await registrarNascimento(aberto.id, { dtPartoReal: '2026-09-24', nascidoM: 4, nascidoF: 4 }, 4)
+
+    expect(banco.casais.get(casal.id)).toMatchObject({ ativo: false, dtEncerramento: d('2026-09-24') })
+    expect([...banco.partos.values()].some((p) => p.idCasal === casal.id && p.ordem === 6)).toBe(false)
+    expect(banco.historicos.at(-1)).toMatchObject({
+      acao: 'encerramento',
+      descricao: 'Casal AB encerrado em 24/09/2026: limite de 5 partos atingido',
+    })
+  })
+
+  it('o encerramento nunca desfaz o primeiro parto do casal no Nidus: o acasalamento dele limita a data', async () => {
+    const { casal, aberto } = await formadoNo(3)
+    // o acasalamento corrigido para depois da formacao, como a ficha deixa
+    aberto.dtAcasalamento = d('2026-09-05')
+
+    await expect(encerrarCasal(casal.id, { dtEncerramento: '2026-09-03', motivo: 'x' }, 4)).rejects.toEqual(
+      noCampo('dtEncerramento', 'Não pode ser antes do acasalamento do 3º parto (05/09/2026).'),
+    )
+    expect(banco.partos.get(aberto.id)).toBeDefined()
+    expect(banco.historicos.some((h) => h.acao === 'acasalamento_desfeito')).toBe(false)
+  })
+
+  it('o encerramento antes do acasalamento automatico do seguinte o desfaz, e volta a contar do Nº', async () => {
+    const { casal, aberto } = await formadoNo(3)
+    await registrarNascimento(aberto.id, { dtPartoReal: '2026-09-24', nascidoM: 4, nascidoF: 4 }, 4)
+
+    await encerrarCasal(casal.id, { dtEncerramento: '2026-09-27', motivo: 'macho morreu' }, 4)
+
+    expect([...banco.partos.values()].filter((p) => p.idCasal === casal.id).map((p) => p.ordem)).toEqual([3])
+    expect(banco.historicos.find((h) => h.acao === 'acasalamento_desfeito')).toMatchObject({
+      descricao: 'Acasalamento do 4º parto do casal AB em 30/09/2026 desfeito: o casal foi encerrado antes, em 27/09/2026',
+    })
+  })
+})
+
+// ------------------------------------------------------------------ a ninhada sem casal
+
+describe('a ninhada do cadastro inicial nao tem ciclo de parto', () => {
+  it('nascimento, selecao, desmame, sem ninhada e as correcoes recusam, dizendo que e do cadastro inicial', async () => {
+    banco.partos.set(50, {
+      id: 50,
+      idCasal: null,
+      idLinhagem: 3,
+      ordem: 0,
+      dtAcasalamento: d('2026-09-01'),
+      dtPartoReal: d('2026-10-01'),
+      dtDesmameReal: d('2026-11-10'),
+      dtSemNinhada: null,
+      motivoSemNinhada: null,
+    })
+    const doCadastro = expect.objectContaining({ status: 409, codigo: 'SEQUENCIA_INVALIDA', message: expect.stringContaining('cadastro inicial') })
+
+    await expect(registrarNascimento(50, { dtPartoReal: '2026-10-01', nascidoM: 1, nascidoF: 0 }, 4)).rejects.toEqual(doCadastro)
+    await expect(registrarSelecao(50, { dtSelecao: '2026-10-02', eutanasiadoM: 1, eutanasiadoF: 0 }, 4)).rejects.toEqual(doCadastro)
+    await expect(registrarDesmame(50, { dtDesmameReal: '2026-10-22', desmamadoM: 1, desmamadoF: 0 }, 4)).rejects.toEqual(doCadastro)
+    await expect(fecharSemNinhada(50, { dtSemNinhada: '2026-10-22', motivo: 'x' }, 4)).rejects.toEqual(doCadastro)
+    await expect(corrigirAcasalamento(50, { dtAcasalamento: '2026-09-02' }, 4)).rejects.toEqual(doCadastro)
+    await expect(
+      corrigirNascimento(50, { dtPartoReal: '2026-10-01', nascidoM: 1, nascidoF: 0, motivo: 'x' }, 4),
+    ).rejects.toEqual(doCadastro)
+    await expect(corrigirDesmame(50, { dtDesmameReal: '2026-10-22', motivo: 'x' }, 4)).rejects.toEqual(doCadastro)
   })
 })
 

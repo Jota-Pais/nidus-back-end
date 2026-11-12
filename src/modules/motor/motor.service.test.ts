@@ -10,7 +10,13 @@ const agora = new Date('2026-10-30T12:00:00.000Z')
 /** a data de nascimento de quem chega com 'idade' dias na entrega */
 const nascidoHa = (idade: number) => new Date(Date.parse(`${ENTREGA}T00:00:00.000Z`) - idade * 86_400_000)
 
-type Parto = { id: number; ordem: number; dtPartoReal: Date; dtDesmameReal: Date | null; casal: { identificacao: string } }
+type Parto = {
+  id: number
+  ordem: number | null
+  dtPartoReal: Date
+  dtDesmameReal: Date | null
+  casal: { identificacao: string } | null
+}
 
 const banco = vi.hoisted(() => ({
   linhas: [] as unknown[],
@@ -70,8 +76,29 @@ describe('o que a busca le', () => {
       situacao: 'vivo',
       idPedido: null,
       caixa: { idEspecie: 1 },
-      parto: { casal: { idLinhagem: 3 } },
+      // a linhagem da ninhada, com casal ou sem: a do cadastro inicial tambem entra
+      parto: { idLinhagem: 3 },
     })
+  })
+
+  it('a ninhada do cadastro inicial e candidata, com ordem e casal nulos nos partos de origem', async () => {
+    banco.partos.push({ id: 7, ordem: null, dtPartoReal: nascidoHa(35), dtDesmameReal: new Date('2026-10-30T00:00:00.000Z'), casal: null })
+    banco.linhas.push({ idCaixa: 6, idParto: 7, sexo: 'M', _count: { _all: 6 } })
+
+    const busca = await buscarAtendimento({ ...pedido, machos: 4, qualquer: 0, idadeMin: 30, idadeMax: 40 }, agora)
+
+    expect(busca.candidatas).toEqual([
+      expect.objectContaining({
+        idCaixa: 6,
+        tipo: 'estoque',
+        idadeNaEntrega: 35,
+        origem: 'de_fato',
+        livres: { m: 6, f: 0 },
+        alocar: { m: 4, f: 0 },
+        partos: [{ ordem: null, casal: null }],
+      }),
+    ])
+    expect(busca.deficit).toEqual({ m: 0, f: 0, qualquer: 0 })
   })
 })
 

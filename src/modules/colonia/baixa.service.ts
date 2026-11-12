@@ -12,7 +12,16 @@ import type { Escolhido } from './escolha.ts'
 import { caixaLiberada, liberarSeVazia } from './liberacao.ts'
 import { lancarOcorrencia } from './ocorrencia.ts'
 import { soltosNaAnulacao } from './reserva.ts'
-import { MOTIVO_SELECAO, ROTULO_DO_SEXO, SEXOS, contarPorSexo, noNumero, quantosDoSexo, sexoDe } from './tipos.ts'
+import {
+  MOTIVO_SELECAO,
+  ROTULO_DO_SEXO,
+  SEXOS,
+  contarPorSexo,
+  noNumero,
+  origemDaNinhada,
+  quantosDoSexo,
+  sexoDe,
+} from './tipos.ts'
 import type { PorSexo, Sexo } from './tipos.ts'
 import { travarCaixas, travarOcorrencia, travarPedidos } from './travas.ts'
 
@@ -130,7 +139,7 @@ export const selecaoDoAnimalDaBaixa = {
   sexo: true,
   idPedido: true,
   idParto: true,
-  parto: { select: { dtDesmameReal: true, casal: { select: { idLinhagem: true } } } },
+  parto: { select: { dtDesmameReal: true, idLinhagem: true } },
 } satisfies Prisma.AnimalSelect
 
 export function animalDaBaixa(animal: Prisma.AnimalGetPayload<{ select: typeof selecaoDoAnimalDaBaixa }>): AnimalDaBaixa {
@@ -140,7 +149,7 @@ export function animalDaBaixa(animal: Prisma.AnimalGetPayload<{ select: typeof s
     idPedido: animal.idPedido,
     idParto: animal.idParto,
     desmamado: animal.parto.dtDesmameReal !== null,
-    idLinhagem: animal.parto.casal.idLinhagem,
+    idLinhagem: animal.parto.idLinhagem,
   }
 }
 
@@ -183,7 +192,7 @@ async function porQueNaoVolta(
     const partos = new Set(animais.map((animal) => animal.idParto))
     const outra = (await ninhadasNaCaixa(tx, origem.id)).find((ninhada) => !partos.has(ninhada.idParto))
 
-    return outra === undefined ? null : `tem agora a ninhada do ${outra.ordem}º parto do casal ${outra.casal}`
+    return outra === undefined ? null : `tem agora a ninhada ${origemDaNinhada(outra)}`
   }
 
   const cabem = animais.every((animal) => animal.desmamado && recusaDoEstoque(origem, animal) === null)

@@ -104,9 +104,9 @@ describe.skipIf(!URL_TESTE)('o pedido no banco de verdade', { timeout: 60_000 },
       caixaCasal, idLinhagem, daqui(-83),
     )
     const parto = await id(
-      `INSERT INTO reproducao.parto (id_casal, ordem, dt_acasalamento, dt_parto_real, dt_desmame_real)
-       VALUES ($1, 1, $2::date, $3::date, $4::date) RETURNING id`,
-      casal, daqui(-83), daqui(-60), daqui(-38),
+      `INSERT INTO reproducao.parto (id_casal, id_linhagem, ordem, dt_acasalamento, dt_parto_real, dt_desmame_real)
+       VALUES ($1, $2, 1, $3::date, $4::date, $5::date) RETURNING id`,
+      casal, idLinhagem, daqui(-83), daqui(-60), daqui(-38),
     )
 
     // nascem na caixa do casal; 2 machos e 2 femeas vao para o estoque depois do desmame

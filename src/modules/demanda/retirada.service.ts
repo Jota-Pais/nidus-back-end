@@ -16,8 +16,8 @@ export type LugarDaRetirada = {
   /** 'aaaa-mm-dd' */
   dtNascimento: string
   qtd: number
-  /** de qual parto saem os animais */
-  partos: { ordem: number; casal: string }[]
+  /** de qual parto saem os animais; ordem e casal nulos na ninhada do cadastro inicial */
+  partos: { ordem: number | null; casal: string | null }[]
 }
 
 /**
@@ -67,7 +67,7 @@ export async function retiradaDoPedido(idPedido: number) {
     }
 
     lugar.qtd += linha._count._all
-    lugar.partos.push({ ordem: parto.ordem, casal: parto.casal.identificacao.trim() })
+    lugar.partos.push({ ordem: parto.ordem, casal: parto.casal === null ? null : parto.casal.identificacao.trim() })
     porLugar.set(chave, lugar)
   }
 

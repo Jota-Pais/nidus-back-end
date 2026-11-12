@@ -5,6 +5,7 @@ import {
   exigirPerfil,
   usuarioDaRequisicao,
 } from '../../shared/middlewares/autorizacao.ts'
+import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { dataDoFato, idNaRota, idNoCorpo, motivoDaCorrecao } from '../../shared/validacao.ts'
 import { corrigirAcasalamento, corrigirDesmame, corrigirNascimento } from './correcao.service.ts'
 import {
@@ -31,8 +32,9 @@ const contagem = z.number().int().min(0).max(999, 'No máximo 999 animais.')
 
 /**
  * Corpo de POST /api/casais. O casal vai numa caixa que ja existe ('idCaixa') ou numa posicao
- * vazia da estante ('posicao'), e ai a caixa nasce junto. Par genetico e linhagem da especie
- * certa sao conferidos no servico - o Zod garante so a forma
+ * vazia da estante ('posicao'), e ai a caixa nasce junto. 'partoAtual' e o parto em que o casal ja
+ * esta (o que existia antes do Nidus), sem ele o 1o. Par genetico e linhagem da especie certa sao
+ * conferidos no servico - o Zod garante so a forma
  */
 export const casalNovo = z
   .object({
@@ -49,6 +51,12 @@ export const casalNovo = z
     grupoMacho: grupoGenetico,
     grupoFemea: grupoGenetico,
     dtFormacao: dataDoFato,
+    partoAtual: z
+      .number()
+      .int('Informe o número do parto, de 1 a 5.')
+      .min(1, 'Informe o número do parto, de 1 a 5.')
+      .max(MAX_PARTOS_POR_CASAL, `O casal tem no máximo ${MAX_PARTOS_POR_CASAL} partos.`)
+      .optional(),
   })
   .refine((dados) => (dados.idCaixa === undefined) !== (dados.posicao === undefined), {
     path: ['idCaixa'],

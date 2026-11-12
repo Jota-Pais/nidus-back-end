@@ -141,6 +141,8 @@ model Linhagem {
   pedidos Pedido[]
   /// As caixas de estoque desta linhagem
   caixas  Caixa[]
+  /// As ninhadas desta linhagem, com casal ou sem
+  partos  Parto[]
 
   /// Alvo da FK composta (id_especie, id_linhagem) que entra por SQL.
   @@unique([idEspecie, id])
@@ -193,6 +195,8 @@ model Casal {
   parGenetico GrupoGeneticoPar @relation(fields: [grupoMacho, grupoFemea], references: [grupoMacho, grupoFemea], onDelete: NoAction, onUpdate: NoAction)
   partos   Parto[]
 
+  /// Alvo da FK composta (id_casal, id_linhagem) do parto: a ninhada e da linhagem do casal.
+  @@unique([id, idLinhagem])
   @@index([idCaixa, ativo])
   @@map("casal")
   @@schema("reproducao")
@@ -200,16 +204,24 @@ model Casal {
 
 /// A ficha de um ciclo: as datas e quem as registrou. Quantos nasceram, morreram,
 /// desmamaram e foram entregues nao fica aqui: e contado nos animais do parto
-/// (colonia.animal), que tambem dao a idade, a linhagem e a especie de cada um.
+/// (colonia.animal), que tambem dao a idade e o sexo de cada um.
 /// As datas previstas sao calculadas (src/modules/reproducao/cadeiaTemporal.ts).
+///
+/// Ha tambem a ninhada sem casal conhecido: a do cadastro inicial do estoque, com os
+/// animais que ja estavam na colonia antes do Nidus. Ela nao tem casal, ordem nem
+/// acasalamento, e tem sempre o nascimento (CHECK parto_ninhada_sem_casal).
 model Parto {
-  id      Int @id @default(autoincrement())
-  idCasal Int @map("id_casal")
-  /// 1 a 5: o casal encerra no 5o parto.
-  ordem   Int @db.SmallInt
+  id      Int  @id @default(autoincrement())
+  /// Nulo so na ninhada sem casal conhecido (cadastro inicial).
+  idCasal Int? @map("id_casal")
+  /// A linhagem da ninhada, e com ela a especie. Com casal, a do casal (FK composta).
+  idLinhagem Int @map("id_linhagem")
+  /// 1 a 5: o casal encerra no 5o parto. Nulo na ninhada sem casal.
+  ordem   Int? @db.SmallInt
 
-  dtAcasalamento   DateTime  @map("dt_acasalamento") @db.Date
-  /// Nulo ate o nascimento.
+  /// Nulo na ninhada sem casal.
+  dtAcasalamento   DateTime? @map("dt_acasalamento") @db.Date
+  /// Nulo ate o nascimento. Na ninhada sem casal, o nascimento informado no cadastro.
   dtPartoReal      DateTime? @map("dt_parto_real") @db.Date
   dtDesmameReal    DateTime? @map("dt_desmame_real") @db.Date
   /// O acasalamento de casal encerrado que nao deu parto: fecha o ciclo sem
@@ -229,7 +241,9 @@ model Parto {
   dtCriacao    DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
   dtManutencao DateTime? @map("dt_manutencao") @db.Timestamptz(6)
 
-  casal          Casal    @relation(fields: [idCasal], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  /// FK COMPOSTA: a ninhada do casal e da linhagem dele. Sem casal, nao confere nada.
+  casal          Casal?   @relation(fields: [idCasal, idLinhagem], references: [id, idLinhagem], onDelete: NoAction, onUpdate: NoAction)
+  linhagem       Linhagem @relation(fields: [idLinhagem], references: [id], onDelete: NoAction, onUpdate: NoAction)
   usuarioParto   Usuario? @relation("RegistrouParto", fields: [idUsuarioParto], references: [id], onDelete: NoAction, onUpdate: NoAction)
   usuarioDesmame Usuario? @relation("RegistrouDesmame", fields: [idUsuarioDesmame], references: [id], onDelete: NoAction, onUpdate: NoAction)
   /// A ninhada: cada animal que nasceu deste parto, onde quer que esteja
@@ -288,9 +302,9 @@ model Animal {
 /// casal, datas, posicao) continua em auditoria.historico.
 model Ocorrencia {
   id             Int      @id @default(autoincrement())
-  /// nascimento | baixa (morte ou eutanasia, a selecao inclusive) | mudanca de
-  /// caixa | reserva | reserva_desfeita | entrega | correcao (da contagem ou do
-  /// sexo) | anulacao (de uma baixa)
+  /// nascimento | entrada (do cadastro inicial do estoque) | baixa (morte ou
+  /// eutanasia, a selecao inclusive) | mudanca de caixa | reserva | reserva_desfeita |
+  /// entrega | correcao (da contagem ou do sexo) | anulacao (de uma baixa)
   tipo           String   @db.VarChar(20)
   /// A data do fato, decidida pelo usuario
   dtFato         DateTime @map("dt_fato") @db.Date

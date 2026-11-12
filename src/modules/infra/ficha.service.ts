@@ -1,6 +1,7 @@
-// A ficha da caixa (GET /api/caixas/:id). A de casal mostra o casal, os partos (1 a 5), os casais
-// que vieram antes; a de estoque, os vivos por data de nascimento com as origens, os
-// pedidos com reservado nela e os casais da caixa, se ela ja foi de casal. Tudo
+// A ficha da caixa (GET /api/caixas/:id). A de casal mostra o casal, os partos (1 a 5; o casal que
+// ja estava no Nº parto quando foi cadastrado tem so do Nº em diante, e casal.partoInicial diz
+// qual e), os casais que vieram antes; a de estoque, os vivos por data de nascimento com as
+// origens, os pedidos com reservado nela e os casais da caixa, se ela ja foi de casal. Tudo
 // contado nos animais: nenhum numero vem gravado
 
 import { naoEncontrado } from '../../shared/erros.ts'
@@ -147,7 +148,10 @@ export async function montarFicha(idCaixa: number) {
       livre: total - reservado,
       nascimentoDe: grupos[0]?.dtNascimento ?? null,
       nascimentoAte: grupos.at(-1)?.dtNascimento ?? null,
-      /** os vivos por data de nascimento, com os partos de onde vieram */
+      /**
+       * os vivos por data de nascimento, com os partos de onde vieram. A origem do cadastro inicial
+       * (ninhada sem casal conhecido) tem ordem, casal e a caixa de origem nulos
+       */
       grupos: grupos.map(({ partos, ...grupo }) => ({
         ...grupo,
         ...daIdade(umAUm, grupo.dtNascimento),
@@ -155,8 +159,8 @@ export async function montarFicha(idCaixa: number) {
           idParto: parto.idParto,
           ordem: parto.ordem,
           casal: parto.casal,
-          codigoOrigem: parto.caixaDoCasal.codigo,
-          numeroVisivelOrigem: parto.caixaDoCasal.numeroVisivel,
+          codigoOrigem: parto.caixaDoCasal?.codigo ?? null,
+          numeroVisivelOrigem: parto.caixaDoCasal?.numeroVisivel ?? null,
           qtd: parto.vivos.m + parto.vivos.f,
         })),
       })),

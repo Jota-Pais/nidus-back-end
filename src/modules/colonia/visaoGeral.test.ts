@@ -191,6 +191,9 @@ vi.mock('../../shared/prisma.ts', () => {
             { idParto: 7, sexo: 'M', idPedido: null, _count: { _all: 3 } },
             { idParto: 7, sexo: 'F', idPedido: 4, _count: { _all: 2 } },
             { idParto: 8, sexo: 'F', idPedido: null, _count: { _all: 6 } },
+            // a ninhada do cadastro inicial: sem casal, a linhagem e a do parto
+            { idParto: 9, sexo: 'M', idPedido: null, _count: { _all: 6 } },
+            { idParto: 9, sexo: 'M', idPedido: 4, _count: { _all: 1 } },
           ]
         },
       },
@@ -198,8 +201,9 @@ vi.mock('../../shared/prisma.ts', () => {
         findMany: async () => {
           banco.partosLidos += 1
           return [
-            { id: 7, dtPartoReal: d('2026-10-01'), dtDesmameReal: d('2026-10-23'), casal: { idLinhagem: 1 } },
-            { id: 8, dtPartoReal: d('2026-11-01'), dtDesmameReal: null, casal: { idLinhagem: 2 } },
+            { id: 7, idLinhagem: 1, dtPartoReal: d('2026-10-01'), dtDesmameReal: d('2026-10-23') },
+            { id: 8, idLinhagem: 2, dtPartoReal: d('2026-11-01'), dtDesmameReal: null },
+            { id: 9, idLinhagem: 1, dtPartoReal: d('2026-10-06'), dtDesmameReal: d('2026-11-10') },
           ]
         },
       },
@@ -208,7 +212,7 @@ vi.mock('../../shared/prisma.ts', () => {
 })
 
 describe('a leitura da visao geral', () => {
-  it('le so os vivos e os casais ativos, e cada parto vai para a linhagem do casal', async () => {
+  it('le so os vivos e os casais ativos, e cada parto vai para a linhagem dele, com casal ou do cadastro inicial', async () => {
     const visao = await lerVisaoGeral(hoje)
 
     expect(banco.ondeDosAnimais).toEqual({ situacao: 'vivo' })
@@ -216,16 +220,22 @@ describe('a leitura da visao geral', () => {
     expect(banco.partosLidos).toBe(1)
     expect(visao.especies.map((e) => e.codigo)).toEqual(['rato', 'camundongo'])
 
+    // 3 machos e 2 femeas do parto 7, mais 7 machos do cadastro inicial (1 reservado)
     expect(visao.especies[0]?.linhagens[0]).toMatchObject({
       linhagem: 'Wistar',
       casais: 2,
-      vivos: { m: 3, f: 2 },
+      vivos: { m: 10, f: 2 },
       mamando: { m: 0, f: 0 },
-      reservados: { m: 0, f: 2 },
-      livres: { m: 3, f: 0 },
+      reservados: { m: 1, f: 2 },
+      livres: { m: 9, f: 0 },
     })
-    // nascidos em 01/10: 40 dias em 10/11
+    // nascidos em 01/10 (40 dias em 10/11) e em 06/10 (35 dias, a faixa de 22 a 35)
     expect(visao.especies[0]?.linhagens[0]?.livresPorIdade[2]).toEqual({ de: 36, ate: 60, m: 3, f: 0 })
+    expect(visao.especies[0]?.linhagens[0]?.livresPorIdade[1]).toEqual({ de: 22, ate: 35, m: 6, f: 0 })
+    expect(visao.especies[0]?.linhagens[0]?.livresPorIdadeDias).toEqual([
+      { idade: 35, m: 6, f: 0 },
+      { idade: 40, m: 3, f: 0 },
+    ])
 
     expect(visao.especies[1]?.linhagens[0]).toMatchObject({
       linhagem: 'Swiss',

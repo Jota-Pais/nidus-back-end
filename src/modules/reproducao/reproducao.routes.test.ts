@@ -79,6 +79,18 @@ describe('validacao de entrada - formacao de casal', () => {
     expect(resultado.success).toBe(false)
   })
 
+  it('o parto atual e opcional, inteiro de 1 a 5, com a mensagem no campo dele', () => {
+    expect(casalNovo.safeParse(corpoValido).data?.partoAtual).toBeUndefined()
+    expect(casalNovo.safeParse({ ...corpoValido, partoAtual: 1 }).success).toBe(true)
+    expect(casalNovo.safeParse({ ...corpoValido, partoAtual: 5 }).success).toBe(true)
+
+    for (const partoAtual of [0, 6, 2.5, '3']) {
+      const resultado = casalNovo.safeParse({ ...corpoValido, partoAtual })
+      expect(resultado.success).toBe(false)
+      expect(resultado.error?.issues.map((issue) => issue.path)).toEqual([['partoAtual']])
+    }
+  })
+
   it('aceita formar casal numa posicao vazia, sem caixa', () => {
     const { idCaixa: _semCaixa, ...semCaixa } = corpoValido
     const resultado = casalNovo.safeParse({

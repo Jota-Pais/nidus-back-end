@@ -45,8 +45,10 @@ export type LivresDoParto = {
   codigo: string
   numeroVisivel: string
   tipo: 'casal' | 'estoque'
-  ordem: number
-  casal: string
+  /** null na ninhada do cadastro inicial (sem casal conhecido) */
+  ordem: number | null
+  /** null na ninhada do cadastro inicial (sem casal conhecido) */
+  casal: string | null
   /** 'aaaa-mm-dd' */
   dtNascimento: string
   /** 'aaaa-mm-dd', ou null enquanto o desmame nao foi registrado */
@@ -64,7 +66,8 @@ export type CandidataDaBusca = {
   idadeNaEntrega: number
   origem: Origem
   livres: PorSexo
-  partos: { ordem: number; casal: string }[]
+  /** de onde vieram; ordem e casal nulos na ninhada do cadastro inicial */
+  partos: { ordem: number | null; casal: string | null }[]
 }
 
 type Lugar = CandidataDaBusca & { dtDesmame: string }
@@ -121,7 +124,7 @@ export function lugaresDaBusca(
 async function lerLivres(idEspecie: number, idLinhagem: number): Promise<LivresDoParto[]> {
   const linhas = await prisma.animal.groupBy({
     by: ['idCaixa', 'idParto', 'sexo'],
-    where: { situacao: 'vivo', idPedido: null, caixa: { idEspecie }, parto: { casal: { idLinhagem } } },
+    where: { situacao: 'vivo', idPedido: null, caixa: { idEspecie }, parto: { idLinhagem } },
     _count: { _all: true },
   })
   if (linhas.length === 0) return []
@@ -151,7 +154,7 @@ async function lerLivres(idEspecie: number, idLinhagem: number): Promise<LivresD
       numeroVisivel: caixa.estante.numeroVisivel,
       tipo: caixa.tipo === 'estoque' ? 'estoque' : 'casal',
       ordem: parto.ordem,
-      casal: parto.casal.identificacao.trim(),
+      casal: parto.casal === null ? null : parto.casal.identificacao.trim(),
       dtNascimento: dataISO(parto.dtPartoReal),
       dtDesmameReal: parto.dtDesmameReal === null ? null : dataISO(parto.dtDesmameReal),
       livres: { m: 0, f: 0 },

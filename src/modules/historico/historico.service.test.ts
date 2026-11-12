@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { entidadeDaOcorrencia, linhasQueForamParaATrilha, listarHistorico, ondeNaTrilha } from './historico.service.ts'
+import { entidadeDaOcorrencia, linhasQueForamParaATrilha, listarHistorico, nomeDoParto, ondeNaTrilha } from './historico.service.ts'
 
 // A tela Historico le auditoria.historico e a trilha de ocorrencias juntos. O banco aqui so devolve
 // o que cada teste deixa e guarda a consulta
@@ -279,5 +279,21 @@ describe('onde', () => {
 
     expect(caixaFindMany).not.toHaveBeenCalled()
     expect(pedidoFindMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('a ninhada do cadastro inicial no historico', () => {
+  it('a entrada e da caixa que recebeu os animais', () => {
+    expect(entidadeDaOcorrencia({ tipo: 'entrada', idPedido: null, idParto: 20, idCaixaOrigem: null, idCaixaDestino: 8 })).toEqual({
+      entidade: 'caixa',
+      idEntidade: 8,
+    })
+  })
+
+  it('o parto sem casal se chama cadastro inicial na coluna Onde', () => {
+    expect(nomeDoParto({ ordem: 2, dtPartoReal: null, casal: { identificacao: 'AB' } })).toBe('2º parto do casal AB')
+    expect(nomeDoParto({ ordem: null, dtPartoReal: new Date('2026-10-07T00:00:00.000Z'), casal: null })).toBe(
+      'Cadastro inicial (nascidos em 07/10/2026)',
+    )
   })
 })

@@ -112,6 +112,27 @@ describe('o numero do parto na celula acompanha a fase', () => {
   })
 })
 
+describe('o casal que ja estava no Nº parto quando foi cadastrado', () => {
+  it('o parto atual e o de maior ordem, nao quantos partos o casal tem no Nidus', () => {
+    expect(partoAtual([parto(3, '2026-09-01')])).toBe(3)
+    expect(partoAtual([parto(3, '2026-09-01', '2026-09-24'), parto(4, '2026-09-30')])).toBe(4)
+    expect(partoAtual([parto(5, '2026-09-01', '2026-09-24')])).toBe(5)
+  })
+
+  it('o card e a celula mostram o Nº parto: acasalado, em aleitamento e depois o seguinte', () => {
+    const noTerceiro = { identificacao: 'AB', ativo: true, partos: [parto(3, '2026-10-20')] }
+    expect(casalNoCard(noTerceiro, naCaixa([]), hoje)).toMatchObject({ partoAtual: 3, partoDaFase: 3, partoPrevisto: '2026-11-12' })
+
+    const nascido = { ...noTerceiro, partos: [parto(3, '2026-09-30', '2026-10-23'), parto(4, '2026-10-29')] }
+    const mamando = [doParto(4, 3, '2026-10-23', [4, 4], [0, 0], false)]
+    expect(casalNoCard(nascido, naCaixa(mamando), hoje)).toMatchObject({
+      partoAtual: 4,
+      partoDaFase: 3,
+      ninhadas: [{ casal: 'AB', parto: 3, m: 4, f: 4, mamando: true }],
+    })
+  })
+})
+
 describe('a caixa de estoque no card', () => {
   it('dentro da caixa so a idade distingue: partos do mesmo dia viram um grupo, do mais velho para o mais novo', () => {
     const grupos = gruposPorNascimento(
@@ -142,6 +163,22 @@ describe('a caixa de estoque no card', () => {
       grupos: [
         { dtNascimento: '2026-09-01', idadeDias: 68, total: 3, reservados: 0 },
         { dtNascimento: '2026-10-01', idadeDias: 38, total: 4, reservados: 4 },
+      ],
+    })
+  })
+
+  it('a ninhada do cadastro inicial entra nos grupos por nascimento como qualquer outra', () => {
+    const doCadastro: VivosDoParto = { ...doParto(9, 1, '2026-10-04', [6, 0]), ordem: null, casal: null, caixaDoCasal: null }
+    const card = estoqueNoCard({ sexo: 'M', idLinhagem: 3 }, naCaixa([doCadastro, doParto(5, 1, '2026-09-19', [3, 0], [1, 0])]), hoje)
+
+    expect(card).toMatchObject({
+      total: 9,
+      reservado: 1,
+      nascimentoDe: '2026-09-19',
+      nascimentoAte: '2026-10-04',
+      grupos: [
+        { dtNascimento: '2026-09-19', idadeDias: 50, total: 3, reservados: 1 },
+        { dtNascimento: '2026-10-04', idadeDias: 35, total: 6, reservados: 0 },
       ],
     })
   })

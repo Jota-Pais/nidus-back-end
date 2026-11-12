@@ -297,7 +297,7 @@ describe('anulacao de baixa', () => {
         idParto: a.idParto ?? 1,
         parto: {
           dtDesmameReal: a.desmame === null ? null : d(a.desmame ?? '2026-09-23'),
-          casal: { idLinhagem: 3 },
+          idLinhagem: 3,
         },
       },
     })),

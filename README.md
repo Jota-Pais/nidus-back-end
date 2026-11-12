@@ -38,7 +38,9 @@ O que mora aqui:
   acasalar; a data só prevê o parto) e se edita direto na ficha, sem motivo: a que
   vale é a última. A correção da data do nascimento leva junto o acasalamento que o
   sistema abriu, se ele ainda não deu parto nem foi editado, e o encerramento antes
-  dele o desfaz
+  dele o desfaz. O casal que já existia antes do Nidus entra no parto em que está
+  (`partoAtual` de 1 a 5 no `POST /api/casais`; sem ele, o 1º): os partos de antes
+  não existem no sistema, e a ficha diz em `casal.partoInicial` em qual ele entrou
 - **Animais** - cada filhote que nasce vira uma linha anônima em `colonia.animal`,
   com o parto de origem, o sexo, a caixa onde está e a situação (vivo, morto,
   entregue ou anulado). Toda contagem da ficha é contada nos animais. Morte e
@@ -63,6 +65,14 @@ O que mora aqui:
   ainda tem desmamados; senão, mamando se tem filhotes; senão, acasalada se tem
   parto pendente. A de estoque fica em estoque. `atrasado` marca o parto
   previsto que passou sem nascimento e o filhote com mais de 22 dias sem desmame
+- **Cadastro inicial do estoque** - os ratos que a colônia já tinha, de idade
+  conhecida e casal desconhecido, entram numa caixa de estoque nova numa posição
+  vazia (`POST /api/caixas/estoque`, com a posição como no formar casal, a
+  linhagem, o sexo, a quantidade e o nascimento) ou numa caixa de estoque que já
+  existe (`POST /api/caixas/:id/entrada`). Viram uma ninhada sem casal (parto sem
+  casal, ordem e acasalamento), desmamada no dia do cadastro, e a trilha ganha a
+  ocorrência `entrada`. Estoque é de desmamados: menos de 21 dias é recusado. Nas
+  telas, a origem dessa ninhada vem com `casal` e `ordem` nulos
 - **Pedidos** - o pedido do pesquisador, com o protocolo CEUA dele, sem
   depender de projeto cadastrado: machos, fêmeas e animais de qualquer sexo, com
   idade exata ou faixa de idade

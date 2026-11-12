@@ -110,7 +110,7 @@ const db = {
         .map((id) => {
           const parto = banco.partos.get(id) as Parto
           const casal = banco.casais.get(parto.idCasal) as Casal
-          return { ...parto, casal: { identificacao: casal.identificacao, idLinhagem: casal.idLinhagem } }
+          return { ...parto, idLinhagem: casal.idLinhagem, casal: { identificacao: casal.identificacao } }
         })
     },
   },

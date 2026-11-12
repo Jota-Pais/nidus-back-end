@@ -23,6 +23,7 @@ import {
   SEXOS,
   contarPorSexo,
   doSexo,
+  origemDaNinhada,
   quantosAnimais,
   quantosDoSexo,
 } from '../colonia/tipos.ts'
@@ -211,7 +212,7 @@ async function destinoDosNovos(
     if (outra !== undefined) {
       throw campoInvalido(
         'idCaixa',
-        `A caixa ${caixaDoCasal.codigo} do casal tem agora a ninhada do ${outra.ordem}º parto: diga em qual caixa de estoque entram os animais a mais.`,
+        `A caixa ${caixaDoCasal.codigo} do casal tem agora a ninhada ${origemDaNinhada(outra)}: diga em qual caixa de estoque entram os animais a mais.`,
       )
     }
 
@@ -232,7 +233,7 @@ async function destinoDosNovos(
     )
   }
 
-  const quem = { sexo, idLinhagem: parto.casal.idLinhagem }
+  const quem = { sexo, idLinhagem: parto.idLinhagem }
 
   if (naDoCasal) {
     // a caixa do casal que virou estoque: os a mais estao onde nasceram, sem chegada
@@ -489,8 +490,8 @@ export async function corrigirNascimento(idParto: number, dados: CorrecaoDoNasci
   return { parto: await cicloFicha(idParto), faltas }
 }
 
-/** O parto seguinte, como a correcao do nascimento le */
-type PartoSeguinte = { id: number; dtAcasalamento: Date; dtPartoReal: Date | null; dtSemNinhada: Date | null }
+/** O parto seguinte, como a correcao do nascimento le. Do mesmo casal: tem sempre o acasalamento */
+type PartoSeguinte = { id: number; dtAcasalamento: Date | null; dtPartoReal: Date | null; dtSemNinhada: Date | null }
 
 /**
  * O acasalamento seguinte que acompanha a correcao da data do nascimento: o que o sistema abriu
@@ -503,7 +504,7 @@ export function acasalamentoQueAcompanha(
   nascimentoDepois: string,
 ): { idParto: number; antes: string; depois: string } | null {
   if (seguinte === null || seguinte.dtPartoReal !== null || seguinte.dtSemNinhada !== null) return null
-  if (nascimentoAntes === nascimentoDepois) return null
+  if (seguinte.dtAcasalamento === null || nascimentoAntes === nascimentoDepois) return null
 
   const antes = dataISO(seguinte.dtAcasalamento)
   if (antes !== calcularProximoCiclo(nascimentoAntes).dtAcasalamento) return null

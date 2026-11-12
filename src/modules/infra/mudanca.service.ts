@@ -18,7 +18,7 @@ import { escolherAnimais, exigirDepoisDaChegada, idadeDoGrupo } from '../colonia
 import type { Escolhido } from '../colonia/escolha.ts'
 import { caixaLiberada, liberarSeVazia, partoPendente } from '../colonia/liberacao.ts'
 import { lancarOcorrencia } from '../colonia/ocorrencia.ts'
-import { SEXOS, quantosDoSexo } from '../colonia/tipos.ts'
+import { SEXOS, origemDaNinhada, quantosDoSexo } from '../colonia/tipos.ts'
 import type { Sexo } from '../colonia/tipos.ts'
 import { travarCaixas } from '../colonia/travas.ts'
 import { exigirOrdem } from '../reproducao/ordemDasDatas.ts'
@@ -58,13 +58,13 @@ const CAMPO: Record<Sexo, string> = { M: 'machos', F: 'femeas' }
 /**
  * A linhagem dos animais escolhidos e a recusa de quem ainda nao desmamou: filhote que mama fica
  * com a mae, e caixa de estoque so recebe desmamado. A chegada na caixa nova e no dia do desmame
- * ou depois
+ * ou depois (na ninhada do cadastro inicial, o desmame e o dia da entrada)
  */
 async function linhagemDosDesmamados(tx: Transacao, escolhidos: Escolhido[], dtFato: string): Promise<number> {
   const partos = await tx.parto.findMany({
     where: { animais: { some: { id: { in: escolhidos.map((animal) => animal.id) } } } },
     orderBy: { id: 'asc' },
-    select: { ordem: true, dtDesmameReal: true, casal: { select: { identificacao: true, idLinhagem: true } } },
+    select: { ordem: true, idLinhagem: true, dtDesmameReal: true, casal: { select: { identificacao: true } } },
   })
 
   const mamando = partos.find((parto) => parto.dtDesmameReal === null)
@@ -72,12 +72,15 @@ async function linhagemDosDesmamados(tx: Transacao, escolhidos: Escolhido[], dtF
   if (mamando !== undefined) {
     throw erroDeRegra(
       'SEQUENCIA_INVALIDA',
-      `A ninhada do ${mamando.ordem}º parto do casal ${mamando.casal.identificacao.trim()} ainda não desmamou: registre o desmame antes de passar os animais para outra caixa.`,
+      `A ninhada ${origemDaNinhada({ ordem: mamando.ordem, casal: mamando.casal?.identificacao.trim() ?? null })} ainda não desmamou: registre o desmame antes de passar os animais para outra caixa.`,
     )
   }
 
   exigirOrdem('dtFato', dtFato, {
-    depoisDe: partos.map((parto) => ({ evento: `do desmame do ${parto.ordem}º parto`, data: parto.dtDesmameReal })),
+    depoisDe: partos.map((parto) => ({
+      evento: parto.ordem === null ? 'da entrada no cadastro inicial' : `do desmame do ${parto.ordem}º parto`,
+      data: parto.dtDesmameReal,
+    })),
   })
 
   const [primeiro] = partos
@@ -85,7 +88,7 @@ async function linhagemDosDesmamados(tx: Transacao, escolhidos: Escolhido[], dtF
 
   // dentro de uma caixa os vivos sao de uma linhagem so; se nao forem, o trigger dos animais
   // recusa a caixa de destino
-  return primeiro.casal.idLinhagem
+  return primeiro.idLinhagem
 }
 
 /**
@@ -254,7 +257,7 @@ export function viradaParaEstoque(caixa: CaixaParaVirar): Virada {
   if (mamando !== undefined) {
     return recusa(
       'CAIXA_COM_ANIMAIS',
-      `A ninhada do ${mamando.ordem}º parto ainda está em aleitamento nesta caixa: registre o desmame antes.`,
+      `A ninhada ${origemDaNinhada(mamando)} ainda está em aleitamento nesta caixa: registre o desmame antes.`,
     )
   }
 

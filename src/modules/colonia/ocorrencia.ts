@@ -30,6 +30,17 @@ type Nascimento = Comum & {
   nascidos: PorSexo
 }
 
+/**
+ * A entrada do cadastro inicial: os animais da ninhada sem casal (o parto 'idParto') entram vivos
+ * na caixa de estoque, e chegam nela na data do fato
+ */
+type Entrada = Comum & {
+  tipo: 'entrada'
+  idParto: number
+  idCaixa: number
+  entrantes: PorSexo
+}
+
 /** Morte ou eutanasia (a selecao inclusive): os animais ficam mortos na caixa onde estavam */
 type Baixa = Comum & {
   tipo: 'baixa'
@@ -94,6 +105,7 @@ type Anulacao = Comum & {
 
 export type Lancamento =
   | Nascimento
+  | Entrada
   | Baixa
   | Mudanca
   | Reserva
@@ -157,6 +169,9 @@ async function aplicar(tx: Transacao, lancamento: Lancamento): Promise<number[]>
   switch (lancamento.tipo) {
     case 'nascimento':
       return criar(tx, lancamento.idParto, lancamento.idCaixa, null, lancamento.nascidos)
+
+    case 'entrada':
+      return criar(tx, lancamento.idParto, lancamento.idCaixa, lancamento.dtFato, lancamento.entrantes)
 
     case 'baixa':
       await atualizar(
@@ -249,6 +264,7 @@ async function aplicar(tx: Transacao, lancamento: Lancamento): Promise<number[]>
 function camposDaOcorrencia(lancamento: Lancamento) {
   switch (lancamento.tipo) {
     case 'nascimento':
+    case 'entrada':
       return { idParto: lancamento.idParto, idCaixaDestino: lancamento.idCaixa }
     case 'baixa':
       return { idParto: lancamento.idParto ?? null, idCaixaOrigem: lancamento.idCaixa }

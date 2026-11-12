@@ -143,7 +143,7 @@ async function doHistorico(filtro: FiltroDoHistorico): Promise<LinhaSemOnde[]> {
 
 /**
  * De quem e a ocorrencia na tela: o pedido da reserva e da entrega, o parto do nascimento e da
- * correcao, e a caixa onde aconteceu a baixa, a mudanca e a anulacao
+ * correcao, e a caixa onde aconteceu a entrada do cadastro inicial, a baixa, a mudanca e a anulacao
  */
 export function entidadeDaOcorrencia(ocorrencia: {
   tipo: string
@@ -257,6 +257,22 @@ async function daTrilha(filtro: FiltroDoHistorico): Promise<LinhaSemOnde[]> {
 }
 
 /**
+ * O nome do parto na coluna Onde: '2º parto do casal AB', ou, na ninhada sem casal conhecido,
+ * 'Cadastro inicial (nascidos em 07/10/2026)'
+ */
+export function nomeDoParto(parto: {
+  ordem: number | null
+  dtPartoReal: Date | null
+  casal: { identificacao: string } | null
+}): string {
+  if (parto.casal !== null && parto.ordem !== null) return `${parto.ordem}º parto do casal ${parto.casal.identificacao.trim()}`
+
+  return parto.dtPartoReal === null
+    ? 'Cadastro inicial'
+    : `Cadastro inicial (nascidos em ${dataLegivel(dataISO(parto.dtPartoReal))})`
+}
+
+/**
  * O nome legivel de onde cada linha foi, lido em lote: uma consulta por entidade presente nas
  * linhas, nunca uma por linha
  */
@@ -283,9 +299,12 @@ async function nomesDeOnde(linhas: LinhaSemOnde[]): Promise<Map<string, string>>
     partos.length === 0
       ? null
       : prisma.parto
-          .findMany({ where: { id: { in: partos } }, select: { id: true, ordem: true, casal: { select: { identificacao: true } } } })
+          .findMany({
+            where: { id: { in: partos } },
+            select: { id: true, ordem: true, dtPartoReal: true, casal: { select: { identificacao: true } } },
+          })
           .then((lidos) => {
-            for (const parto of lidos) nomes.set(`parto:${parto.id}`, `${parto.ordem}º parto do casal ${parto.casal.identificacao.trim()}`)
+            for (const parto of lidos) nomes.set(`parto:${parto.id}`, nomeDoParto(parto))
           }),
     pedidos.length === 0
       ? null

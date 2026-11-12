@@ -26,12 +26,13 @@ import {
   SEXOS,
   contarPorSexo,
   doSexo,
+  origemDaNinhada,
   quantosAnimais,
 } from '../colonia/tipos.ts'
 import type { PorSexo } from '../colonia/tipos.ts'
 import { travarCaixas, travarCasal, travarParto } from '../colonia/travas.ts'
 import { calcularProximoCiclo } from './cadeiaTemporal.ts'
-import { cicloFicha } from './cicloFicha.ts'
+import { cicloFicha, ninhadaSemCasal } from './cicloFicha.ts'
 import { exigirOrdem } from './ordemDasDatas.ts'
 import { contarNoDesmame, exigirDataDoDesmame } from './trilhaDoParto.ts'
 
@@ -91,7 +92,11 @@ async function validarParGenetico(grupoMacho: string, grupoFemea: string): Promi
 export async function casalFicha(idCasal: number) {
   const casal = await prisma.casal.findUnique({
     where: { id: idCasal },
-    include: { linhagem: { select: { nome: true } } },
+    include: {
+      linhagem: { select: { nome: true } },
+      // o primeiro parto do casal no Nidus, que nunca se desfaz (encerrarCasal)
+      partos: { orderBy: { ordem: 'asc' }, take: 1, select: { ordem: true } },
+    },
   })
 
   if (casal === null) {
@@ -108,6 +113,11 @@ export async function casalFicha(idCasal: number) {
     dtFormacao: dataISO(casal.dtFormacao),
     ativo: casal.ativo,
     dtEncerramento: casal.dtEncerramento === null ? null : dataISO(casal.dtEncerramento),
+    /**
+     * O parto em que o casal entrou no Nidus: 1 no casal formado aqui, N no que ja estava no Nº
+     * parto quando foi cadastrado. Os partos antes dele foram anteriores ao Nidus e nao tem ficha
+     */
+    partoInicial: casal.partos[0]?.ordem ?? 1,
   }
 }
 
@@ -120,7 +130,7 @@ export function recusaDaCaixaOcupada(ninhadas: NinhadaNaCaixa[], para: string) {
   if (primeira === undefined) return null
 
   const animais = quantosAnimais(primeira)
-  const doParto = `do ${primeira.ordem}º parto do casal ${primeira.casal}`
+  const doParto = origemDaNinhada(primeira)
 
   if (!primeira.desmamado) {
     return erroDeRegra(
@@ -135,7 +145,10 @@ export function recusaDaCaixaOcupada(ninhadas: NinhadaNaCaixa[], para: string) {
   )
 }
 
-/** Trava o casal e o parto, nessa ordem, e le o parto com o casal */
+/**
+ * Trava o casal e o parto, nessa ordem, e le o parto com o casal. So o parto de um casal tem ciclo:
+ * a ninhada do cadastro inicial e recusada (ninhadaSemCasal)
+ */
 export async function travarELerParto(tx: Transacao, idParto: number) {
   const base = await tx.parto.findUnique({ where: { id: idParto }, select: { idCasal: true } })
 
@@ -143,10 +156,12 @@ export async function travarELerParto(tx: Transacao, idParto: number) {
     throw naoEncontrado('Parto')
   }
 
+  if (base.idCasal === null) throw ninhadaSemCasal()
+
   await travarCasal(tx, base.idCasal)
   await travarParto(tx, idParto)
 
-  const parto = await tx.parto.findUnique({
+  const lido = await tx.parto.findUnique({
     where: { id: idParto },
     include: {
       casal: {
@@ -164,11 +179,15 @@ export async function travarELerParto(tx: Transacao, idParto: number) {
     },
   })
 
-  if (parto === null) {
+  if (lido === null) {
     throw naoEncontrado('Parto')
   }
 
-  return parto
+  // o parto de casal tem sempre ordem e acasalamento (CHECK parto_ninhada_sem_casal)
+  const { casal, ordem, dtAcasalamento } = lido
+  if (casal === null || ordem === null || dtAcasalamento === null) throw ninhadaSemCasal()
+
+  return { ...lido, idCasal: base.idCasal, casal, ordem, dtAcasalamento }
 }
 
 export type PartoTravado = Awaited<ReturnType<typeof travarELerParto>>
@@ -182,6 +201,11 @@ export type NovoCasal = {
   grupoMacho: string
   grupoFemea: string
   dtFormacao: string
+  /**
+   * O parto em que o casal ja esta (1 a 5; sem, o 1o): o casal que ja existia antes do Nidus entra
+   * no Nº parto. Os partos antes dele nao existem no sistema
+   */
+  partoAtual?: number | undefined
 }
 
 /**
@@ -235,11 +259,23 @@ async function exigirCaixaParaCasal(tx: Transacao, idCaixa: number, idEspecie: n
 }
 
 /**
- * POST /api/casais - forma o casal e ja abre o 1o parto, com o acasalamento no dia da formacao.
- * Numa posicao vazia a caixa de casal nasce na mesma transacao, com a especie da linhagem; o
- * codigo dela vem do trigger da posicao
+ * A descricao da formacao no historico: 'Casal AB formado, com acasalamento em 01/11/2026 (Wistar)',
+ * ou, no casal que ja estava no Nº parto, 'Casal AB formado no 3º parto, com acasalamento em ...'
+ */
+export function descricaoDaFormacao(casal: string, partoAtual: number, dtAcasalamento: string, linhagem: string): string {
+  const noParto = partoAtual === 1 ? '' : ` no ${partoAtual}º parto`
+  return `Casal ${casal} formado${noParto}, com acasalamento em ${dataLegivel(dtAcasalamento)} (${linhagem})`
+}
+
+/**
+ * POST /api/casais - forma o casal e ja abre o parto em que ele esta (o 1o, ou o 'partoAtual' do
+ * casal que ja existia antes do Nidus), com o acasalamento no dia da formacao. Numa posicao vazia
+ * a caixa de casal nasce na mesma transacao, com a especie da linhagem; o codigo dela vem do
+ * trigger da posicao
  */
 export async function formarCasal(dados: NovoCasal, idUsuario: number) {
+  const partoAtual = dados.partoAtual ?? 1
+
   const linhagem = await prisma.linhagem.findUnique({ where: { id: dados.idLinhagem } })
 
   if (linhagem === null) {
@@ -293,7 +329,12 @@ export async function formarCasal(dados: NovoCasal, idUsuario: number) {
     })
 
     await tx.parto.create({
-      data: { idCasal: criado.id, ordem: 1, dtAcasalamento: paraData(dados.dtFormacao) },
+      data: {
+        idCasal: criado.id,
+        idLinhagem: dados.idLinhagem,
+        ordem: partoAtual,
+        dtAcasalamento: paraData(dados.dtFormacao),
+      },
     })
 
     await registrarHistorico(tx, {
@@ -301,8 +342,8 @@ export async function formarCasal(dados: NovoCasal, idUsuario: number) {
       entidade: 'casal',
       idEntidade: criado.id,
       acao: 'formacao',
-      descricao: `Casal ${criado.identificacao} formado, com acasalamento em ${dataLegivel(dados.dtFormacao)} (${linhagem.nome})`,
-      dados: { idCaixa, idLinhagem: dados.idLinhagem, dtFormacao: dados.dtFormacao },
+      descricao: descricaoDaFormacao(criado.identificacao.trim(), partoAtual, dados.dtFormacao, linhagem.nome),
+      dados: { idCaixa, idLinhagem: dados.idLinhagem, dtFormacao: dados.dtFormacao, partoAtual },
     })
 
     return criado
@@ -328,7 +369,7 @@ export function descricaoDoAcasalamentoAutomatico(casal: string, ordem: number, 
  */
 async function abrirAcasalamentoSeguinte(
   tx: Transacao,
-  casal: { id: number; identificacao: string },
+  casal: { id: number; identificacao: string; idLinhagem: number },
   ordemDoNascido: number,
   dtPartoReal: string,
 ) {
@@ -338,7 +379,7 @@ async function abrirAcasalamentoSeguinte(
 
   const { dtAcasalamento } = calcularProximoCiclo(dtPartoReal)
   const parto = await tx.parto.create({
-    data: { idCasal: casal.id, ordem, dtAcasalamento: paraData(dtAcasalamento) },
+    data: { idCasal: casal.id, idLinhagem: casal.idLinhagem, ordem, dtAcasalamento: paraData(dtAcasalamento) },
   })
 
   await registrarHistorico(tx, {
@@ -670,7 +711,7 @@ export async function encerrarCasal(idCasal: number, dados: Encerramento, idUsua
 
     const casal = await tx.casal.findUnique({
       where: { id: idCasal },
-      include: { partos: { orderBy: { ordem: 'desc' }, take: 1 } },
+      include: { partos: { orderBy: { ordem: 'desc' }, take: 2 } },
     })
 
     if (casal === null) {
@@ -683,20 +724,18 @@ export async function encerrarCasal(idCasal: number, dados: Encerramento, idUsua
 
     // o parto pode vir depois do encerramento, porque a femea separada do macho ainda pare a
     // ninhada que carrega. O acasalamento nao: o pendente marcado para depois do encerramento
-    // (o que o sistema abre 6 dias depois do parto) nao aconteceu, e o limite passa a ser o de antes
-    const [ultimo] = casal.partos
+    // (o que o sistema abre 6 dias depois do parto) nao aconteceu, e o limite passa a ser o de antes.
+    // O primeiro parto do casal no Nidus (o 1o, ou o Nº do casal que ja estava nele) fica: e o
+    // acasalamento da formacao, e sem ele o casal ficaria sem parto
+    const [ultimo, anterior] = casal.partos
     const naoAconteceu =
       ultimo !== undefined &&
-      ultimo.ordem > 1 &&
+      anterior !== undefined &&
       ultimo.dtPartoReal === null &&
       ultimo.dtSemNinhada === null &&
+      ultimo.dtAcasalamento !== null &&
       dataISO(ultimo.dtAcasalamento) > dados.dtEncerramento
-    const limite = naoAconteceu
-      ? await tx.parto.findFirst({
-          where: { idCasal, ordem: ultimo.ordem - 1 },
-          select: { ordem: true, dtAcasalamento: true },
-        })
-      : ultimo
+    const limite = naoAconteceu ? anterior : ultimo
 
     exigirOrdem('dtEncerramento', dados.dtEncerramento, {
       depoisDe: [
@@ -705,7 +744,7 @@ export async function encerrarCasal(idCasal: number, dados: Encerramento, idUsua
       ],
     })
 
-    if (naoAconteceu) {
+    if (naoAconteceu && ultimo.dtAcasalamento !== null) {
       const dtAcasalamento = dataISO(ultimo.dtAcasalamento)
       await tx.parto.delete({ where: { id: ultimo.id } })
 

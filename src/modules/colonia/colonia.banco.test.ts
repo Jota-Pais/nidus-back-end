@@ -466,7 +466,7 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
     const { idCasal } = await casalComNinhada({ linha: 1, coluna: 1 }, { m: 1, f: 1 })
     const aberto = await tx().parto.findFirstOrThrow({ where: { idCasal, ordem: 2 } })
     expect(aberto).toMatchObject({ dtPartoReal: null, dtSemNinhada: null })
-    expect(aberto.dtAcasalamento.toISOString().slice(0, 10)).toBe(daqui(-44))
+    expect(aberto.dtAcasalamento?.toISOString().slice(0, 10)).toBe(daqui(-44))
     const registro = await tx().historico.findFirstOrThrow({ where: { entidade: 'parto', idEntidade: aberto.id, acao: 'acasalamento' } })
     expect(registro.dados).toMatchObject({ automatico: true })
 
@@ -500,7 +500,7 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
     // o acasalamento que o nascimento abriu (6 dias depois dele) e de antes do encerramento: o
     // parto 2 fica pendente ate fechar sem ninhada
     const parto2 = await tx().parto.findFirstOrThrow({ where: { idCasal, ordem: 2 }, select: { id: true, dtAcasalamento: true } })
-    expect(parto2.dtAcasalamento.toISOString().slice(0, 10)).toBe(daqui(-44))
+    expect(parto2.dtAcasalamento?.toISOString().slice(0, 10)).toBe(daqui(-44))
     await fecharSemNinhada(parto2.id, { dtSemNinhada: daqui(-19), motivo: 'não emprenhou' }, tecnico)
     expect(await virarCaixaDeEstoque(idCaixa, tecnico)).toEqual({ idCaixa, sexo: 'M' })
 

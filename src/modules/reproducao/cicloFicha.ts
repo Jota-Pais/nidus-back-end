@@ -1,7 +1,7 @@
 // A ficha de um parto: as datas do ciclo e as contagens, todas contadas nos animais do parto,
 // estejam onde estiverem. Nenhum numero vem gravado no parto
 
-import { naoEncontrado } from '../../shared/erros.ts'
+import { erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { dataISO } from '../../shared/traducao.ts'
 import { animaisDoParto } from '../colonia/consultas.ts'
@@ -105,11 +105,22 @@ export function contarDoParto(dtDesmameReal: Date | null, animais: AnimalDoParto
 const iso = (data: Date | null) => (data === null ? null : dataISO(data))
 
 /**
+ * A ninhada sem casal conhecido (a do cadastro inicial do estoque) nao tem ciclo: nem acasalamento,
+ * nem parto a registrar, nem selecao, desmame ou correcao. Os animais dela se tratam pela caixa
+ */
+export function ninhadaSemCasal() {
+  return erroDeRegra(
+    'SEQUENCIA_INVALIDA',
+    'Esta ninhada veio do cadastro inicial do estoque: não tem casal nem parto para registrar ou corrigir.',
+  )
+}
+
+/**
  * O objeto parto da ficha, reaproveitado pela ficha da caixa. As datas
- * previstas sao calculadas da cadeia temporal
+ * previstas sao calculadas da cadeia temporal. So o parto de um casal tem ficha
  */
 export async function cicloFicha(idParto: number) {
-  const parto = await prisma.parto.findUnique({
+  const lido = await prisma.parto.findUnique({
     where: { id: idParto },
     select: {
       id: true,
@@ -123,9 +134,13 @@ export async function cicloFicha(idParto: number) {
     },
   })
 
-  if (parto === null) {
+  if (lido === null) {
     throw naoEncontrado('Parto')
   }
+
+  const { casal, ordem, dtAcasalamento } = lido
+  if (casal === null || ordem === null || dtAcasalamento === null) throw ninhadaSemCasal()
+  const parto = { ...lido, casal, ordem, dtAcasalamento }
 
   const contagem = contarDoParto(parto.dtDesmameReal, await animaisDoParto(prisma, idParto))
   const dtPartoPrevisto = calcularCicloInicial(dataISO(parto.dtAcasalamento)).dtPartoPrevisto

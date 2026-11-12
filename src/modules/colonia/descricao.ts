@@ -3,7 +3,15 @@
 // caixa F1A para a caixa F2C"). A quantidade sai de quantosAnimais e o verbo concorda com ela
 
 import type { Prisma } from '@prisma/client'
-import { MOTIVO_NAO_CHEGOU_AO_DESMAME, MOTIVO_SELECAO, contarPorSexo, noNumero, quantosAnimais } from './tipos.ts'
+import { dataISO, dataLegivel } from '../../shared/traducao.ts'
+import {
+  MOTIVO_NAO_CHEGOU_AO_DESMAME,
+  MOTIVO_SELECAO,
+  contarPorSexo,
+  noNumero,
+  origemDaNinhada,
+  quantosAnimais,
+} from './tipos.ts'
 import type { PorSexo } from './tipos.ts'
 
 /** O que o texto le da ocorrencia */
@@ -14,7 +22,14 @@ export const selecaoDaDescricao = {
   idCaixaDestino: true,
   idPedido: true,
   motivo: true,
-  parto: { select: { ordem: true, casal: { select: { identificacao: true } } } },
+  parto: {
+    select: {
+      ordem: true,
+      dtPartoReal: true,
+      linhagem: { select: { nome: true } },
+      casal: { select: { identificacao: true } },
+    },
+  },
   caixaOrigem: { select: { codigo: true } },
   caixaDestino: { select: { codigo: true } },
   // basta saber se a baixa tem anulacao: a primeira diz
@@ -34,9 +49,31 @@ function comVerbo(qtd: PorSexo, singular: string, plural: string): string {
   return `${quantosAnimais(qtd)} ${concordar(qtd, singular, plural)}`
 }
 
+/** ' do 2º parto do casal AB', ' do cadastro inicial' na ninhada sem casal, ou '' sem parto */
 function doParto(ocorrencia: OcorrenciaDescrita): string {
   const { parto } = ocorrencia
-  return parto === null ? '' : ` do ${parto.ordem}º parto do casal ${parto.casal.identificacao.trim()}`
+  if (parto === null) return ''
+
+  return ` ${origemDaNinhada({ ordem: parto.ordem, casal: parto.casal?.identificacao.trim() ?? null })}`
+}
+
+/** 'nascidos', 'nascido', 'nascidas', 'nascida': concorda com os animais, so femeas no feminino */
+function nascidos(qtd: PorSexo): string {
+  const feminino = qtd.m === 0 && qtd.f > 0
+  return `${feminino ? 'nascida' : 'nascido'}${qtd.m + qtd.f === 1 ? '' : 's'}`
+}
+
+/**
+ * A entrada do cadastro inicial: 'Entrada de 6 machos Wistar nascidos em 07/10/2026 na caixa F2A
+ * (cadastro inicial).' Vista da caixa, sem o 'na caixa'
+ */
+function descricaoDaEntrada(ocorrencia: OcorrenciaDescrita, qtd: PorSexo, naCaixa: string): string {
+  const { parto } = ocorrencia
+  const linhagem = parto === null ? '' : ` ${parto.linhagem.nome}`
+  const dtNascimento = parto?.dtPartoReal ?? null
+  const nascimento = dtNascimento === null ? '' : ` ${nascidos(qtd)} em ${dataLegivel(dataISO(dtNascimento))}`
+
+  return `Entrada de ${quantosAnimais(qtd)}${linhagem}${nascimento}${naCaixa} (cadastro inicial).`
 }
 
 function descricaoDaBaixa(ocorrencia: OcorrenciaDescrita, qtd: PorSexo, naCaixa: string): string {
@@ -91,6 +128,8 @@ export function descreverOcorrencia(ocorrencia: OcorrenciaDescrita, daCaixa?: nu
   switch (ocorrencia.tipo) {
     case 'nascimento':
       return `${doParto(ocorrencia).trim().replace(/^do /, '') || 'Parto'}: ${quantosAnimais(qtd)}${daCaixa === undefined ? ` na caixa ${destino}` : ''}.`
+    case 'entrada':
+      return descricaoDaEntrada(ocorrencia, qtd, daCaixa === undefined ? ` na caixa ${destino}` : '')
     case 'baixa':
       return descricaoDaBaixa(ocorrencia, qtd, daCaixa === undefined ? ` na caixa ${origem}` : '')
     case 'mudanca':

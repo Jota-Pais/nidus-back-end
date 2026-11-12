@@ -177,18 +177,18 @@ describe.skipIf(!URL_TESTE)('regras do banco', { timeout: 30_000 }, () => {
       [m.caixaCasal2, m.linhagemK],
     )
     m.parto1 = await id(
-      `INSERT INTO reproducao.parto (id_casal, ordem, dt_acasalamento, dt_parto_real, dt_desmame_real)
-       VALUES ($1, 1, '2026-08-01', '2026-08-22', '2026-09-12') RETURNING id`,
-      [casal1],
+      `INSERT INTO reproducao.parto (id_casal, id_linhagem, ordem, dt_acasalamento, dt_parto_real, dt_desmame_real)
+       VALUES ($1, $2, 1, '2026-08-01', '2026-08-22', '2026-09-12') RETURNING id`,
+      [casal1, m.linhagemW],
     )
     m.partoNaoNascido = await id(
-      `INSERT INTO reproducao.parto (id_casal, ordem, dt_acasalamento) VALUES ($1, 2, '2026-09-13') RETURNING id`,
-      [casal1],
+      `INSERT INTO reproducao.parto (id_casal, id_linhagem, ordem, dt_acasalamento) VALUES ($1, $2, 2, '2026-09-13') RETURNING id`,
+      [casal1, m.linhagemW],
     )
     m.partoK = await id(
-      `INSERT INTO reproducao.parto (id_casal, ordem, dt_acasalamento, dt_parto_real, dt_desmame_real)
-       VALUES ($1, 1, '2026-08-01', '2026-08-22', '2026-09-12') RETURNING id`,
-      [casal2],
+      `INSERT INTO reproducao.parto (id_casal, id_linhagem, ordem, dt_acasalamento, dt_parto_real, dt_desmame_real)
+       VALUES ($1, $2, 1, '2026-08-01', '2026-08-22', '2026-09-12') RETURNING id`,
+      [casal2, m.linhagemK],
     )
 
     const machos = await nascer(m.parto1, 'M', 6, m.caixaCasal1)
@@ -625,8 +625,8 @@ describe.skipIf(!URL_TESTE)('regras do banco', { timeout: 30_000 }, () => {
       ['casal_um_ativo_por_caixa', () => `INSERT INTO reproducao.casal (id_caixa, id_linhagem, grupo_macho, grupo_femea, identificacao, dt_formacao)
                                           SELECT id_caixa, id_linhagem, grupo_macho, grupo_femea, identificacao, dt_formacao FROM reproducao.casal WHERE id_caixa = ${m.caixaCasal1}`],
       ['parto_ordem_ciclo', () => `UPDATE reproducao.parto SET ordem = 6 WHERE id = ${m.partoNaoNascido}`],
-      ['parto_id_casal_ordem_key', () => `INSERT INTO reproducao.parto (id_casal, ordem, dt_acasalamento)
-                                          SELECT id_casal, ordem, dt_acasalamento FROM reproducao.parto WHERE id = ${m.parto1}`],
+      ['parto_id_casal_ordem_key', () => `INSERT INTO reproducao.parto (id_casal, id_linhagem, ordem, dt_acasalamento)
+                                          SELECT id_casal, id_linhagem, ordem, dt_acasalamento FROM reproducao.parto WHERE id = ${m.parto1}`],
       ['usuario_perfil_dominio', () => `UPDATE login.usuario SET perfil = 'X' WHERE id = ${m.usuario}`],
       ['pedido_ao_menos_um_animal', () => `UPDATE demanda.pedido SET qtd_m = 0, qtd_f = 0, qtd_qualquer = 0 WHERE id = ${m.pedidoEnviado}`],
       ['pedido_faixa_de_idade', () => `UPDATE demanda.pedido SET idade_min_dias = 10 WHERE id = ${m.pedidoEnviado}`],

@@ -52,6 +52,19 @@ export type Situacao = 'vivo' | 'morto' | 'entregue' | 'anulado'
 /** Por que a caixa foi liberada: o fato que a esvaziou */
 export type MotivoDaLiberacao = 'entrega' | 'baixa' | 'mudanca' | 'casal_encerrado'
 
+/** A ninhada como as mensagens a nomeiam: com casal, a ordem do parto e o casal; sem, nulos */
+export type OrigemDaNinhada = { ordem: number | null; casal: string | null }
+
+/**
+ * De onde veio a ninhada, para o texto: 'do 2º parto do casal AB', ou 'do cadastro inicial' na
+ * ninhada sem casal conhecido (os animais que ja estavam na colonia antes do Nidus)
+ */
+export function origemDaNinhada(ninhada: OrigemDaNinhada): string {
+  return ninhada.ordem === null || ninhada.casal === null
+    ? 'do cadastro inicial'
+    : `do ${ninhada.ordem}º parto do casal ${ninhada.casal}`
+}
+
 /** O motivo da baixa que a selecao lanca: a eutanasia dos filhotes a mais, antes do desmame */
 export const MOTIVO_SELECAO = 'eutanasia de selecao'
 

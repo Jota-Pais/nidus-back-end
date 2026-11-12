@@ -171,17 +171,18 @@ export async function lerVisaoGeral(hoje: string = hojeISO()): Promise<VisaoGera
       ? []
       : await prisma.parto.findMany({
           where: { id: { in: [...new Set(vivos.map((linha) => linha.idParto))] } },
-          select: { id: true, dtPartoReal: true, dtDesmameReal: true, casal: { select: { idLinhagem: true } } },
+          select: { id: true, idLinhagem: true, dtPartoReal: true, dtDesmameReal: true },
         })
   const partoPorId = new Map(partos.map((parto) => [parto.id, parto]))
 
+  // a linhagem e a da ninhada, com casal ou sem (a do cadastro inicial)
   const grupos = vivos.flatMap((linha): GrupoDeVivos[] => {
     const parto = partoPorId.get(linha.idParto)
     if (parto === undefined) return []
 
     return [
       {
-        idLinhagem: parto.casal.idLinhagem,
+        idLinhagem: parto.idLinhagem,
         sexo: linha.sexo,
         reservado: linha.idPedido !== null,
         dtNascimento: parto.dtPartoReal === null ? null : dataISO(parto.dtPartoReal),

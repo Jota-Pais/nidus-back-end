@@ -31,7 +31,8 @@ type Caixa = {
   /** a caixa de casal com o casal ativo ou com parto pendente nao e liberada */
   segura: boolean
 }
-type Parto = { id: number; ordem: number; casal: string; idLinhagem: number; dtPartoReal: Date; dtDesmameReal: Date | null }
+/** A ninhada do cadastro inicial (sem casal conhecido) tem ordem e casal nulos */
+type Parto = { id: number; ordem: number | null; casal: string | null; idLinhagem: number; dtPartoReal: Date; dtDesmameReal: Date | null }
 type Animal = {
   id: number
   idParto: number
@@ -99,7 +100,7 @@ type OndeAnimal = {
   situacao?: string | { in: string[] }
   idPedido?: number | null | { in: number[] }
   idCaixa?: number
-  parto?: { dtPartoReal?: Date; casal?: { idLinhagem: number } }
+  parto?: { dtPartoReal?: Date; idLinhagem?: number }
   caixa?: { idEspecie: number }
 }
 
@@ -112,7 +113,7 @@ function passaNoFiltro(a: Animal, onde: OndeAnimal): boolean {
   if (typeof idPedido === 'object' && idPedido !== null && (a.idPedido === null || !idPedido.in.includes(a.idPedido))) return false
   if (idCaixa !== undefined && a.idCaixa !== idCaixa) return false
   if (parto?.dtPartoReal !== undefined && partoDo(a).dtPartoReal.getTime() !== parto.dtPartoReal.getTime()) return false
-  if (parto?.casal !== undefined && partoDo(a).idLinhagem !== parto.casal.idLinhagem) return false
+  if (parto?.idLinhagem !== undefined && partoDo(a).idLinhagem !== parto.idLinhagem) return false
   if (caixa !== undefined && banco.caixas.get(a.idCaixa)?.idEspecie !== caixa.idEspecie) return false
   return true
 }
@@ -190,7 +191,7 @@ const db = {
     findMany: async ({ where }: { where: { id: { in: number[] } } }) =>
       [...banco.partos.values()]
         .filter((p) => where.id.in.includes(p.id))
-        .map((p) => ({ ...p, casal: { identificacao: p.casal, idLinhagem: p.idLinhagem } })),
+        .map((p) => ({ ...p, casal: p.casal === null ? null : { identificacao: p.casal } })),
   },
   animal: {
     groupBy: async ({ by, where }: { by: (keyof Animal)[]; where: OndeAnimal }) =>
@@ -929,6 +930,66 @@ describe('entrega', () => {
     await expect(registrarEntrega(10, '2026-11-08', 2)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'já foi registrada'))
     await expect(registrarEntrega(11, '2026-11-08', 2)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'ainda não tem animais reservados'))
     await expect(registrarEntrega(12, '2026-11-08', 2)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'foi recusado'))
+  })
+})
+
+// ------------------------------------------------------------------ o animal do cadastro inicial
+
+describe('o animal do cadastro inicial, sem casal conhecido', () => {
+  /**
+   * 6 machos Wistar nascidos em 06/10 (35 dias em 10/11) que entraram no cadastro inicial em 01/11
+   * na caixa de estoque F4A: a ninhada sem casal, desmamada na entrada, e a chegada na caixa
+   */
+  function doCadastroInicial() {
+    banco.caixas.set(5, { id: 5, codigo: 'F4A', ativa: true, tipo: 'estoque', idEspecie: 1, segura: false })
+    banco.partos.set(5, { id: 5, ordem: null, casal: null, idLinhagem: 3, dtPartoReal: d('2026-10-06'), dtDesmameReal: d('2026-11-01') })
+    nascer(5, 5, 6, 0, '2026-11-01')
+  }
+
+  it('a busca acha, a reserva reserva e a entrega entrega, com ordem e casal nulos na origem', async () => {
+    doCadastroInicial()
+    pedido(14, { qtdM: 4, qtdF: 0, qtdQualquer: 0, idadeMinDias: 30, idadeMaxDias: 40 })
+
+    const busca = await buscarAtendimento({
+      especie: 'rato',
+      idLinhagem: 3,
+      machos: 4,
+      femeas: 0,
+      qualquer: 0,
+      idadeMin: 30,
+      idadeMax: 40,
+      dataEntrega: '2026-11-10',
+    })
+    const sugeridas = busca.candidatas.filter((c) => c.sugerida)
+
+    expect(sugeridas).toEqual([
+      expect.objectContaining({
+        codigo: 'F4A',
+        dtNascimento: '2026-10-06',
+        idadeNaEntrega: 35,
+        origem: 'de_fato',
+        livres: { m: 6, f: 0 },
+        alocar: { m: 4, f: 0 },
+        partos: [{ ordem: null, casal: null }],
+      }),
+    ])
+
+    await reservarAnimais(
+      14,
+      sugeridas.map((c) => ({ idCaixa: c.idCaixa, dtNascimento: c.dtNascimento, machos: c.alocar.m, femeas: c.alocar.f })),
+      tecnica,
+    )
+    expect(banco.pedidos.get(14)?.status).toBe('reservado')
+    expect(contar(doPedido(14))).toEqual({ m: 4, f: 0 })
+
+    // antes da entrada no cadastro inicial os animais nao estavam na caixa
+    ;(banco.pedidos.get(14) as Pedido).dtCriacao = new Date('2026-10-20T12:00:00.000Z')
+    await expect(registrarEntrega(14, '2026-10-31', 2)).rejects.toEqual(noCampo('dtEntrega', 'chegada dos animais'))
+
+    const resposta = await registrarEntrega(14, '2026-11-10', 2)
+
+    expect(resposta).toMatchObject({ status: 'entregue', entregues: { m: 4, f: 0 }, caixasLiberadas: [] })
+    expect(naCaixa(5)).toHaveLength(2)
   })
 })
 
