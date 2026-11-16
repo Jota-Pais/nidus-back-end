@@ -73,9 +73,6 @@ describe.skipIf(!URL_TESTE)('o pedido no banco de verdade', { timeout: 60_000 },
     const nomeDaEspecie = 'Rato do teste dos pedidos'
     const especie = await id(`INSERT INTO catalogo.especie (nome) VALUES ($1) RETURNING id`, nomeDaEspecie)
     const idLinhagem = await id(`INSERT INTO catalogo.linhagem (id_especie, nome) VALUES ($1, 'W') RETURNING id`, especie)
-    await tx().$executeRawUnsafe(
-      `INSERT INTO catalogo.grupo_genetico_par (grupo_macho, grupo_femea) VALUES ('A', 'B') ON CONFLICT DO NOTHING`,
-    )
 
     const usuario = async (nome: string, perfil: 'T' | 'P') =>
       id(`INSERT INTO login.usuario (nome, email, perfil) VALUES ($1, $2, $3) RETURNING id`, nome, `${nome}@pedido-no-banco.invalid`, perfil)

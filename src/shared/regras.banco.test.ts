@@ -149,8 +149,6 @@ describe.skipIf(!URL_TESTE)('regras do banco', { timeout: 30_000 }, () => {
     m.linhagemW = await id(`INSERT INTO catalogo.linhagem (id_especie, nome) VALUES ($1, 'W') RETURNING id`, [rato])
     m.linhagemK = await id(`INSERT INTO catalogo.linhagem (id_especie, nome) VALUES ($1, 'K') RETURNING id`, [rato])
     const linhagemS = await id(`INSERT INTO catalogo.linhagem (id_especie, nome) VALUES ($1, 'S') RETURNING id`, [camundongo])
-    // os pares da rotacao em anel ja existem num banco com a carga inicial
-    await banco.query(`INSERT INTO catalogo.grupo_genetico_par (grupo_macho, grupo_femea) VALUES ('A', 'B'), ('B', 'C') ON CONFLICT DO NOTHING`)
     m.usuario = await id(`INSERT INTO login.usuario (nome, email, perfil) VALUES ('Teste', 'regras-do-banco@teste.invalid', 'T') RETURNING id`)
     const sala = await id(`INSERT INTO infra.sala (nome) VALUES ('Sala do teste') RETURNING id`)
     m.estante = await id(

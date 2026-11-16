@@ -52,40 +52,6 @@ export function contagemInvalida(campo: string, passou: { m: boolean; f: boolean
 }
 
 /**
- * Valida o par genetico ANTES do insert, para dar a mensagem rica
- * ("com macho do grupo A, so e valido o grupo B").
- */
-async function validarParGenetico(grupoMacho: string, grupoFemea: string): Promise<void> {
-  const par = await prisma.grupoGeneticoPar.findFirst({
-    where: { grupoMacho, grupoFemea, ativo: true },
-  })
-
-  if (par !== null) {
-    return
-  }
-
-  const validos = await prisma.grupoGeneticoPar.findMany({
-    where: { grupoMacho, ativo: true },
-    select: { grupoFemea: true },
-  })
-
-  const femeas = validos.map((v) => v.grupoFemea).join(', ')
-
-  throw erroDeRegra(
-    'PAR_GENETICO_INVALIDO',
-    `A combinação ${grupoMacho}${grupoFemea} não está na rotação genética permitida.`,
-    {
-      campos: {
-        grupoFemea:
-          femeas.length > 0
-            ? `Com macho do grupo ${grupoMacho}, só é válido o grupo ${femeas}.`
-            : `O grupo ${grupoMacho} não tem par válido cadastrado.`,
-      },
-    },
-  )
-}
-
-/**
  * O objeto casal da ficha, reaproveitado pelo cadastro, pelo
  * encerramento e pela ficha da posicao (infra/ficha.service.ts).
  */
@@ -286,8 +252,6 @@ export async function formarCasal(dados: NovoCasal, idUsuario: number) {
   if (!linhagem.ativa) {
     throw campoInvalido('idLinhagem', 'Esta linhagem está inativa e não forma casal novo.')
   }
-
-  await validarParGenetico(dados.grupoMacho, dados.grupoFemea)
 
   // um casal ativo por caixa tambem fica no indice parcial do banco, e uma posicao com uma caixa
   // ativa no outro: se a corrida passar por aqui, erros-do-banco.ts traduz

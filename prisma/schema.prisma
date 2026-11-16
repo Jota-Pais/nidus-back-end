@@ -151,21 +151,6 @@ model Linhagem {
   @@schema("catalogo")
 }
 
-/// Cruzamento rotacional em anel. So valem AB, BC, CD, DE, EA.
-/// Lista configuravel: o alvo da FK composta de `casal`.
-model GrupoGeneticoPar {
-  id          Int     @id @default(autoincrement())
-  grupoMacho  String  @map("grupo_macho") @db.Char(1)
-  grupoFemea  String  @map("grupo_femea") @db.Char(1)
-  ativo       Boolean @default(true)
-
-  casais Casal[]
-
-  @@unique([grupoMacho, grupoFemea])
-  @@map("grupo_genetico_par")
-  @@schema("catalogo")
-}
-
 // ------------------------------------------------------------ reproducao
 
 /// Maximo um casal ATIVO por caixa (unique parcial, na migration SQL).
@@ -175,7 +160,7 @@ model Casal {
   id         Int    @id @default(autoincrement())
   idCaixa    Int    @map("id_caixa")
   idLinhagem Int    @map("id_linhagem")
-  /// Grupos A-E, validados pela FK composta para grupo_genetico_par.
+  /// Grupos A-E (CHECK no banco) em qualquer combinacao: o cruzamento depende da linhagem.
   grupoMacho String @map("grupo_macho") @db.Char(1)
   grupoFemea String @map("grupo_femea") @db.Char(1)
   /// 2 caracteres, primeiro e o grupo do macho. Ex.: AB.
@@ -191,8 +176,6 @@ model Casal {
 
   caixa    Caixa    @relation(fields: [idCaixa], references: [id], onDelete: NoAction, onUpdate: NoAction)
   linhagem Linhagem @relation(fields: [idLinhagem], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  /// O par tem de estar na rotacao em anel. O banco recusa casal fora da lista.
-  parGenetico GrupoGeneticoPar @relation(fields: [grupoMacho, grupoFemea], references: [grupoMacho, grupoFemea], onDelete: NoAction, onUpdate: NoAction)
   partos   Parto[]
 
   /// Alvo da FK composta (id_casal, id_linhagem) do parto: a ninhada e da linhagem do casal.

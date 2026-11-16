@@ -31,7 +31,7 @@ O que mora aqui:
   de número e de sala, mas não de modelo: para trocar, remove e cadastra de novo.
   Remover é `ativa = false` e vai para o histórico: a sala só sai sem estante ativa
   (`409 SALA_COM_ESTANTE`), e a estante, sem caixa ativa (`409 ESTANTE_OCUPADA`)
-- **Ficha da caixa** - casal (cruzamento AB, BC, CD, DE, EA), do 1º ao 5º parto,
+- **Ficha da caixa** - casal (grupos A a E em qualquer par), do 1º ao 5º parto,
   com parto, eutanásia de seleção e desmame. As datas previstas saem sozinhas:
   parto = acasalamento + 23 dias, desmame = parto + 22. O acasalamento seguinte
   abre sozinho no nascimento, 6 dias depois do parto real (ninguém vê o casal
@@ -88,7 +88,7 @@ O que mora aqui:
 Os parâmetros biológicos (gestação, aleitamento, intervalo, máximo de 5 partos,
 4 machos e 4 fêmeas esperados por casal, tolerância de idade) são constantes em
 `src/shared/parametros.ts`, como no `settings.py` do sistema do cliente, e não vão
-para o banco: nenhum trigger repete esses números. Os pares genéticos ficam no banco.
+para o banco: nenhum trigger repete esses números.
 
 ## Pedido de animais e busca de atendimento
 
@@ -166,7 +166,7 @@ e o que você grava rodando local aparece para o cliente.
 | `npm run build` | Gera o Prisma Client e compila para `dist/` |
 | `npm start` | Roda o build, é o comando da Render |
 | `npm run db:deploy` | Aplica migrations pendentes. Nunca dropa nada |
-| `npm run db:seed` | Carga inicial: espécies, linhagens, parâmetros, pares genéticos, salas e estantes (não duplica nada) |
+| `npm run db:seed` | Carga inicial: espécies, linhagens, parâmetros, salas e estantes (não duplica nada) |
 | `npm run db:usuarios` | Cria os três usuários e o projeto CEUA num banco novo. Procura cada usuário pelo e-mail: o que acha fica como está, o que não acha é criado de novo |
 | `npm run db:senha -- <email> "<senha>"` | Define a senha de um usuário que já existe. É a reserva de quem já tem conta, quando o e-mail com o código não chega ou trava por código errado demais. Não cria conta |
 | `npm run desempenho` | Mede o tempo de resposta das rotas de leitura (veja Desempenho) |
@@ -233,7 +233,7 @@ src/
     colonia/           os animais: escolha, baixa, anulacao, liberacao da caixa, a trilha e a visao geral
     demanda/           projetos CEUA e pedidos: aprovação, reserva, entrega e recusa
     motor/             busca de atendimento
-    catalogo/          espécies, linhagens e pares genéticos
+    catalogo/          espécies e linhagens
     login/             sessão, primeiro acesso e senha esquecida
     usuarios/          contas e perfis (só o gestor)
     historico/         quem fez cada operação, quando e o que mudou

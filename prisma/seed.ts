@@ -10,7 +10,7 @@
 // Usuarios e o projeto CEUA ficam fora daqui, em `prisma/criar-usuarios.ts`, que
 // roda depois deste.
 
-import { especies, estantes, paresGeneticos, salas } from './dados-iniciais.ts'
+import { especies, estantes, salas } from './dados-iniciais.ts'
 import { prisma } from '../src/shared/prisma.ts'
 
 async function semearEspeciesELinhagens() {
@@ -28,16 +28,6 @@ async function semearEspeciesELinhagens() {
         create: { idEspecie: gravada.id, nome },
       })
     }
-  }
-}
-
-async function semearParesGeneticos() {
-  for (const par of paresGeneticos) {
-    await prisma.grupoGeneticoPar.upsert({
-      where: { grupoMacho_grupoFemea: par },
-      update: {},
-      create: par,
-    })
   }
 }
 
@@ -85,10 +75,9 @@ async function semearEstantes(idDaSala: Map<string, number>) {
 }
 
 async function conferir() {
-  const [qtdEspecie, qtdLinhagem, qtdPar, qtdSala, qtdEstante] = await Promise.all([
+  const [qtdEspecie, qtdLinhagem, qtdSala, qtdEstante] = await Promise.all([
     prisma.especie.count(),
     prisma.linhagem.count(),
-    prisma.grupoGeneticoPar.count(),
     prisma.sala.count(),
     prisma.estante.count(),
   ])
@@ -107,7 +96,6 @@ async function conferir() {
       linhas: qtdLinhagem,
       esperado: especies.reduce((total, e) => total + e.linhagens.length, 0),
     },
-    { tabela: 'grupo_genetico_par', linhas: qtdPar, esperado: paresGeneticos.length },
     { tabela: 'sala', linhas: qtdSala, esperado: salas.length },
     { tabela: 'estante', linhas: qtdEstante, esperado: estantes.length },
   ])
@@ -116,7 +104,6 @@ async function conferir() {
 
 async function main() {
   await semearEspeciesELinhagens()
-  await semearParesGeneticos()
   await semearEstantes(await semearSalas())
   await conferir()
 }

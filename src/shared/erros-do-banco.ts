@@ -75,12 +75,6 @@ const POR_CONSTRAINT: Record<string, Traducao> = {
     codigo: 'DATA_FORA_DA_ORDEM',
     mensagem: 'A data é anterior à chegada dos animais nesta caixa.',
   },
-  // FK composta do par genetico. Rede de seguranca: a mensagem rica vem da pre-validacao em
-  // 'reproducao.service.ts'
-  casal_grupo_macho_grupo_femea_fkey: {
-    codigo: 'PAR_GENETICO_INVALIDO',
-    mensagem: 'Esta combinação não está na rotação genética permitida.',
-  },
   usuario_email_key: {
     codigo: 'EMAIL_EM_USO',
     mensagem: 'Já existe uma conta com este e-mail.',
@@ -143,13 +137,9 @@ export function traduzirErroDoBanco(erro: unknown): ErroDeAplicacao | undefined 
     return undefined
   }
 
-  // 23505 unique_violation | 23514 check_violation (inclui RAISE de
-  // trigger) | 23503 foreign_key_violation (FK composta do par genetico).
-  if (
-    causa.originalCode !== '23505' &&
-    causa.originalCode !== '23514' &&
-    causa.originalCode !== '23503'
-  ) {
+  // 23505 unique_violation | 23514 check_violation (inclui RAISE de trigger). FK quebrada (23503)
+  // e bug de programacao: nenhuma e traduzida
+  if (causa.originalCode !== '23505' && causa.originalCode !== '23514') {
     return undefined
   }
 

@@ -15,15 +15,6 @@ export const especies = [
   },
 ] as const
 
-/** Rotacao em anel: so estes cinco pares formam casal. */
-export const paresGeneticos = [
-  { grupoMacho: 'A', grupoFemea: 'B' },
-  { grupoMacho: 'B', grupoFemea: 'C' },
-  { grupoMacho: 'C', grupoFemea: 'D' },
-  { grupoMacho: 'D', grupoFemea: 'E' },
-  { grupoMacho: 'E', grupoFemea: 'A' },
-] as const
-
 /** As 3 salas de criacao de hoje. Depois da carga, o gestor muda nos Cadastros. */
 export const salas = ['Sala 1', 'Sala 2', 'Sala 3'] as const
 

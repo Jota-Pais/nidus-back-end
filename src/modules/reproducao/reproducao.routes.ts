@@ -33,8 +33,8 @@ const contagem = z.number().int().min(0).max(999, 'No máximo 999 animais.')
 /**
  * Corpo de POST /api/casais. O casal vai numa caixa que ja existe ('idCaixa') ou numa posicao
  * vazia da estante ('posicao'), e ai a caixa nasce junto. 'partoAtual' e o parto em que o casal ja
- * esta (o que existia antes do Nidus), sem ele o 1o. Par genetico e linhagem da especie certa sao
- * conferidos no servico - o Zod garante so a forma
+ * esta (o que existia antes do Nidus), sem ele o 1o. Os grupos sao A-E em qualquer combinacao (o
+ * cruzamento depende da linhagem). A linhagem ativa e conferida no servico - o Zod garante so a forma
  */
 export const casalNovo = z
   .object({

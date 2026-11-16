@@ -159,15 +159,6 @@ describe('constraint do banco vira 409', () => {
     expect(traduzido?.message).not.toMatch(/violates/)
   })
 
-  it('FK composta recusada vira PAR_GENETICO_INVALIDO (rede de seguranca)', () => {
-    // O caminho normal e o pre-check em reproducao.service.ts, que da a mensagem rica com os
-    // pares validos. Isto so cobre a corrida: par desativado entre o pre-check e o insert
-    const traduzido = traduzirErroDoBanco(fk('casal_grupo_macho_grupo_femea_fkey', 'casal'))
-
-    expect(traduzido?.status).toBe(409)
-    expect(traduzido?.codigo).toBe('PAR_GENETICO_INVALIDO')
-  })
-
   it('nao usa a mensagem crua do Postgres como texto para o usuario', () => {
     // "duplicate key value violates unique constraint" e para log
     const traduzido = traduzirErroDoBanco(unique('caixa_uma_por_posicao', 'caixa'))
@@ -208,10 +199,8 @@ describe('o que NAO deve virar 409', () => {
     expect(traduzirErroDoBanco(trigger('PREFIXO_NOVO: algo que ninguem traduziu'))).toBeUndefined()
   })
 
-  it('FK sem constraint mapeada continua sem traducao', () => {
-    // 23503 (FK) so traduz a unica composta mapeada (par genetico,
-    // acima). Qualquer outra FK quebrada e bug de programacao, e 23502 (not
-    // null) nem chega a ser considerado - nenhum dos dois deve virar 409.
+  it('FK quebrada e not null continuam sem traducao', () => {
+    // 23503 (FK) e 23502 (not null) sao bug de programacao: nenhum dos dois deve virar 409.
     expect(traduzirErroDoBanco(fk('casal_id_caixa_fkey', 'casal'))).toBeUndefined()
     expect(
       traduzirErroDoBanco({

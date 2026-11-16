@@ -68,9 +68,6 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
 
     const especie = await id(`INSERT INTO catalogo.especie (nome) VALUES ('Rato do teste da colonia') RETURNING id`)
     idLinhagem = await id(`INSERT INTO catalogo.linhagem (id_especie, nome) VALUES ($1, 'W') RETURNING id`, especie)
-    await tx().$executeRawUnsafe(
-      `INSERT INTO catalogo.grupo_genetico_par (grupo_macho, grupo_femea) VALUES ('A', 'B') ON CONFLICT DO NOTHING`,
-    )
     tecnico = await id(
       `INSERT INTO login.usuario (nome, email, perfil) VALUES ('tecnico', 'tecnico@colonia-no-banco.invalid', 'T') RETURNING id`,
     )

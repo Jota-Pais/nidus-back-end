@@ -82,7 +82,6 @@ const banco = vi.hoisted(() => ({
   historicos: [] as Record<string, unknown>[],
   liberadas: [] as { idCaixa: number; dtFato: string; motivo: string }[],
   linhagem: { id: 3, idEspecie: 1, nome: 'Wistar', ativa: true },
-  parValido: true,
   proximoId: 1000,
   /** o dia da primeira chegada de animais em cada caixa (a primeira ocorrencia com destino nela) */
   primeiraChegada: new Map<number, Date>(),
@@ -131,10 +130,6 @@ const db = {
   $queryRaw: async () => [],
   $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(db),
   linhagem: { findUnique: async () => banco.linhagem },
-  grupoGeneticoPar: {
-    findFirst: async () => (banco.parValido ? { id: 1 } : null),
-    findMany: async () => [{ grupoFemea: 'B' }],
-  },
   estante: { findFirst: async () => ({ id: 1, numeroVisivel: 'E1', faces: 2, linhas: 3, colunas: 3 }) },
   caixa: {
     findUnique: async ({ where }: { where: { id: number } }) => {
@@ -402,7 +397,6 @@ function cenario() {
   banco.historicos = []
   banco.liberadas = []
   banco.linhagem = { id: 3, idEspecie: 1, nome: 'Wistar', ativa: true }
-  banco.parValido = true
   banco.proximoId = 1000
   banco.primeiraChegada = new Map([
     [6, d('2026-09-01')],
@@ -470,6 +464,17 @@ describe('formar casal', () => {
     const [primeiro] = [...banco.partos.values()].filter((p) => p.idCasal === casal.id)
     expect(primeiro).toMatchObject({ ordem: 1, dtAcasalamento: d('2026-11-01') })
     expect(primeiro).not.toHaveProperty('dtPartoPrevisto')
+  })
+
+  it('qualquer combinacao de A-E forma casal: na isogenica, macho e femea da mesma letra', async () => {
+    banco.linhagem = { id: 5, idEspecie: 2, nome: 'C57BL/6J', ativa: true }
+
+    const { idCaixa } = await formarCasal(
+      { ...novo, idLinhagem: 5, grupoMacho: 'A', grupoFemea: 'A', posicao: { idEstante: 1, face: 'frontal', linha: 2, coluna: 1 } },
+      4,
+    )
+
+    expect([...banco.casais.values()].find((c) => c.idCaixa === idCaixa)).toMatchObject({ identificacao: 'AA', idLinhagem: 5 })
   })
 
   it('caixa de estoque nao recebe casal', async () => {

@@ -153,18 +153,10 @@ async function gravarOMundo(banco: pg.Client): Promise<Mundo> {
     const caixaDoCasal = await caixa(1, 'casal')
     const estoque = await caixa(2, 'estoque')
 
-    // um par da rotacao que ja existe: o teste nao grava par
-    const [par] = (
-      await banco.query<{ macho: string; femea: string }>(
-        `SELECT grupo_macho AS macho, grupo_femea AS femea FROM catalogo.grupo_genetico_par WHERE ativo ORDER BY id LIMIT 1`,
-      )
-    ).rows
-    if (par === undefined) throw new Error('o banco nao tem par genetico ativo')
-
     const casal = await id(
       `INSERT INTO reproducao.casal (id_caixa, id_linhagem, grupo_macho, grupo_femea, identificacao, dt_formacao)
-       VALUES ($1, $2, $3, $4, $5, $6::date) RETURNING id`,
-      [caixaDoCasal, idLinhagem, par.macho, par.femea, `${par.macho}${par.femea}`, daqui(-83)],
+       VALUES ($1, $2, 'A', 'B', 'AB', $3::date) RETURNING id`,
+      [caixaDoCasal, idLinhagem, daqui(-83)],
     )
     const parto = await id(
       `INSERT INTO reproducao.parto (id_casal, id_linhagem, ordem, dt_acasalamento, dt_parto_real, dt_desmame_real)
