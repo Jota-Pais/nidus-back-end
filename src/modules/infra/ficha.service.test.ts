@@ -174,10 +174,17 @@ describe('a ficha da caixa de casal', () => {
 
 describe('a ficha da caixa de estoque', () => {
   /** um vivo da caixa: o pedido, quando chegou nela e quando nasceu */
-  const vivo = (dtNascimento: string, dtMovimento: string | null, idPedido: number | null = null) => ({
+  /** Um vivo da caixa; a ninhada do cadastro inicial diz o parto e a entrada no estoque (o desmame dela) */
+  const vivo = (
+    dtNascimento: string,
+    dtMovimento: string | null,
+    idPedido: number | null = null,
+    cadastro: { idParto: number; dtEntrada: string } | null = null,
+  ) => ({
+    idParto: cadastro?.idParto ?? 0,
     idPedido,
     dtMovimento: dtMovimento === null ? null : d(dtMovimento),
-    parto: { dtPartoReal: d(dtNascimento) },
+    parto: { dtPartoReal: d(dtNascimento), dtDesmameReal: cadastro === null ? null : d(cadastro.dtEntrada) },
   })
 
   beforeEach(() => {
@@ -227,7 +234,7 @@ describe('a ficha da caixa de estoque', () => {
         livres: 4,
         pedidos: [],
         dtChegada: '2026-09-28',
-        origens: [{ idParto: 20, ordem: 1, casal: 'AB', codigoOrigem: 'F1A', numeroVisivelOrigem: 'E1', qtd: 4 }],
+        origens: [{ idParto: 20, ordem: 1, casal: 'AB', codigoOrigem: 'F1A', numeroVisivelOrigem: 'E1', qtd: 4, dtEntrada: null }],
       },
       {
         dtNascimento: '2026-10-01',
@@ -238,8 +245,8 @@ describe('a ficha da caixa de estoque', () => {
         pedidos: [{ idPedido: 9, qtd: 3 }],
         dtChegada: '2026-10-27',
         origens: [
-          { idParto: 30, ordem: 2, casal: 'EF', codigoOrigem: 'T2C', numeroVisivelOrigem: 'E2', qtd: 3 },
-          { idParto: 31, ordem: 1, casal: 'GH', codigoOrigem: 'F1A', numeroVisivelOrigem: 'E1', qtd: 1 },
+          { idParto: 30, ordem: 2, casal: 'EF', codigoOrigem: 'T2C', numeroVisivelOrigem: 'E2', qtd: 3, dtEntrada: null },
+          { idParto: 31, ordem: 1, casal: 'GH', codigoOrigem: 'F1A', numeroVisivelOrigem: 'E1', qtd: 1, dtEntrada: null },
         ],
       },
     ])
@@ -270,8 +277,13 @@ describe('a ficha da caixa de estoque', () => {
     expect(ficha.grupos.map((grupo) => grupo.dtChegada)).toEqual([null, null])
   })
 
-  it('o grupo do cadastro inicial tem a origem com ordem, casal e caixa de origem nulos', async () => {
-    banco.umAUm = [vivo('2026-10-04', '2026-11-08'), vivo('2026-10-04', '2026-11-08'), vivo('2026-09-19', '2026-11-09', 9)]
+  it('o grupo do cadastro inicial tem a origem com ordem, casal e caixa de origem nulos, e a entrada no estoque', async () => {
+    const de41 = { idParto: 41, dtEntrada: '2026-11-08' }
+    banco.umAUm = [
+      vivo('2026-10-04', '2026-11-08', null, de41),
+      vivo('2026-10-04', '2026-11-08', null, de41),
+      vivo('2026-09-19', '2026-11-09', 9, { idParto: 40, dtEntrada: '2026-11-09' }),
+    ]
     banco.vivos = naCaixa(
       [
         doParto(40, '2026-09-19', [1, 0], [1, 0], { ordem: null, casal: null, caixaDoCasal: null }),
@@ -289,14 +301,14 @@ describe('a ficha da caixa de estoque', () => {
         dtNascimento: '2026-09-19',
         pedidos: [{ idPedido: 9, qtd: 1 }],
         dtChegada: '2026-11-09',
-        origens: [{ idParto: 40, ordem: null, casal: null, codigoOrigem: null, numeroVisivelOrigem: null, qtd: 1 }],
+        origens: [{ idParto: 40, ordem: null, casal: null, codigoOrigem: null, numeroVisivelOrigem: null, qtd: 1, dtEntrada: '2026-11-09' }],
       }),
       expect.objectContaining({
         dtNascimento: '2026-10-04',
         total: 2,
         livres: 2,
         dtChegada: '2026-11-08',
-        origens: [{ idParto: 41, ordem: null, casal: null, codigoOrigem: null, numeroVisivelOrigem: null, qtd: 2 }],
+        origens: [{ idParto: 41, ordem: null, casal: null, codigoOrigem: null, numeroVisivelOrigem: null, qtd: 2, dtEntrada: '2026-11-08' }],
       }),
     ])
   })

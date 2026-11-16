@@ -7,6 +7,7 @@ import {
 } from '../../shared/middlewares/autorizacao.ts'
 import { dataDoFato, idNaRota, idNoCorpo } from '../../shared/validacao.ts'
 import { mudarDePosicao } from './caixa.service.ts'
+import { editarCaixaDeEstoque } from './edicaoDoEstoque.service.ts'
 import { criarCaixaDeEstoque, registrarEntrada } from './entrada.service.ts'
 import { montarFicha } from './ficha.service.ts'
 import { registrarMudanca, virarCaixaDeEstoque } from './mudanca.service.ts'
@@ -64,6 +65,38 @@ caixaRoutes.post('/:id/entrada', exigirPerfil(...OPERA_A_COLONIA), async (req, r
   const dados = entradaNaCaixa.parse(req.body)
 
   res.status(201).json(await registrarEntrada(id, dados, usuarioDaRequisicao(req).id))
+})
+
+/**
+ * Corpo de PATCH /api/caixas/:id: o que mudou na caixa de estoque, sem motivo (e o engano de
+ * digitacao do cadastro inicial). O que fica contraditorio e conferido no servico
+ */
+export const edicaoDoEstoque = z
+  .object({
+    idLinhagem: idNoCorpo.optional(),
+    sexo: z.enum(['M', 'F'], { error: 'Escolha machos ou fêmeas.' }).optional(),
+    nascimentos: z
+      .array(z.object({ idParto: idNoCorpo, dtNascimento: dataDoFato }))
+      .min(1)
+      .max(50)
+      .refine((lista) => new Set(lista.map((item) => item.idParto)).size === lista.length, {
+        error: 'Cada ninhada aparece uma vez só.',
+      })
+      .optional(),
+  })
+  .refine((dados) => Object.values(dados).some((valor) => valor !== undefined), {
+    error: 'Mude ao menos um dado da caixa.',
+  })
+
+/**
+ * PATCH /api/caixas/:id - corrige a caixa de estoque: a linhagem, o sexo e o nascimento do que veio
+ * do cadastro inicial. Devolve a ficha
+ */
+caixaRoutes.patch('/:id', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+  const { id } = idNaRota.parse(req.params)
+  const dados = edicaoDoEstoque.parse(req.body)
+
+  res.json(await editarCaixaDeEstoque(id, dados, usuarioDaRequisicao(req).id))
 })
 
 caixaRoutes.patch('/:id/posicao', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {

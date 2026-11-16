@@ -5,7 +5,7 @@ import { criarApp } from '../../app.ts'
 import { hojeISO } from '../../shared/traducao.ts'
 import type { Perfil } from '../../shared/traducao.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
-import { caixaDeEstoqueNova, entradaNaCaixa, mudanca } from './caixa.routes.ts'
+import { caixaDeEstoqueNova, edicaoDoEstoque, entradaNaCaixa, mudanca } from './caixa.routes.ts'
 
 // Autorizacao e validacao de forma. Nenhum teste aqui chega ao banco
 
@@ -170,5 +170,38 @@ describe('o cadastro inicial do estoque', () => {
     const resposta = await request(app('tecnico')).post('/api/caixas/1/entrada').send({ quantidade: 0, dtNascimento: nascimento })
     expect(resposta.status).toBe(400)
     expect(resposta.body.erro.campos).toHaveProperty('quantidade')
+  })
+})
+
+describe('edicao da caixa de estoque', () => {
+  it('pesquisador nao edita a caixa, e sem sessao e 401', async () => {
+    expect((await request(app()).patch('/api/caixas/1').send({ sexo: 'M' })).status).toBe(401)
+
+    const resposta = await request(app('pesquisador')).patch('/api/caixas/1').send({ sexo: 'M' })
+    expect(resposta.status).toBe(403)
+    expect(resposta.body.erro.codigo).toBe('SEM_PERMISSAO')
+  })
+
+  it('corpo vazio volta 400: ao menos um dado muda', async () => {
+    const resposta = await request(app('gestor')).patch('/api/caixas/1').send({})
+
+    expect(resposta.status).toBe(400)
+    expect(resposta.body.erro.codigo).toBe('VALIDACAO')
+  })
+
+  it('cada campo e opcional e sem motivo; sexo M ou F, nascimento nunca no futuro e uma vez por ninhada', () => {
+    expect(edicaoDoEstoque.safeParse({ sexo: 'F' }).success).toBe(true)
+    expect(edicaoDoEstoque.safeParse({ idLinhagem: 2, nascimentos: [{ idParto: 3, dtNascimento: '2026-09-01' }] }).success).toBe(true)
+    expect(edicaoDoEstoque.safeParse({ sexo: 'X' }).success).toBe(false)
+    expect(edicaoDoEstoque.safeParse({ nascimentos: [] }).success).toBe(false)
+    expect(edicaoDoEstoque.safeParse({ nascimentos: [{ idParto: 3, dtNascimento: somarDias(hojeISO(), 1) }] }).success).toBe(false)
+    expect(
+      edicaoDoEstoque.safeParse({
+        nascimentos: [
+          { idParto: 3, dtNascimento: '2026-09-01' },
+          { idParto: 3, dtNascimento: '2026-09-02' },
+        ],
+      }).success,
+    ).toBe(false)
   })
 })

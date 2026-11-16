@@ -39,11 +39,20 @@ function vivosUmAUm(idCaixa: number) {
   return prisma.animal.findMany({
     where: { idCaixa, situacao: 'vivo' },
     orderBy: { id: 'asc' },
-    select: { idPedido: true, dtMovimento: true, parto: { select: { dtPartoReal: true } } },
+    select: { idParto: true, idPedido: true, dtMovimento: true, parto: { select: { dtPartoReal: true, dtDesmameReal: true } } },
   })
 }
 
 type VivoUmAUm = Awaited<ReturnType<typeof vivosUmAUm>>[number]
+
+/**
+ * A entrada no estoque da ninhada do cadastro inicial (o desmame dela): o nascimento corrigido na
+ * edicao da caixa nao passa dela. Null na ninhada de casal
+ */
+function entradaDoCadastro(vivos: VivoUmAUm[], idParto: number, semCasal: boolean): string | null {
+  const desmame = vivos.find((animal) => animal.idParto === idParto)?.parto.dtDesmameReal ?? null
+  return semCasal && desmame !== null ? dataISO(desmame) : null
+}
 
 /**
  * Os vivos de uma idade na caixa: os reservados por pedido e a chegada mais recente deles na caixa,
@@ -150,7 +159,8 @@ export async function montarFicha(idCaixa: number) {
       nascimentoAte: grupos.at(-1)?.dtNascimento ?? null,
       /**
        * os vivos por data de nascimento, com os partos de onde vieram. A origem do cadastro inicial
-       * (ninhada sem casal conhecido) tem ordem, casal e a caixa de origem nulos
+       * (ninhada sem casal conhecido) tem ordem, casal e a caixa de origem nulos, e a data da entrada
+       * no estoque (dtEntrada), que a de casal nao tem
        */
       grupos: grupos.map(({ partos, ...grupo }) => ({
         ...grupo,
@@ -162,6 +172,7 @@ export async function montarFicha(idCaixa: number) {
           codigoOrigem: parto.caixaDoCasal?.codigo ?? null,
           numeroVisivelOrigem: parto.caixaDoCasal?.numeroVisivel ?? null,
           qtd: parto.vivos.m + parto.vivos.f,
+          dtEntrada: entradaDoCadastro(umAUm, parto.idParto, parto.caixaDoCasal === null),
         })),
       })),
       /** o que cada pedido tem reservado nesta caixa */
