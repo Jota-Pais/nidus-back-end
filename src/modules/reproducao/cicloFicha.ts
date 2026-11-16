@@ -6,10 +6,10 @@ import { prisma } from '../../shared/prisma.ts'
 import { dataISO } from '../../shared/traducao.ts'
 import { animaisDoParto } from '../colonia/consultas.ts'
 import type { AnimalDoParto } from '../colonia/consultas.ts'
-import { contarPorSexo, sexoDe, somarUm } from '../colonia/tipos.ts'
+import { MOTIVO_SELECAO, contarPorSexo, sexoDe, somarUm } from '../colonia/tipos.ts'
 import type { PorSexo } from '../colonia/tipos.ts'
 import { calcularCicloInicial, calcularDesmamePrevisto } from './cadeiaTemporal.ts'
-import { limitesDoDesmame, primeiraSaida, primeiroFatoDoNascimento } from './trilhaDoParto.ts'
+import { baixaDoParto, limitesDoDesmame, primeiraSaida, primeiroFatoDoNascimento } from './trilhaDoParto.ts'
 
 /** Uma caixa onde estao vivos do parto */
 export type OndeEstao = {
@@ -150,6 +150,7 @@ export async function cicloFicha(idParto: number) {
   // que nao nasceu nao tem animal, nem trilha que limite
   const desmame = nasceu ? await limitesDoDesmame(prisma, parto) : null
   const primeiroFato = nasceu ? await primeiroFatoDoNascimento(prisma, idParto) : null
+  const ultimaSelecao = nasceu ? await baixaDoParto(prisma, idParto, MOTIVO_SELECAO, 'desc') : null
 
   return {
     id: parto.id,
@@ -173,8 +174,11 @@ export async function cicloFicha(idParto: number) {
     /** Os vivos reservados, por pedido */
     reservados: contagem.reservados,
     entregues: contagem.entregues,
-    /** a ultima eutanasia de selecao nao anulada: o desmame nao fica antes dela */
-    dtUltimaSelecao: iso(desmame?.ultimaSelecao ?? null),
+    /**
+     * a ultima eutanasia de selecao nao anulada. Nao limita o desmame: as selecoes depois da data
+     * dele passam para ela (levarSelecoesParaODesmame), e a tela avisa
+     */
+    dtUltimaSelecao: iso(ultimaSelecao?.dtFato ?? null),
     /** o primeiro dia em que um animal do parto deixou a caixa do casal: o desmame nao passa dele */
     dtPrimeiraSaida: iso(desmame === null ? null : primeiraSaida(desmame)),
     /** a primeira baixa, mudanca ou entrega nao anulada dos animais: o nascimento nao passa dela */

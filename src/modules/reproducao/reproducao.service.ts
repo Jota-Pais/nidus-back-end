@@ -34,7 +34,12 @@ import { travarCaixas, travarCasal, travarParto } from '../colonia/travas.ts'
 import { calcularProximoCiclo } from './cadeiaTemporal.ts'
 import { cicloFicha, ninhadaSemCasal } from './cicloFicha.ts'
 import { exigirOrdem } from './ordemDasDatas.ts'
-import { contarNoDesmame, exigirDataDoDesmame } from './trilhaDoParto.ts'
+import {
+  contarNoDesmame,
+  exigirDataDoDesmame,
+  levarSelecoesParaODesmame,
+  selecoesQuePassaram,
+} from './trilhaDoParto.ts'
 
 type Transacao = Prisma.TransactionClient
 
@@ -579,7 +584,8 @@ export type Desmame = {
  * na caixa do casal no dia do desmame (contarNoDesmame): abaixo deles, a diferenca vira baixa
  * ('nao chegou ao desmame') na data do desmame; acima, e erro de contagem do nascimento, que se
  * corrige la. Quem morreu depois da data, ja lancado na baixa da caixa, chegou ao desmame e conta
- * nele. Ninguem muda de caixa aqui
+ * nele. A eutanasia de selecao que ficou depois da data passa para ela antes da contagem
+ * (levarSelecoesParaODesmame). Ninguem muda de caixa aqui
  */
 export async function registrarDesmame(idParto: number, dados: Desmame, idUsuario: number) {
   const faltas = await prisma.$transaction(async (tx) => {
@@ -598,9 +604,25 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
 
     await travarCaixas(tx, [parto.casal.idCaixa])
 
-    const animais = await animaisDoParto(tx, idParto)
     await exigirDataDoDesmame(tx, parto, dados.dtDesmameReal)
 
+    // a selecao e antes do desmame: a que ficou depois da data vai para ela antes da contagem, que
+    // le a saida dos animais (sem isso, os da selecao contariam como mortos depois do desmame)
+    const selecoes = await levarSelecoesParaODesmame(tx, idParto, dados.dtDesmameReal)
+    const passaram = selecoesQuePassaram(selecoes, dados.dtDesmameReal)
+
+    if (passaram !== null) {
+      await lancarOcorrencia(tx, {
+        tipo: 'correcao',
+        dtFato: dados.dtDesmameReal,
+        idUsuario,
+        idParto,
+        motivo: `${passaram}, a data do desmame`,
+        novaSaida: { ids: selecoes.ids, dtSaida: dados.dtDesmameReal },
+      })
+    }
+
+    const animais = await animaisDoParto(tx, idParto)
     const { vivos, morreramDepois } = contarNoDesmame(animais, parto.casal.idCaixa, dados.dtDesmameReal)
     const acima = { m: dados.desmamadoM > vivos.m, f: dados.desmamadoF > vivos.f }
 
@@ -645,8 +667,13 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
       entidade: 'parto',
       idEntidade: idParto,
       acao: 'desmame',
-      descricao: `Desmame do ${parto.ordem}º parto em ${dataLegivel(dados.dtDesmameReal)}: ${quantosAnimais({ m: dados.desmamadoM, f: dados.desmamadoF })}`,
-      dados: { dtDesmameReal: dados.dtDesmameReal, desmamadoM: dados.desmamadoM, desmamadoF: dados.desmamadoF },
+      descricao: `Desmame do ${parto.ordem}º parto em ${dataLegivel(dados.dtDesmameReal)}: ${quantosAnimais({ m: dados.desmamadoM, f: dados.desmamadoF })}${passaram === null ? '' : ` (${passaram})`}`,
+      dados: {
+        dtDesmameReal: dados.dtDesmameReal,
+        desmamadoM: dados.desmamadoM,
+        desmamadoF: dados.desmamadoF,
+        ...(passaram === null ? {} : { selecoes: { antes: selecoes.datas, depois: dados.dtDesmameReal } }),
+      },
     })
 
     if (!parto.casal.ativo) {

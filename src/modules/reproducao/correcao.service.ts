@@ -34,7 +34,14 @@ import { cicloFicha } from './cicloFicha.ts'
 import { exigirOrdem } from './ordemDasDatas.ts'
 import { contagemInvalida, travarELerParto } from './reproducao.service.ts'
 import type { Nascimento, PartoTravado } from './reproducao.service.ts'
-import { baixaDoParto, exigirDataDoDesmame, primeiroFatoDoNascimento, rotuloDoFato } from './trilhaDoParto.ts'
+import {
+  baixaDoParto,
+  exigirDataDoDesmame,
+  levarSelecoesParaODesmame,
+  primeiroFatoDoNascimento,
+  rotuloDoFato,
+  selecoesQuePassaram,
+} from './trilhaDoParto.ts'
 
 type Transacao = Prisma.TransactionClient
 
@@ -516,7 +523,8 @@ export function acasalamentoQueAcompanha(
 
 /**
  * PATCH /api/partos/:id/desmame - corrige so a data do desmame, nos mesmos limites do registro
- * (exigirDataDoDesmame). A baixa 'nao chegou ao desmame' acompanha a data. A contagem se corrige
+ * (exigirDataDoDesmame). A baixa 'nao chegou ao desmame' acompanha a data, e a eutanasia de selecao
+ * que ficaria depois dela passa para ela (levarSelecoesParaODesmame). A contagem se corrige
  * anulando essa baixa ou lancando outra
  */
 export async function corrigirDesmame(
@@ -548,14 +556,20 @@ export async function corrigirDesmame(
         where: { id: naoChegaram.id },
         data: { dtFato: paraData(dados.dtDesmameReal) },
       })
+    }
 
+    // a selecao e antes do desmame: a que ficou depois da data nova vai com ele
+    const selecoes = await levarSelecoesParaODesmame(tx, idParto, dados.dtDesmameReal)
+    const comSaidaNova = [...(naoChegaram?.animais.map((ligacao) => ligacao.idAnimal) ?? []), ...selecoes.ids]
+
+    if (comSaidaNova.length > 0) {
       await lancarOcorrencia(tx, {
         tipo: 'correcao',
         dtFato: dados.dtDesmameReal,
         idUsuario,
         idParto,
         motivo: dados.motivo,
-        novaSaida: { ids: naoChegaram.animais.map((ligacao) => ligacao.idAnimal), dtSaida: dados.dtDesmameReal },
+        novaSaida: { ids: comSaidaNova, dtSaida: dados.dtDesmameReal },
       })
     }
 
@@ -566,13 +580,16 @@ export async function corrigirDesmame(
       acao: 'correcao_desmame',
       descricao: descricaoDaCorrecao(
         `Correção do desmame do ${parto.ordem}º parto`,
-        [dePara(dataLegivel(antes), dataLegivel(dados.dtDesmameReal))],
+        [dePara(dataLegivel(antes), dataLegivel(dados.dtDesmameReal)), selecoesQuePassaram(selecoes, dados.dtDesmameReal)],
         dados.motivo,
       ),
       dados: {
         motivo: dados.motivo,
-        antes: { dtDesmameReal: antes },
-        depois: { dtDesmameReal: dados.dtDesmameReal },
+        antes: { dtDesmameReal: antes, ...(selecoes.datas.length === 0 ? {} : { dtSelecoes: selecoes.datas }) },
+        depois: {
+          dtDesmameReal: dados.dtDesmameReal,
+          ...(selecoes.datas.length === 0 ? {} : { dtSelecoes: [dados.dtDesmameReal] }),
+        },
       },
     })
   })

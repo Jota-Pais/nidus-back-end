@@ -1,9 +1,9 @@
 // O que os animais do parto e a trilha deles dizem sobre as datas do parto: uma data do parto
 // nunca deixa um fato dos animais fora de ordem. Aqui ficam os limites do desmame, os mesmos no
-// registro e na correcao, e a contagem dos vivos no dia do desmame
+// registro e na correcao, as selecoes que acompanham o desmame e a contagem dos vivos no dia dele
 
 import type { Prisma } from '@prisma/client'
-import { dataISO } from '../../shared/traducao.ts'
+import { dataISO, dataLegivel, paraData } from '../../shared/traducao.ts'
 import type { AnimalDoParto } from '../colonia/consultas.ts'
 import { MOTIVO_SELECAO, contarPorSexo } from '../colonia/tipos.ts'
 import type { PorSexo } from '../colonia/tipos.ts'
@@ -66,10 +66,11 @@ export async function primeiraChegadaFora(tx: Transacao, idParto: number, idCaix
 /** O parto como os limites do desmame precisam dele */
 type PartoDoDesmame = { id: number; dtPartoReal: Date | null; casal: { idCaixa: number } }
 
-/** O que limita a data do desmame, lido na trilha do parto */
+/**
+ * O que limita a data do desmame, lido na trilha do parto. A eutanasia de selecao nao limita: a que
+ * ficou depois da data vai para ela (levarSelecoesParaODesmame)
+ */
 export type LimitesDoDesmame = {
-  /** a ultima eutanasia de selecao que nao foi anulada: o desmame nao fica antes dela */
-  ultimaSelecao: Date | null
   /** a primeira mudanca ou entrega dos animais do parto: o desmame nao passa dela */
   saida: { tipo: string; dtFato: Date } | null
   /** a primeira chegada de animais do parto numa caixa que nao e a do casal (primeiraChegadaFora) */
@@ -79,11 +80,10 @@ export type LimitesDoDesmame = {
 /** Os limites do desmame do parto, os mesmos no registro, na correcao e na ficha */
 export async function limitesDoDesmame(tx: Transacao, parto: PartoDoDesmame): Promise<LimitesDoDesmame> {
   // uma consulta de cada vez: a transacao e uma conexao so
-  const ultimaSelecao = await baixaDoParto(tx, parto.id, MOTIVO_SELECAO, 'desc')
   const saida = await primeiroFato(tx, parto.id, ['mudanca', 'entrega'])
   const chegadaFora = await primeiraChegadaFora(tx, parto.id, parto.casal.idCaixa)
 
-  return { ultimaSelecao: ultimaSelecao?.dtFato ?? null, saida, chegadaFora }
+  return { saida, chegadaFora }
 }
 
 /**
@@ -97,24 +97,73 @@ export function primeiraSaida(limites: LimitesDoDesmame): Date | null {
 }
 
 /**
- * A data do desmame fica depois do parto e da ultima eutanasia de selecao (a selecao e antes do
- * desmame), e nunca depois de um animal do parto sair da caixa do casal: pela mudanca, pela
- * entrega ou chegando ao estoque como animal a mais. Morte na caixa nao limita: quem morreu depois
- * da data chegou ao desmame, e quem morreu antes, nao (contarNoDesmame)
+ * A data do desmame fica depois do parto, e nunca depois de um animal do parto sair da caixa do
+ * casal: pela mudanca, pela entrega ou chegando ao estoque como animal a mais. Morte na caixa nao
+ * limita: quem morreu depois da data chegou ao desmame, e quem morreu antes, nao (contarNoDesmame).
+ * A eutanasia de selecao tambem nao: a selecao e antes do desmame, e a que ficou depois da data vai
+ * para ela (levarSelecoesParaODesmame)
  */
 export async function exigirDataDoDesmame(tx: Transacao, parto: PartoDoDesmame, dtDesmame: string): Promise<void> {
-  const { ultimaSelecao, saida, chegadaFora } = await limitesDoDesmame(tx, parto)
+  const { saida, chegadaFora } = await limitesDoDesmame(tx, parto)
 
   exigirOrdem('dtDesmameReal', dtDesmame, {
-    depoisDe: [
-      { evento: 'do parto', data: parto.dtPartoReal },
-      { evento: 'da última eutanásia de seleção', data: ultimaSelecao },
-    ],
+    depoisDe: [{ evento: 'do parto', data: parto.dtPartoReal }],
     antesDe: [
       { evento: rotuloDoFato(saida), data: saida?.dtFato },
       { evento: 'da chegada de animais deste parto numa caixa de estoque', data: chegadaFora },
     ],
   })
+}
+
+/** As selecoes que passaram para a data do desmame: os animais delas e as datas de antes */
+export type SelecoesLevadas = {
+  /** os animais das selecoes levadas, que ganham a saida nova */
+  ids: number[]
+  /** as datas de antes, 'aaaa-mm-dd', sem repetir e em ordem */
+  datas: string[]
+}
+
+/**
+ * A eutanasia de selecao e antes do desmame. A que ficou depois da data do desmame (a ninhada
+ * antiga lancada com a data de hoje, o desmame corrigido para antes dela) passa para a data do
+ * desmame: a ocorrencia aqui, e a saida dos animais dela pela ocorrencia de correcao que quem chama
+ * lanca com os 'ids' (a unica porta de escrita no animal). A selecao anulada fica como esta
+ */
+export async function levarSelecoesParaODesmame(
+  tx: Transacao,
+  idParto: number,
+  dtDesmame: string,
+): Promise<SelecoesLevadas> {
+  const selecoes = await tx.ocorrencia.findMany({
+    where: {
+      tipo: 'baixa',
+      idParto,
+      motivo: MOTIVO_SELECAO,
+      anulacoes: { none: {} },
+      dtFato: { gt: paraData(dtDesmame) },
+    },
+    orderBy: { dtFato: 'asc' },
+    select: { id: true, dtFato: true, animais: { select: { idAnimal: true } } },
+  })
+
+  for (const selecao of selecoes) {
+    await tx.ocorrencia.update({ where: { id: selecao.id }, data: { dtFato: paraData(dtDesmame) } })
+  }
+
+  return {
+    ids: selecoes.flatMap((selecao) => selecao.animais.map((ligacao) => ligacao.idAnimal)),
+    datas: [...new Set(selecoes.map((selecao) => dataISO(selecao.dtFato)))],
+  }
+}
+
+/** 'as eutanásias de seleção de 16/11/2026 passaram para 20/03/2026', ou null sem selecao levada */
+export function selecoesQuePassaram(levadas: SelecoesLevadas, dtDesmame: string): string | null {
+  if (levadas.datas.length === 0) return null
+
+  const datas = levadas.datas.map(dataLegivel)
+  const de = datas.length === 1 ? datas[0] : `${datas.slice(0, -1).join(', ')} e ${datas.at(-1)}`
+
+  return `as eutanásias de seleção de ${de} passaram para ${dataLegivel(dtDesmame)}`
 }
 
 /** Os tipos de fato dos animais que a data do nascimento nunca passa */
