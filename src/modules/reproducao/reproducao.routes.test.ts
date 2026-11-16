@@ -11,6 +11,7 @@ import {
   correcaoDoDesmame,
   correcaoDoNascimento,
   desmame,
+  edicaoDoCasal,
   selecao,
 } from './reproducao.routes.ts'
 
@@ -274,5 +275,31 @@ describe('validacao de entrada - modelo por rato', () => {
     expect(
       (await request(app('tecnico')).patch('/api/partos/1/selecao').send({ dtSelecao: '2026-05-25' })).status,
     ).toBe(404)
+  })
+})
+
+describe('validacao de entrada - edicao do casal', () => {
+  it('pesquisador nao edita casal, e sem sessao e 401', async () => {
+    expect((await request(app()).patch('/api/casais/1').send({ grupoMacho: 'A' })).status).toBe(401)
+
+    const resposta = await request(app('pesquisador')).patch('/api/casais/1').send({ grupoMacho: 'A' })
+    expect(resposta.status).toBe(403)
+    expect(resposta.body.erro.codigo).toBe('SEM_PERMISSAO')
+  })
+
+  it('corpo vazio volta 400: ao menos um dado muda', async () => {
+    const resposta = await request(app('tecnico')).patch('/api/casais/1').send({})
+
+    expect(resposta.status).toBe(400)
+    expect(resposta.body.erro.codigo).toBe('VALIDACAO')
+  })
+
+  it('cada campo e opcional e sem motivo; grupo A-E, parto de 1 a 5 e data nunca no futuro', () => {
+    expect(edicaoDoCasal.safeParse({ grupoFemea: 'A' }).success).toBe(true)
+    expect(edicaoDoCasal.safeParse({ idLinhagem: 2, dtFormacao: '2026-05-02', partoInicial: 3 }).success).toBe(true)
+    expect(edicaoDoCasal.safeParse({ grupoMacho: 'F' }).success).toBe(false)
+    expect(edicaoDoCasal.safeParse({ partoInicial: 6 }).success).toBe(false)
+    expect(edicaoDoCasal.safeParse({ partoInicial: 0 }).success).toBe(false)
+    expect(edicaoDoCasal.safeParse({ dtFormacao: somarDias(hojeISO(), 1) }).success).toBe(false)
   })
 })

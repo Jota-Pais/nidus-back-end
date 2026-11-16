@@ -40,7 +40,14 @@ O que mora aqui:
   sistema abriu, se ele ainda não deu parto nem foi editado, e o encerramento antes
   dele o desfaz. O casal que já existia antes do Nidus entra no parto em que está
   (`partoAtual` de 1 a 5 no `POST /api/casais`; sem ele, o 1º): os partos de antes
-  não existem no sistema, e a ficha diz em `casal.partoInicial` em qual ele entrou
+  não existem no sistema, e a ficha diz em `casal.partoInicial` em qual ele entrou.
+  O engano de digitação do casal se edita depois (`PATCH /api/casais/:id`, técnico e
+  gestor, casal ativo ou encerrado, sem motivo): grupos, linhagem, formação e
+  `partoInicial`. A linhagem leva os partos e as caixas de estoque só com animais do
+  casal; a formação, o acasalamento do 1º parto que era o dela; o parto de entrada
+  renumera todos. Recusa só o que ficaria contraditório (caixa de estoque com outra
+  ninhada, animal reservado para pedido de outra linhagem, mais de 5 partos, datas
+  fora de ordem)
 - **Animais** - cada filhote que nasce vira uma linha anônima em `colonia.animal`,
   com o parto de origem, o sexo, a caixa onde está e a situação (vivo, morto,
   entregue ou anulado). Toda contagem da ficha é contada nos animais. Morte e

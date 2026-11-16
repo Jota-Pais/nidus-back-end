@@ -158,6 +158,9 @@ export async function travarELerParto(tx: Transacao, idParto: number) {
 
 export type PartoTravado = Awaited<ReturnType<typeof travarELerParto>>
 
+/** O motivo do encerramento que o proprio sistema grava no nascimento do ultimo parto */
+export const MOTIVO_DO_LIMITE_DE_PARTOS = `Limite de ${MAX_PARTOS_POR_CASAL} partos atingido`
+
 // ------------------------------------------------------------ formar casal
 
 export type NovoCasal = {
@@ -428,7 +431,7 @@ export async function registrarNascimento(idParto: number, dados: Nascimento, id
         data: {
           ativo: false,
           dtEncerramento: paraData(dados.dtPartoReal),
-          motivoEncerramento: `Limite de ${MAX_PARTOS_POR_CASAL} partos atingido`,
+          motivoEncerramento: MOTIVO_DO_LIMITE_DE_PARTOS,
           dtManutencao: agora(),
         },
       })

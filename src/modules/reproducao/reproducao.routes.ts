@@ -8,6 +8,7 @@ import {
 import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
 import { dataDoFato, idNaRota, idNoCorpo, motivoDaCorrecao } from '../../shared/validacao.ts'
 import { corrigirAcasalamento, corrigirDesmame, corrigirNascimento } from './correcao.service.ts'
+import { editarCasal } from './edicao.service.ts'
 import {
   encerrarCasal,
   fecharSemNinhada,
@@ -67,6 +68,35 @@ casalRoutes.post('/', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const dados = casalNovo.parse(req.body)
 
   res.status(201).json(await formarCasal(dados, usuarioDaRequisicao(req).id))
+})
+
+/**
+ * Corpo de PATCH /api/casais/:id: o que mudou no casal, ao menos um campo. Sem motivo: e o engano
+ * de digitacao do cadastro. 'partoInicial' e o parto em que o casal entrou no Nidus (o 'partoAtual'
+ * da formacao). O que fica contraditorio e conferido no servico
+ */
+export const edicaoDoCasal = z
+  .object({
+    idLinhagem: idNoCorpo.optional(),
+    grupoMacho: grupoGenetico.optional(),
+    grupoFemea: grupoGenetico.optional(),
+    dtFormacao: dataDoFato.optional(),
+    partoInicial: z
+      .number()
+      .int('Informe o número do parto, de 1 a 5.')
+      .min(1, 'Informe o número do parto, de 1 a 5.')
+      .max(MAX_PARTOS_POR_CASAL, `O casal tem no máximo ${MAX_PARTOS_POR_CASAL} partos.`)
+      .optional(),
+  })
+  .refine((dados) => Object.values(dados).some((valor) => valor !== undefined), {
+    error: 'Mude ao menos um dado do casal.',
+  })
+
+casalRoutes.patch('/:id', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+  const { id } = idNaRota.parse(req.params)
+  const dados = edicaoDoCasal.parse(req.body)
+
+  res.json(await editarCasal(id, dados, usuarioDaRequisicao(req).id))
 })
 
 const encerramento = z.object({
