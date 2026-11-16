@@ -56,10 +56,20 @@ describe('validacao da baixa', () => {
     expect(
       baixa.safeParse({
         dtFato: '2026-11-02',
+        tipo: 'morte',
         motivo: 'morte',
         itens: [{ sexo: 'F', qtd: 1, dtNascimento: '2026-09-01', idPedido: 3 }],
       }).success,
     ).toBe(true)
+  })
+
+  it('a causa e obrigatoria, morte ou eutanasia: o formulario nao tem padrao', () => {
+    const semCausa = baixa.safeParse({ dtFato: '2026-11-02', itens: [{ sexo: 'F', qtd: 1 }] })
+
+    expect(semCausa.success).toBe(false)
+    expect(semCausa.error?.issues[0]).toMatchObject({ path: ['tipo'], message: 'Escolha a causa: morte ou eutanásia.' })
+    expect(baixa.safeParse({ dtFato: '2026-11-02', tipo: 'doenca', itens: [{ sexo: 'F', qtd: 1 }] }).success).toBe(false)
+    expect(baixa.safeParse({ dtFato: '2026-11-02', tipo: 'eutanasia', itens: [{ sexo: 'F', qtd: 1 }] }).success).toBe(true)
   })
 
   it('recusa baixa sem animal, quantidade zero e sexo fora de M/F', () => {

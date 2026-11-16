@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AnimalDoParto } from '../colonia/consultas.ts'
-import { cicloFicha, contarDoParto } from './cicloFicha.ts'
+import { baixasDoAleitamento, cicloFicha, contarDoParto } from './cicloFicha.ts'
 
 // A ficha do parto conta os animais do parto, onde estiverem. O banco aqui devolve o parto e os
 // animais montados no teste
@@ -12,6 +12,8 @@ const banco = vi.hoisted(() => ({
   animais: [] as unknown[],
   /** o que a trilha devolve para cada limite: a selecao, a saida, a chegada fora e o primeiro fato */
   trilha: {} as Record<string, { tipo: string; dtFato: Date } | null>,
+  /** as baixas nao anuladas dos animais do parto, com a causa */
+  baixas: [] as { causa: string; animais: { idAnimal: number }[] }[],
 }))
 
 /** Qual limite a consulta da trilha procura, pelo filtro que ela manda */
@@ -25,7 +27,10 @@ vi.mock('../../shared/prisma.ts', () => ({
   prisma: {
     parto: { findUnique: async () => banco.parto },
     animal: { findMany: async () => banco.animais },
-    ocorrencia: { findFirst: async ({ where }: { where: Onde }) => banco.trilha[limiteDa(where)] ?? null },
+    ocorrencia: {
+      findFirst: async ({ where }: { where: Onde }) => banco.trilha[limiteDa(where)] ?? null,
+      findMany: async () => banco.baixas,
+    },
   },
 }))
 
@@ -66,6 +71,7 @@ const ninhada = (): AnimalDoParto[] => [
 beforeEach(() => {
   proximo = 1
   banco.trilha = {}
+  banco.baixas = []
 })
 
 describe('contagens do parto contadas nos animais', () => {
@@ -97,6 +103,32 @@ describe('contagens do parto contadas nos animais', () => {
   })
 })
 
+describe('as baixas do aleitamento separadas pela causa', () => {
+  /** a selecao (1 M e 1 F, eutanasia), a que nao chegou ao desmame (morte) e o morto depois do desmame */
+  const causas = () =>
+    new Map<number, string | null>([
+      [1, 'eutanasia'],
+      [2, 'eutanasia'],
+      [3, 'morte'],
+      [4, 'morte'],
+    ])
+
+  it('ate o dia do desmame: a eutanasia e o ajuste de ninhada, a morte e a morte no aleitamento', () => {
+    expect(baixasDoAleitamento(d('2026-10-23'), ninhada(), causas())).toEqual({
+      ajusteDeNinhada: { m: 1, f: 1 },
+      // a femea que nao chegou ao desmame, no proprio dia dele; o macho de 01/11 ja estava desmamado
+      mortesNoAleitamento: { m: 0, f: 1 },
+    })
+  })
+
+  it('sem desmame, toda baixa e do aleitamento', () => {
+    expect(baixasDoAleitamento(null, ninhada(), causas())).toEqual({
+      ajusteDeNinhada: { m: 1, f: 1 },
+      mortesNoAleitamento: { m: 1, f: 1 },
+    })
+  })
+})
+
 describe('cicloFicha', () => {
   it('as datas previstas saem da cadeia temporal, e a contagem dos animais', async () => {
     banco.parto = {
@@ -110,11 +142,19 @@ describe('cicloFicha', () => {
       casal: { idCaixa: 1 },
     }
     banco.animais = ninhada()
+    banco.baixas = [
+      { causa: 'eutanasia', animais: [{ idAnimal: 1 }, { idAnimal: 2 }] },
+      { causa: 'morte', animais: [{ idAnimal: 3 }] },
+      { causa: 'morte', animais: [{ idAnimal: 4 }] },
+    ]
 
     const ciclo = await cicloFicha(9)
 
     expect(ciclo).toMatchObject({
       id: 9,
+      baixasAntesDoDesmame: { m: 1, f: 2 },
+      ajusteDeNinhada: { m: 1, f: 1 },
+      mortesNoAleitamento: { m: 0, f: 1 },
       ordem: 2,
       dtAcasalamento: '2026-09-08',
       dtPartoPrevisto: '2026-10-01',

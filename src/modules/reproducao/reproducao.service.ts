@@ -19,6 +19,7 @@ import type { NinhadaNaCaixa } from '../colonia/consultas.ts'
 import { escolherAnimais, exigirDepoisDaChegada, pedidosTocados } from '../colonia/escolha.ts'
 import type { Escolhido } from '../colonia/escolha.ts'
 import { caixaLiberada, liberarSeVazia, partoPendente } from '../colonia/liberacao.ts'
+import type { CausaDaBaixa } from '../colonia/causa.ts'
 import { lancarOcorrencia } from '../colonia/ocorrencia.ts'
 import {
   MOTIVO_NAO_CHEGOU_AO_DESMAME,
@@ -474,7 +475,14 @@ async function baixarDoParto(
   tx: Transacao,
   parto: PartoTravado,
   qtd: PorSexo,
-  baixa: { campo: string; dtFato: string; motivo: string; idPedido: number | undefined; idUsuario: number },
+  baixa: {
+    campo: string
+    dtFato: string
+    causa: CausaDaBaixa
+    motivo: string
+    idPedido: number | undefined
+    idUsuario: number
+  },
 ): Promise<Escolhido[]> {
   const escolhidos: Escolhido[] = []
 
@@ -495,6 +503,7 @@ async function baixarDoParto(
 
   await lancarOcorrencia(tx, {
     tipo: 'baixa',
+    causa: baixa.causa,
     dtFato: baixa.dtFato,
     idUsuario: baixa.idUsuario,
     idCaixa: parto.casal.idCaixa,
@@ -558,6 +567,7 @@ export async function registrarSelecao(idParto: number, dados: Selecao, idUsuari
     const escolhidos = await baixarDoParto(tx, parto, { m: dados.eutanasiadoM, f: dados.eutanasiadoF }, {
       campo: 'dtSelecao',
       dtFato: dados.dtSelecao,
+      causa: 'eutanasia',
       motivo: MOTIVO_SELECAO,
       idPedido: dados.idPedido,
       idUsuario,
@@ -657,6 +667,8 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
     const escolhidos = await baixarDoParto(tx, parto, naoChegaram, {
       campo: 'dtDesmameReal',
       dtFato: dados.dtDesmameReal,
+      // quem nao chegou ao desmame morreu no aleitamento
+      causa: 'morte',
       motivo: MOTIVO_NAO_CHEGOU_AO_DESMAME,
       idPedido: dados.idPedido,
       idUsuario,

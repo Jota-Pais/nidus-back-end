@@ -195,7 +195,7 @@ describe.skipIf(!URL_TESTE)('o pedido no banco de verdade', { timeout: 60_000 },
     // a caixa do casal tem 3 machos, 2 deles de A: a baixa de 2 leva o livre e um de A
     const baixa = await registrarBaixa(
       m.caixaCasal,
-      { dtFato: hoje, motivo: 'morte', itens: [{ sexo: 'M', qtd: 2, idPedido: pedidoA }] },
+      { dtFato: hoje, tipo: 'morte', motivo: 'morte', itens: [{ sexo: 'M', qtd: 2, idPedido: pedidoA }] },
       m.tecnico.id,
     )
     expect(baixa.faltas).toEqual([{ idPedido: pedidoA, m: 1, f: 0, qualquer: 0 }])

@@ -9,6 +9,7 @@ import { contagemDosPedidos, faltasDosPedidos, ninhadasNaCaixa } from './consult
 import { exigirEstoqueQueRecebe, recusaDoEstoque } from './destino.ts'
 import { escolherAnimais, exigirDepoisDaChegada, idadeDoGrupo, pedidosTocados } from './escolha.ts'
 import type { Escolhido } from './escolha.ts'
+import type { CausaDaBaixa } from './causa.ts'
 import { caixaLiberada, liberarSeVazia } from './liberacao.ts'
 import { lancarOcorrencia } from './ocorrencia.ts'
 import { soltosNaAnulacao } from './reserva.ts'
@@ -36,12 +37,13 @@ export type ItemDaBaixa = {
   idPedido?: number | undefined
 }
 
-export type TipoDaBaixa = 'morte' | 'eutanasia'
+/** A causa da baixa, como o formulario a chama: quem registra escolhe, sem padrao */
+export type TipoDaBaixa = CausaDaBaixa
 
 export type Baixa = {
   dtFato: string
-  /** Sem tipo, vale o motivo escrito (se houver) */
-  tipo?: TipoDaBaixa | undefined
+  /** Morte ou eutanasia: vira a causa da ocorrencia. O motivo escrito (se houver) e so o texto */
+  tipo: TipoDaBaixa
   /** So na eutanasia: a baixa e a selecao deste parto, a mesma que a ficha da ninhada sempre gravou */
   idParto?: number | undefined
   motivo?: string | undefined
@@ -97,10 +99,9 @@ export async function registrarBaixa(idCaixa: number, dados: Baixa, idUsuario: n
       dtFato: dados.dtFato,
       idUsuario,
       idCaixa,
+      causa: dados.tipo,
       idParto: selecao ? dados.idParto : undefined,
-      motivo: selecao
-        ? MOTIVO_SELECAO
-        : (dados.motivo ?? (dados.tipo === undefined ? undefined : MOTIVO_DO_TIPO[dados.tipo])),
+      motivo: selecao ? MOTIVO_SELECAO : (dados.motivo ?? MOTIVO_DO_TIPO[dados.tipo]),
       ids,
     })
 

@@ -71,6 +71,8 @@ type Ocorrencia = {
   anulada: boolean
   /** a caixa onde os animais chegaram (mudanca, a mais da correcao, volta da anulacao) */
   idCaixaDestino?: number | null
+  /** so na baixa: morte ou eutanasia */
+  causa?: string | null
 }
 
 const banco = vi.hoisted(() => ({
@@ -361,6 +363,7 @@ vi.mock('../colonia/ocorrencia.ts', () => ({
       ids,
       anulada: false,
       idCaixaDestino: l.tipo === 'correcao' ? (l.novos?.idCaixa ?? null) : null,
+      causa: l.tipo === 'baixa' ? l.causa : null,
     }
     banco.ocorrencias.push(ocorrencia)
     return { idOcorrencia: ocorrencia.id, ids }
@@ -434,7 +437,7 @@ function morteNaCaixa(qtd: number, dtFato: string) {
   const mortos = doParto(1).filter((a) => a.sexo === 'M' && a.idCaixa === 1).slice(0, qtd)
   for (const a of mortos) Object.assign(a, { situacao: 'morto', dtSaida: d(dtFato) })
   const ids = mortos.map((a) => a.id)
-  banco.ocorrencias.push({ id: banco.proximoId++, tipo: 'baixa', dtFato: d(dtFato), idParto: null, motivo: 'morte', ids, anulada: false })
+  banco.ocorrencias.push({ id: banco.proximoId++, tipo: 'baixa', dtFato: d(dtFato), idParto: null, motivo: 'morte', causa: 'morte', ids, anulada: false })
   return ids
 }
 
@@ -1625,6 +1628,9 @@ describe('correcao da data do desmame', () => {
       expect(ciclo).toMatchObject({
         dtDesmameReal: '2026-03-20',
         baixasAntesDoDesmame: { m: 1, f: 4 },
+        // a selecao e o ajuste de ninhada; a femea que nao chegou ao desmame morreu no aleitamento
+        ajusteDeNinhada: { m: 1, f: 3 },
+        mortesNoAleitamento: { m: 0, f: 1 },
         desmamadoM: 2,
         desmamadoF: 2,
         dtUltimaSelecao: '2026-03-20',

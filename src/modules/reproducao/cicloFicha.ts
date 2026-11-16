@@ -4,6 +4,8 @@
 import { erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { dataISO } from '../../shared/traducao.ts'
+import { causaDe, contarBaixasDoAleitamento } from '../colonia/causa.ts'
+import type { BaixasDoAleitamento } from '../colonia/causa.ts'
 import { animaisDoParto } from '../colonia/consultas.ts'
 import type { AnimalDoParto } from '../colonia/consultas.ts'
 import { MOTIVO_SELECAO, contarPorSexo, sexoDe, somarUm } from '../colonia/tipos.ts'
@@ -105,6 +107,41 @@ export function contarDoParto(dtDesmameReal: Date | null, animais: AnimalDoParto
 const iso = (data: Date | null) => (data === null ? null : dataISO(data))
 
 /**
+ * As baixas do aleitamento do parto, separadas pela causa: o ajuste de ninhada (eutanasia) e a morte
+ * no aleitamento. A causa de cada morto e a da baixa que o matou, a que nao foi anulada
+ */
+export function baixasDoAleitamento(
+  dtDesmameReal: Date | null,
+  animais: AnimalDoParto[],
+  causaPorAnimal: Map<number, string | null>,
+): BaixasDoAleitamento {
+  return contarBaixasDoAleitamento(
+    animais.flatMap((animal) =>
+      animal.situacao === 'morto' && animal.dtSaida !== null
+        ? [
+            {
+              sexo: animal.sexo,
+              dtSaida: animal.dtSaida,
+              causa: causaDe(causaPorAnimal.get(animal.id) ?? null),
+              parto: { comCasal: true, dtDesmameReal },
+            },
+          ]
+        : [],
+    ),
+  )
+}
+
+/** A causa da baixa de cada morto do parto: a das baixas que nao foram anuladas */
+async function causasDasBaixas(idParto: number): Promise<Map<number, string | null>> {
+  const baixas = await prisma.ocorrencia.findMany({
+    where: { tipo: 'baixa', anulacoes: { none: {} }, animais: { some: { animal: { idParto } } } },
+    select: { causa: true, animais: { select: { idAnimal: true } } },
+  })
+
+  return new Map(baixas.flatMap((baixa) => baixa.animais.map((ligacao) => [ligacao.idAnimal, baixa.causa] as const)))
+}
+
+/**
  * A ninhada sem casal conhecido (a do cadastro inicial do estoque) nao tem ciclo: nem acasalamento,
  * nem parto a registrar, nem selecao, desmame ou correcao. Os animais dela se tratam pela caixa
  */
@@ -142,7 +179,8 @@ export async function cicloFicha(idParto: number) {
   if (casal === null || ordem === null || dtAcasalamento === null) throw ninhadaSemCasal()
   const parto = { ...lido, casal, ordem, dtAcasalamento }
 
-  const contagem = contarDoParto(parto.dtDesmameReal, await animaisDoParto(prisma, idParto))
+  const animais = await animaisDoParto(prisma, idParto)
+  const contagem = contarDoParto(parto.dtDesmameReal, animais)
   const dtPartoPrevisto = calcularCicloInicial(dataISO(parto.dtAcasalamento)).dtPartoPrevisto
   const dtPartoReal = iso(parto.dtPartoReal)
   const nasceu = dtPartoReal !== null
@@ -151,6 +189,7 @@ export async function cicloFicha(idParto: number) {
   const desmame = nasceu ? await limitesDoDesmame(prisma, parto) : null
   const primeiroFato = nasceu ? await primeiroFatoDoNascimento(prisma, idParto) : null
   const ultimaSelecao = nasceu ? await baixaDoParto(prisma, idParto, MOTIVO_SELECAO, 'desc') : null
+  const aleitamento = baixasDoAleitamento(parto.dtDesmameReal, animais, nasceu ? await causasDasBaixas(idParto) : new Map())
 
   return {
     id: parto.id,
@@ -166,6 +205,10 @@ export async function cicloFicha(idParto: number) {
     nascidoM: nasceu ? contagem.nascidos.m : null,
     nascidoF: nasceu ? contagem.nascidos.f : null,
     baixasAntesDoDesmame: contagem.baixasAntesDoDesmame,
+    /** das baixas antes do desmame, as eutanasias: o ajuste de ninhada (a selecao) */
+    ajusteDeNinhada: aleitamento.ajusteDeNinhada,
+    /** das baixas antes do desmame, as mortes ('nao chegou ao desmame' inclusive) */
+    mortesNoAleitamento: aleitamento.mortesNoAleitamento,
     desmamadoM: contagem.desmamados?.m ?? null,
     desmamadoF: contagem.desmamados?.f ?? null,
     vivos: contagem.vivos,

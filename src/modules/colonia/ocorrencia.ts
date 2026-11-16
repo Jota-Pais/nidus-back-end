@@ -10,6 +10,7 @@ import { agora } from '../../shared/relogio.ts'
 import type { Prisma } from '@prisma/client'
 import { erroDeRegra } from '../../shared/erros.ts'
 import { paraData } from '../../shared/traducao.ts'
+import type { CausaDaBaixa } from './causa.ts'
 import type { PorSexo, Sexo } from './tipos.ts'
 
 type Transacao = Pick<Prisma.TransactionClient, 'animal' | 'ocorrencia'>
@@ -44,6 +45,8 @@ type Entrada = Comum & {
 /** Morte ou eutanasia (a selecao inclusive): os animais ficam mortos na caixa onde estavam */
 type Baixa = Comum & {
   tipo: 'baixa'
+  /** morte ou eutanasia: o dado que a ficha e a visao geral contam; o motivo e o texto da trilha */
+  causa: CausaDaBaixa
   idCaixa: number
   /** A baixa da selecao e a do desmame sao de um parto so */
   idParto?: number | undefined
@@ -267,7 +270,7 @@ function camposDaOcorrencia(lancamento: Lancamento) {
     case 'entrada':
       return { idParto: lancamento.idParto, idCaixaDestino: lancamento.idCaixa }
     case 'baixa':
-      return { idParto: lancamento.idParto ?? null, idCaixaOrigem: lancamento.idCaixa }
+      return { idParto: lancamento.idParto ?? null, idCaixaOrigem: lancamento.idCaixa, causa: lancamento.causa }
     case 'mudanca':
       return { idCaixaOrigem: lancamento.idCaixaOrigem, idCaixaDestino: lancamento.idCaixaDestino }
     case 'reserva':

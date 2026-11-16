@@ -305,6 +305,10 @@ model Ocorrencia {
   /// travada (colonia/baixa.service.ts)
   idAnulada      Int?     @map("id_anulada")
   motivo         String?  @db.VarChar(200)
+  /// So na baixa, e toda baixa tem: morte | eutanasia (a selecao inclusive). O
+  /// motivo continua o texto da trilha; a causa e o dado que a ficha e a visao
+  /// geral contam (a eutanasia de ajuste de ninhada e a morte no aleitamento)
+  causa          String?  @db.VarChar(10)
 
   usuario      Usuario?           @relation(fields: [idUsuario], references: [id], onDelete: NoAction, onUpdate: NoAction)
   parto        Parto?             @relation(fields: [idParto], references: [id], onDelete: NoAction, onUpdate: NoAction)

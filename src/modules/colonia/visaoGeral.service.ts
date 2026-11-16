@@ -1,10 +1,13 @@
 // A visao geral da colonia, no lugar do Kanban: por especie e linhagem, os casais ativos e os
-// vivos, quantos mamam, quantos estao reservados, quantos estao livres e a idade dos livres. Tudo e
-// contagem de colonia.animal; nada fica gravado
+// vivos, quantos mamam, quantos estao reservados, quantos estao livres e a idade dos livres, e, desde
+// o inicio, as baixas do aleitamento (o ajuste de ninhada e a morte no aleitamento) sobre os
+// nascidos. Tudo e contagem de colonia.animal e da trilha; nada fica gravado
 
 import { prisma } from '../../shared/prisma.ts'
 import { codigoDaEspecie, dataISO, hojeISO } from '../../shared/traducao.ts'
 import { diasEntre } from '../reproducao/cadeiaTemporal.ts'
+import { causaDe, contarBaixasDoAleitamento } from './causa.ts'
+import type { MortoDaBaixa } from './causa.ts'
 import type { PorSexo } from './tipos.ts'
 
 /**
@@ -38,6 +41,27 @@ export type LinhagemNaVisaoGeral = {
   livresPorIdade: LivresNaFaixa[]
   /** os livres por idade em dias, uma entrada por idade, da menor para a maior, sem entrada zerada */
   livresPorIdadeDias: LivresNaIdade[]
+  /** desde o inicio, sem periodo: as baixas do aleitamento e os nascidos de onde elas sairam */
+  aleitamento: AleitamentoDaLinhagem
+}
+
+/**
+ * As baixas do aleitamento da linhagem desde o inicio, e a base da porcentagem: os nascidos de partos
+ * registrados no Nidus (de casal; o cadastro inicial chegou desmamado e fica fora), sem o registro
+ * anulado
+ */
+export type AleitamentoDaLinhagem = {
+  nascidos: number
+  /** as eutanasias no aleitamento (a selecao) */
+  ajusteDeNinhada: number
+  /** as mortes no aleitamento ('nao chegou ao desmame' inclusive) */
+  mortesNoAleitamento: number
+}
+
+/** O que a leitura traz para o aleitamento: os nascidos por linhagem e os mortos de parto de casal */
+export type AleitamentoLido = {
+  nascidos: Map<number, number>
+  mortos: (MortoDaBaixa & { idLinhagem: number })[]
 }
 
 export type VisaoGeral = {
@@ -85,6 +109,20 @@ function linhagemZerada(linhagem: { id: number; nome: string }): LinhagemNaVisao
     livres: zero(),
     livresPorIdade: FAIXAS_DE_IDADE_DOS_LIVRES.map((faixa) => ({ de: faixa.de, ate: faixa.ate, m: 0, f: 0 })),
     livresPorIdadeDias: [],
+    aleitamento: { nascidos: 0, ajusteDeNinhada: 0, mortesNoAleitamento: 0 },
+  }
+}
+
+/** As baixas do aleitamento da linhagem, sobre os nascidos dela */
+function aleitamentoDaLinhagem(idLinhagem: number, lido: AleitamentoLido): AleitamentoDaLinhagem {
+  const { ajusteDeNinhada, mortesNoAleitamento } = contarBaixasDoAleitamento(
+    lido.mortos.filter((morto) => morto.idLinhagem === idLinhagem),
+  )
+
+  return {
+    nascidos: lido.nascidos.get(idLinhagem) ?? 0,
+    ajusteDeNinhada: ajusteDeNinhada.m + ajusteDeNinhada.f,
+    mortesNoAleitamento: mortesNoAleitamento.m + mortesNoAleitamento.f,
   }
 }
 
@@ -100,12 +138,14 @@ export function montarVisaoGeral(
   casaisAtivos: Map<number, number>,
   grupos: GrupoDeVivos[],
   hoje: string = hojeISO(),
+  aleitamento: AleitamentoLido = { nascidos: new Map(), mortos: [] },
 ): VisaoGeral {
   return {
     especies: especies.map((especie) => {
       const linhagens = especie.linhagens.map((linhagem) => {
         const contagem = linhagemZerada(linhagem)
         contagem.casais = casaisAtivos.get(linhagem.id) ?? 0
+        contagem.aleitamento = aleitamentoDaLinhagem(linhagem.id, aleitamento)
 
         for (const grupo of grupos) {
           if (grupo.idLinhagem !== linhagem.id) continue
@@ -151,9 +191,57 @@ export function montarVisaoGeral(
   }
 }
 
-/** GET /api/visao-geral - quatro leituras: o catalogo, os casais ativos, os vivos e os partos deles */
+/**
+ * Os nascidos de partos de casal por linhagem (sem o registro anulado), e os mortos deles com a causa
+ * da baixa que nao foi anulada: o que o aleitamento da visao geral conta
+ */
+async function lerAleitamento(): Promise<AleitamentoLido> {
+  const [partos, ligacoes] = await Promise.all([
+    prisma.parto.findMany({
+      where: { idCasal: { not: null }, dtPartoReal: { not: null } },
+      select: { idLinhagem: true, _count: { select: { animais: { where: { situacao: { not: 'anulado' } } } } } },
+    }),
+    prisma.ocorrenciaAnimal.findMany({
+      where: {
+        ocorrencia: { tipo: 'baixa', anulacoes: { none: {} } },
+        animal: { situacao: 'morto', parto: { idCasal: { not: null } } },
+      },
+      select: {
+        ocorrencia: { select: { causa: true } },
+        animal: { select: { sexo: true, dtSaida: true, parto: { select: { idLinhagem: true, dtDesmameReal: true } } } },
+      },
+    }),
+  ])
+
+  const nascidos = new Map<number, number>()
+  for (const parto of partos) {
+    nascidos.set(parto.idLinhagem, (nascidos.get(parto.idLinhagem) ?? 0) + parto._count.animais)
+  }
+
+  return {
+    nascidos,
+    mortos: ligacoes.flatMap(({ ocorrencia, animal }) =>
+      animal.dtSaida === null
+        ? []
+        : [
+            {
+              idLinhagem: animal.parto.idLinhagem,
+              sexo: animal.sexo,
+              dtSaida: animal.dtSaida,
+              causa: causaDe(ocorrencia.causa),
+              parto: { comCasal: true, dtDesmameReal: animal.parto.dtDesmameReal },
+            },
+          ],
+    ),
+  }
+}
+
+/**
+ * GET /api/visao-geral - o catalogo, os casais ativos, os vivos e os partos deles, e o aleitamento
+ * (os nascidos e as baixas de parto de casal)
+ */
 export async function lerVisaoGeral(hoje: string = hojeISO()): Promise<VisaoGeral> {
-  const [especies, casais, vivos] = await Promise.all([
+  const [especies, casais, vivos, aleitamento] = await Promise.all([
     prisma.especie.findMany({
       orderBy: { id: 'asc' },
       select: { nome: true, linhagens: { select: { id: true, nome: true, ativa: true } } },
@@ -164,6 +252,7 @@ export async function lerVisaoGeral(hoje: string = hojeISO()): Promise<VisaoGera
       where: { situacao: 'vivo' },
       _count: { _all: true },
     }),
+    lerAleitamento(),
   ])
 
   const partos =
@@ -197,5 +286,6 @@ export async function lerVisaoGeral(hoje: string = hojeISO()): Promise<VisaoGera
     new Map(casais.map((linha) => [linha.idLinhagem, linha._count._all])),
     grupos,
     hoje,
+    aleitamento,
   )
 }

@@ -34,7 +34,7 @@ const itemDaBaixa = z.object({
 export const baixa = z.object({
   dtFato: dataDoFato,
   motivo: z.string().trim().min(1).max(200).optional(),
-  tipo: z.enum(['morte', 'eutanasia']).optional(),
+  tipo: z.enum(['morte', 'eutanasia'], { error: 'Escolha a causa: morte ou eutanásia.' }),
   idParto: idNoCorpo.optional(),
   itens: z.array(itemDaBaixa).min(1, 'Informe os animais da baixa.').max(20),
 })

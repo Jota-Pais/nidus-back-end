@@ -264,7 +264,7 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
       tecnico,
     )
 
-    const baixa = await registrarBaixa(estoque, { dtFato: daqui(-10), motivo: 'morte', itens: [{ sexo: 'F', qtd: 2 }] }, tecnico)
+    const baixa = await registrarBaixa(estoque, { dtFato: daqui(-10), tipo: 'morte', motivo: 'morte', itens: [{ sexo: 'F', qtd: 2 }] }, tecnico)
     expect(baixa).toEqual({ baixas: { m: 0, f: 2 }, liberada: true, faltas: [] })
     expect(await caixa(estoque)).toMatchObject({ ativa: false, motivo: 'baixa', dt: daqui(-10) })
 
@@ -453,9 +453,9 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
       registrarMudanca(femeas ?? 0, { dtFato: daqui(-20), femeas: { qtd: 1, destino: { idCaixa: machos ?? 0 } } }, tecnico),
     ).rejects.toEqual(expect.objectContaining({ status: 400, extras: { campos: { 'femeas.destino': expect.stringContaining('outro sexo') } } }))
     // nem a baixa do ultimo animal da caixa de femeas a libera com vivo dentro: libera so quando esvazia
-    await registrarBaixa(femeas ?? 0, { dtFato: daqui(-5), itens: [{ sexo: 'F', qtd: 1 }] }, tecnico)
+    await registrarBaixa(femeas ?? 0, { dtFato: daqui(-5), tipo: 'morte', itens: [{ sexo: 'F', qtd: 1 }] }, tecnico)
     expect(await caixa(femeas ?? 0)).toMatchObject({ ativa: true })
-    await registrarBaixa(femeas ?? 0, { dtFato: daqui(-5), itens: [{ sexo: 'F', qtd: 1 }] }, tecnico)
+    await registrarBaixa(femeas ?? 0, { dtFato: daqui(-5), tipo: 'morte', itens: [{ sexo: 'F', qtd: 1 }] }, tecnico)
     expect(await caixa(femeas ?? 0)).toMatchObject({ ativa: false, motivo: 'baixa' })
   })
 
@@ -582,7 +582,7 @@ describe.skipIf(!URL_TESTE)('a colonia no banco de verdade', () => {
       tecnico,
     )
     const estoque = caixas[0]?.idCaixa ?? 0
-    await registrarBaixa(estoque, { dtFato: daqui(-10), itens: [{ sexo: 'M', qtd: 1 }] }, tecnico)
+    await registrarBaixa(estoque, { dtFato: daqui(-10), tipo: 'morte', itens: [{ sexo: 'M', qtd: 1 }] }, tecnico)
 
     const grade = await montarGrade(idEstante)
     const naGrade = grade.faces.flatMap((face) => face.posicoes).filter((p) => p.caixa !== null)

@@ -77,6 +77,7 @@ describe('lancarOcorrencia: a unica porta de escrita nos animais', () => {
   it('baixa: so vivo da caixa vira morto, com a data de saida', async () => {
     await lancarOcorrencia(tx as never, {
       tipo: 'baixa',
+      causa: 'eutanasia',
       dtFato: '2026-11-02',
       idUsuario: 4,
       idCaixa: 6,
@@ -90,7 +91,7 @@ describe('lancarOcorrencia: a unica porta de escrita nos animais', () => {
         data: { situacao: 'morto', dtSaida: d('2026-11-02'), dtManutencao: expect.any(Date) },
       },
     ])
-    expect(banco.ocorrencia).toMatchObject({ tipo: 'baixa', idCaixaOrigem: 6, idParto: null, motivo: 'morte' })
+    expect(banco.ocorrencia).toMatchObject({ tipo: 'baixa', causa: 'eutanasia', idCaixaOrigem: 6, idParto: null, motivo: 'morte' })
     expect(ligados()).toEqual([1, 2])
   })
 
@@ -98,7 +99,7 @@ describe('lancarOcorrencia: a unica porta de escrita nos animais', () => {
     banco.faltam = 1
 
     await expect(
-      lancarOcorrencia(tx as never, { tipo: 'baixa', dtFato: '2026-11-02', idUsuario: 4, idCaixa: 6, ids: [1, 2] }),
+      lancarOcorrencia(tx as never, { tipo: 'baixa', causa: 'morte', dtFato: '2026-11-02', idUsuario: 4, idCaixa: 6, ids: [1, 2] }),
     ).rejects.toEqual(expect.objectContaining({ status: 409, codigo: 'SEM_ANIMAIS' }))
     expect(banco.ocorrencia).toBeNull()
   })

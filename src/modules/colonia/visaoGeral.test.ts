@@ -166,6 +166,8 @@ const banco = vi.hoisted(() => ({
   ondeDosAnimais: null as unknown,
   ondeDosCasais: null as unknown,
   partosLidos: 0,
+  ondeDosNascidos: null as unknown,
+  ondeDosMortos: null as unknown,
 }))
 
 vi.mock('../../shared/prisma.ts', () => {
@@ -197,8 +199,34 @@ vi.mock('../../shared/prisma.ts', () => {
           ]
         },
       },
+      // os mortos de parto de casal: 2 da selecao e 1 que nao chegou ao desmame, ate o desmame de
+      // 23/10; 1 morto depois dele, que nao conta no aleitamento
+      ocorrenciaAnimal: {
+        findMany: async ({ where }: { where: unknown }) => {
+          banco.ondeDosMortos = where
+          const wistar = (causa: string, sexo: string, saida: string) => ({
+            ocorrencia: { causa },
+            animal: { sexo, dtSaida: d(saida), parto: { idLinhagem: 1, dtDesmameReal: d('2026-10-23') } },
+          })
+          return [
+            wistar('eutanasia', 'M', '2026-10-05'),
+            wistar('eutanasia', 'F', '2026-10-05'),
+            wistar('morte', 'F', '2026-10-23'),
+            wistar('morte', 'M', '2026-11-02'),
+          ]
+        },
+      },
       parto: {
-        findMany: async () => {
+        findMany: async ({ where }: { where: { idCasal?: unknown } }) => {
+          // os nascidos de parto de casal, por linhagem
+          if (where.idCasal !== undefined) {
+            banco.ondeDosNascidos = where
+            return [
+              { idLinhagem: 1, _count: { animais: 20 } },
+              { idLinhagem: 1, _count: { animais: 5 } },
+              { idLinhagem: 2, _count: { animais: 10 } },
+            ]
+          }
           banco.partosLidos += 1
           return [
             { id: 7, idLinhagem: 1, dtPartoReal: d('2026-10-01'), dtDesmameReal: d('2026-10-23') },
@@ -236,6 +264,15 @@ describe('a leitura da visao geral', () => {
       { idade: 35, m: 6, f: 0 },
       { idade: 40, m: 3, f: 0 },
     ])
+
+    // o aleitamento desde o inicio: os nascidos de partos de casal e as baixas ate o desmame
+    expect(banco.ondeDosNascidos).toEqual({ idCasal: { not: null }, dtPartoReal: { not: null } })
+    expect(banco.ondeDosMortos).toEqual({
+      ocorrencia: { tipo: 'baixa', anulacoes: { none: {} } },
+      animal: { situacao: 'morto', parto: { idCasal: { not: null } } },
+    })
+    expect(visao.especies[0]?.linhagens[0]?.aleitamento).toEqual({ nascidos: 25, ajusteDeNinhada: 2, mortesNoAleitamento: 1 })
+    expect(visao.especies[1]?.linhagens[0]?.aleitamento).toEqual({ nascidos: 10, ajusteDeNinhada: 0, mortesNoAleitamento: 0 })
 
     expect(visao.especies[1]?.linhagens[0]).toMatchObject({
       linhagem: 'Swiss',

@@ -180,16 +180,16 @@ describe('baixa em qualquer caixa', () => {
   it('morte na caixa de estoque: os vivos saem como mortos e a caixa vazia libera na hora', async () => {
     banco.animais = [vivo(1), vivo(2)]
 
-    const resultado = await registrarBaixa(6, { dtFato: '2026-11-02', motivo: 'morte', itens: [{ sexo: 'M', qtd: 2 }] }, 4)
+    const resultado = await registrarBaixa(6, { dtFato: '2026-11-02', tipo: 'morte', motivo: 'morte', itens: [{ sexo: 'M', qtd: 2 }] }, 4)
 
     expect(resultado).toEqual({ idOcorrencia: 77, baixas: { m: 2, f: 0 }, liberada: true, faltas: [] })
     expect(banco.lancados).toEqual([
-      { tipo: 'baixa', dtFato: '2026-11-02', idUsuario: 4, idCaixa: 6, motivo: 'morte', ids: [1, 2] },
+      { tipo: 'baixa', causa: 'morte', dtFato: '2026-11-02', idUsuario: 4, idCaixa: 6, motivo: 'morte', ids: [1, 2] },
     ])
     expect(banco.liberadas).toEqual([{ idCaixa: 6, dtFato: '2026-11-02', motivo: 'baixa' }])
   })
 
-  it('o tipo grava o motivo: morte e eutanasia; a eutanasia de um parto e a selecao dele', async () => {
+  it('o tipo grava a causa e o motivo: morte e eutanasia; a eutanasia de um parto e a selecao dele', async () => {
     banco.animais = [vivo(1), vivo(2), vivo(3), vivo(4)]
     const itens = [{ sexo: 'M' as const, qtd: 1 }]
 
@@ -197,17 +197,23 @@ describe('baixa em qualquer caixa', () => {
     await registrarBaixa(6, { dtFato: '2026-11-02', tipo: 'eutanasia', itens }, 4)
     await registrarBaixa(6, { dtFato: '2026-11-02', tipo: 'eutanasia', idParto: 9, itens }, 4)
 
-    expect(banco.lancados.map((l) => ({ motivo: l.motivo, idParto: 'idParto' in l ? l.idParto : undefined }))).toEqual([
-      { motivo: 'morte', idParto: undefined },
-      { motivo: 'eutanásia', idParto: undefined },
-      { motivo: 'eutanasia de selecao', idParto: 9 },
+    expect(
+      banco.lancados.map((l) => ({
+        causa: 'causa' in l ? l.causa : undefined,
+        motivo: l.motivo,
+        idParto: 'idParto' in l ? l.idParto : undefined,
+      })),
+    ).toEqual([
+      { causa: 'morte', motivo: 'morte', idParto: undefined },
+      { causa: 'eutanasia', motivo: 'eutanásia', idParto: undefined },
+      { causa: 'eutanasia', motivo: 'eutanasia de selecao', idParto: 9 },
     ])
   })
 
   it('com vivos sobrando, a caixa continua ativa', async () => {
     banco.animais = [vivo(1), vivo(2), vivo(3)]
 
-    const resultado = await registrarBaixa(6, { dtFato: '2026-11-02', itens: [{ sexo: 'M', qtd: 1 }] }, 4)
+    const resultado = await registrarBaixa(6, { dtFato: '2026-11-02', tipo: 'morte', itens: [{ sexo: 'M', qtd: 1 }] }, 4)
 
     expect(resultado.liberada).toBe(false)
   })
@@ -215,7 +221,7 @@ describe('baixa em qualquer caixa', () => {
   it('o reservado que morre deixa o pedido em falta, e a resposta diz qual', async () => {
     banco.animais = [vivo(1, { idPedido: 3 })]
 
-    const resultado = await registrarBaixa(6, { dtFato: '2026-11-02', itens: [{ sexo: 'M', qtd: 1 }] }, 4)
+    const resultado = await registrarBaixa(6, { dtFato: '2026-11-02', tipo: 'morte', itens: [{ sexo: 'M', qtd: 1 }] }, 4)
 
     expect(resultado.faltas).toEqual([{ idPedido: 3, m: 1, f: 0, qualquer: 0 }])
   })
@@ -224,7 +230,7 @@ describe('baixa em qualquer caixa', () => {
     banco.animais = [vivo(1), vivo(2, { dtNascimento: '2026-09-20' })]
 
     await expect(
-      registrarBaixa(6, { dtFato: '2026-11-02', itens: [{ sexo: 'M', qtd: 1 }] }, 4),
+      registrarBaixa(6, { dtFato: '2026-11-02', tipo: 'morte', itens: [{ sexo: 'M', qtd: 1 }] }, 4),
     ).rejects.toEqual(
       expect.objectContaining({ status: 400, extras: { campos: { 'itens.0.dtNascimento': expect.any(String) } } }),
     )
@@ -233,7 +239,7 @@ describe('baixa em qualquer caixa', () => {
   it('com a idade indicada, a baixa sai daquela idade', async () => {
     banco.animais = [vivo(1), vivo(2, { dtNascimento: '2026-09-20' })]
 
-    await registrarBaixa(6, { dtFato: '2026-11-02', itens: [{ sexo: 'M', qtd: 1, dtNascimento: '2026-09-20' }] }, 4)
+    await registrarBaixa(6, { dtFato: '2026-11-02', tipo: 'morte', itens: [{ sexo: 'M', qtd: 1, dtNascimento: '2026-09-20' }] }, 4)
 
     expect(banco.lancados[0]).toMatchObject({ ids: [2] })
   })
@@ -241,7 +247,7 @@ describe('baixa em qualquer caixa', () => {
   it('a data nao pode ser antes da chegada dos animais na caixa', async () => {
     banco.animais = [vivo(1, { dtMovimento: '2026-10-23' })]
 
-    await expect(registrarBaixa(6, { dtFato: '2026-10-22', itens: [{ sexo: 'M', qtd: 1 }] }, 4)).rejects.toEqual(
+    await expect(registrarBaixa(6, { dtFato: '2026-10-22', tipo: 'morte', itens: [{ sexo: 'M', qtd: 1 }] }, 4)).rejects.toEqual(
       expect.objectContaining({ status: 400, extras: { campos: { dtFato: expect.stringContaining('chegada') } } }),
     )
     expect(banco.lancados).toEqual([])
@@ -254,6 +260,7 @@ describe('baixa em qualquer caixa', () => {
       6,
       {
         dtFato: '2026-11-02',
+        tipo: 'morte',
         itens: [
           { sexo: 'M', qtd: 1 },
           { sexo: 'M', qtd: 1 },
@@ -269,13 +276,13 @@ describe('baixa em qualquer caixa', () => {
   it('caixa liberada nao recebe baixa', async () => {
     banco.caixas.set(6, { ...estoque(6, 'F2C'), ativa: false })
 
-    await expect(registrarBaixa(6, { dtFato: '2026-11-02', itens: [{ sexo: 'M', qtd: 1 }] }, 4)).rejects.toEqual(
+    await expect(registrarBaixa(6, { dtFato: '2026-11-02', tipo: 'morte', itens: [{ sexo: 'M', qtd: 1 }] }, 4)).rejects.toEqual(
       recusa(409, 'CAIXA_LIBERADA'),
     )
   })
 
   it('caixa inexistente e 404', async () => {
-    await expect(registrarBaixa(99, { dtFato: '2026-11-02', itens: [{ sexo: 'M', qtd: 1 }] }, 4)).rejects.toEqual(
+    await expect(registrarBaixa(99, { dtFato: '2026-11-02', tipo: 'morte', itens: [{ sexo: 'M', qtd: 1 }] }, 4)).rejects.toEqual(
       recusa(404, 'NAO_ENCONTRADO'),
     )
   })
