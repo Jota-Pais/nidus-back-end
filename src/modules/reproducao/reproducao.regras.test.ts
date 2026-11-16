@@ -1531,6 +1531,47 @@ describe('correcao da data do desmame', () => {
     expect((await cicloFicha(1)).dtUltimaSelecao).toBe('2026-10-01')
   })
 
+  describe('a ninhada antiga lancada hoje: nasceu em 28/02, selecao e desmame com a data de hoje (16/11)', () => {
+    /** 3 M e 6 F; 1 M e 3 F na selecao de hoje; desmame hoje com 2 e 2, e 1 F nao chegou: 1 M e 4 F de baixa */
+    async function lancadaHoje() {
+      nascido(3, 6)
+      Object.assign(banco.partos.get(1) as Parto, { dtPartoReal: d('2026-02-28') })
+      await registrarSelecao(1, { dtSelecao: '2026-11-16', eutanasiadoM: 1, eutanasiadoF: 3 }, 4)
+      await registrarDesmame(1, { dtDesmameReal: '2026-11-16', desmamadoM: 2, desmamadoF: 2 }, 4)
+    }
+
+    it('a selecao de hoje segura o desmame em hoje: marco e recusado, e a ficha diz o mesmo limite', async () => {
+      await lancadaHoje()
+
+      expect(await cicloFicha(1)).toMatchObject({
+        baixasAntesDoDesmame: { m: 1, f: 4 },
+        desmamadoM: 2,
+        desmamadoF: 2,
+        dtUltimaSelecao: '2026-11-16',
+        dtPrimeiraSaida: null,
+      })
+      await expect(corrigirDesmame(1, { dtDesmameReal: '2026-03-20', motivo: 'data real' }, 4)).rejects.toEqual(
+        noCampo('dtDesmameReal', 'Não pode ser antes da última eutanásia de seleção (16/11/2026).'),
+      )
+      expect(banco.partos.get(1)?.dtDesmameReal).toEqual(d('2026-11-16'))
+    })
+
+    it('sem a selecao (anulada), o desmame volta para marco e a baixa "nao chegou ao desmame" vai junto', async () => {
+      await lancadaHoje()
+      // a anulacao da selecao: a ocorrencia deixa de contar e os animais voltam vivos para a caixa
+      const selecao = banco.ocorrencias.find((o) => o.motivo === 'eutanasia de selecao') as Ocorrencia
+      selecao.anulada = true
+      for (const a of animaisCom(selecao.ids)) Object.assign(a, { situacao: 'vivo', dtSaida: null })
+
+      const { parto: ciclo } = await corrigirDesmame(1, { dtDesmameReal: '2026-03-20', motivo: 'data real' }, 4)
+
+      const naoChegou = banco.ocorrencias.find((o) => o.motivo === 'nao chegou ao desmame')
+      expect(naoChegou?.dtFato).toEqual(d('2026-03-20'))
+      expect(animaisCom(naoChegou?.ids ?? []).map((a) => iso(a.dtSaida))).toEqual(['2026-03-20'])
+      expect(ciclo).toMatchObject({ dtDesmameReal: '2026-03-20', dtUltimaSelecao: null })
+    })
+  })
+
   it('so corrige desmame registrado', async () => {
     nascido()
 
