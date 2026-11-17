@@ -32,18 +32,38 @@ const doCasal = (id: number): PartoDaCaixa => ({
 })
 
 let proximo = 100
+/** Animais de um parto na caixa: entraram nela em 10/11, com a ninhada do cadastro */
 const animais = (idParto: number, qtd: number, campos: Partial<AnimalDaCaixa> = {}): AnimalDaCaixa[] =>
-  Array.from({ length: qtd }, () => ({ id: proximo++, idParto, sexo: 'F', situacao: 'vivo', idPedido: null, ...campos }))
+  Array.from({ length: qtd }, () => ({
+    id: proximo++,
+    idParto,
+    sexo: 'F',
+    situacao: 'vivo',
+    idPedido: null,
+    dtMovimento: d('2026-11-10'),
+    ...campos,
+  }))
+
+/** Quantos animais de cada ninhada ha na lista: os que entraram, quando todos estao nesta caixa */
+function porNinhada(lista: AnimalDaCaixa[]): RetratoDoEstoque['cadastrados'] {
+  return [...new Set(lista.map((animal) => animal.idParto))].map((idParto) => ({
+    idParto,
+    total: lista.filter((animal) => animal.idParto === idParto).length,
+  }))
+}
 
 /** A caixa F2A de estoque, femeas Wistar (rato), com 3 femeas do cadastro inicial */
 function retrato(campos: Partial<RetratoDoEstoque> = {}): RetratoDoEstoque {
+  const daCaixa = campos.animais ?? animais(20, 3)
+
   return {
     caixa: { codigo: 'F2A', sexo: 'F', idLinhagem: 3, linhagem: 'Wistar', idEspecie: 1 },
-    animais: animais(20, 3),
     partos: [cadastro(20)],
     foraDaCaixa: [],
     linhagem: { nova: { id: 5, nome: 'SHR', idEspecie: 1 }, pedidos: [] },
+    cadastrados: porNinhada(daCaixa),
     ...campos,
+    animais: daCaixa,
   }
 }
 
@@ -212,6 +232,65 @@ describe('o nascimento do cadastro inicial', () => {
   })
 })
 
+describe('a quantidade do cadastro inicial', () => {
+  it('subir: os que faltaram entram nesta caixa, chegando com a ninhada, e o historico diz de quanto para quanto', () => {
+    const plano = planejarEdicaoDoEstoque(retrato(), { quantidades: [{ idParto: 20, quantidade: 5 }] })
+
+    expect(plano).toMatchObject({
+      quantidades: [
+        { idParto: 20, antes: 3, depois: 5, novos: 2, anulados: [], chegada: '2026-11-10', dtNascimento: '2026-09-01' },
+      ],
+      descricao: 'Caixa de estoque F2A editada: quantidade do cadastro inicial nascido em 01/09/2026 3 → 5',
+      antes: { quantidades: [{ idParto: 20, quantidade: 3 }] },
+      depois: { quantidades: [{ idParto: 20, quantidade: 5 }] },
+    })
+  })
+
+  it('descer: anula os registros a mais, dos vivos livres daqui, os ultimos lancados', () => {
+    const plano = planejarEdicaoDoEstoque(retrato(), { quantidades: [{ idParto: 20, quantidade: 1 }] })
+
+    expect(plano?.quantidades).toEqual([
+      { idParto: 20, antes: 3, depois: 1, novos: 0, anulados: [101, 102], chegada: '2026-11-10', dtNascimento: '2026-09-01' },
+    ])
+  })
+
+  it('o reservado e o que ja saiu nao saem do cadastro: a recusa diz quantos e o minimo', () => {
+    // 5 entraram: 1 livre e 2 reservados aqui, 1 morto aqui e 1 que passou para outra caixa
+    const caixa = retrato({
+      animais: [...animais(20, 1), ...animais(20, 2, { idPedido: 7 }), ...animais(20, 1, { situacao: 'morto' })],
+      cadastrados: [{ idParto: 20, total: 5 }],
+    })
+
+    expect(() => planejarEdicaoDoEstoque(caixa, { quantidades: [{ idParto: 20, quantidade: 3 }] })).toThrow(
+      noCampo(
+        'quantidades.0.quantidade',
+        'Só sai do cadastro animal vivo e livre nesta caixa, e desta ninhada há 1: 2 estão reservados (desfaça a reserva antes) e 2 já saíram desta caixa (baixa, entrega ou passagem para outra caixa). A quantidade não fica abaixo de 4.',
+      ),
+    )
+    expect(planejarEdicaoDoEstoque(caixa, { quantidades: [{ idParto: 20, quantidade: 4 }] })?.quantidades[0]?.anulados).toEqual([100])
+  })
+
+  it('a ninhada de casal e a que nao tem animais na caixa nao se corrigem aqui', () => {
+    const caixa = retrato({ animais: [...animais(20, 2), ...animais(30, 3)], partos: [cadastro(20), doCasal(30)] })
+
+    expect(() => planejarEdicaoDoEstoque(caixa, { quantidades: [{ idParto: 30, quantidade: 1 }] })).toThrow(
+      noCampo('quantidades.0.quantidade', '3 do 1º parto do casal AB, caixa T1I: quantos nasceram se corrige pela ficha do casal.'),
+    )
+    expect(() => planejarEdicaoDoEstoque(caixa, { quantidades: [{ idParto: 99, quantidade: 1 }] })).toThrow(
+      noCampo('quantidades.0.quantidade', 'Esta ninhada não tem animais nesta caixa.'),
+    )
+  })
+
+  it('a mesma quantidade nao muda nada; a ninhada que chegou depois traz os novos na chegada dela', () => {
+    expect(planejarEdicaoDoEstoque(retrato(), { quantidades: [{ idParto: 20, quantidade: 3 }] })).toBeNull()
+
+    const chegouDepois = retrato({ animais: animais(20, 2, { dtMovimento: d('2026-11-12') }) })
+    expect(planejarEdicaoDoEstoque(chegouDepois, { quantidades: [{ idParto: 20, quantidade: 3 }] })?.quantidades[0]?.chegada).toBe(
+      '2026-11-12',
+    )
+  })
+})
+
 // ------------------------------------------------------------------ a gravacao
 
 const banco = vi.hoisted(() => ({
@@ -235,7 +314,14 @@ const db = {
   },
   animal: {
     findMany: async () => banco.animais,
-    groupBy: async () => [],
+    // os vivos fora da caixa (por parto e caixa): nenhum; quantos entraram em cada ninhada: os daqui
+    groupBy: async ({ by }: { by: string[] }) =>
+      by.includes('idCaixa')
+        ? []
+        : [...new Set(banco.animais.map((animal) => animal.idParto as number))].map((idParto) => ({
+            idParto,
+            _count: { _all: banco.animais.filter((animal) => animal.idParto === idParto).length },
+          })),
   },
   parto: {
     findMany: async () => banco.partos,
@@ -268,6 +354,15 @@ vi.mock('../colonia/ocorrencia.ts', () => ({
 }))
 
 vi.mock('./ficha.service.ts', () => ({ montarFicha: async (id: number) => ({ tipo: 'estoque', caixa: { id } }) }))
+
+// a liberacao da caixa que so ficou com registros anulados: a regra dela esta em liberacao.test.ts
+vi.mock('../colonia/liberacao.ts', async (original) => ({
+  ...(await original<typeof import('../colonia/liberacao.ts')>()),
+  liberarSeVazia: async (_tx: unknown, idCaixa: number, dtFato: string) => {
+    banco.ordem.push(`liberar ${idCaixa} ${dtFato}`)
+    return false
+  },
+}))
 
 describe('a gravacao', () => {
   beforeEach(() => {
@@ -319,6 +414,34 @@ describe('a gravacao', () => {
         },
       }),
     ])
+  })
+
+  it('a quantidade que sobe junto com o sexo: os novos entram depois, ja no sexo novo, numa correcao da ninhada', async () => {
+    await editarCaixaDeEstoque(2, { sexo: 'M', quantidades: [{ idParto: 20, quantidade: 4 }] }, 4)
+
+    expect(banco.ordem).toEqual(['caixa {"sexo":"M"}', 'correcao correcao', 'correcao correcao'])
+    expect(banco.lancamentos.at(-1)).toEqual({
+      tipo: 'correcao',
+      // sem chegada gravada, a entrada no estoque da ninhada
+      dtFato: '2026-11-10',
+      idUsuario: 4,
+      idParto: 20,
+      motivo: 'quantidade do cadastro inicial corrigida na edição da caixa de estoque',
+      anulados: [],
+      novos: { idCaixa: 2, m: 2, f: 0, chegam: true },
+    })
+    expect(banco.historicos[0]).toMatchObject({
+      dados: { antes: { sexo: 'F', quantidades: [{ idParto: 20, quantidade: 2 }] }, depois: { sexo: 'M', quantidades: [{ idParto: 20, quantidade: 4 }] } },
+    })
+  })
+
+  it('a quantidade que desce anula o registro a mais, e a caixa que esvaziou se confere', async () => {
+    await editarCaixaDeEstoque(2, { quantidades: [{ idParto: 20, quantidade: 1 }] }, 4)
+
+    expect(banco.lancamentos).toEqual([
+      expect.objectContaining({ tipo: 'correcao', idParto: 20, anulados: [201], novos: undefined }),
+    ])
+    expect(banco.ordem).toEqual(['correcao correcao', 'liberar 2 2026-11-10'])
   })
 
   it('sem mudanca nao grava nem registra', async () => {

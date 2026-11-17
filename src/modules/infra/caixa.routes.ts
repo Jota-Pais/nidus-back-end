@@ -8,7 +8,7 @@ import {
 import { dataDoFato, idNaRota, idNoCorpo } from '../../shared/validacao.ts'
 import { mudarDePosicao } from './caixa.service.ts'
 import { editarCaixaDeEstoque } from './edicaoDoEstoque.service.ts'
-import { criarCaixaDeEstoque, registrarEntrada } from './entrada.service.ts'
+import { criarCaixaDeEstoque } from './entrada.service.ts'
 import { montarFicha } from './ficha.service.ts'
 import { registrarMudanca, virarCaixaDeEstoque } from './mudanca.service.ts'
 
@@ -56,20 +56,15 @@ caixaRoutes.post('/estoque', exigirPerfil(...OPERA_A_COLONIA), async (req, res) 
   res.status(201).json(await criarCaixaDeEstoque(dados, usuarioDaRequisicao(req).id))
 })
 
-/** Corpo de POST /api/caixas/:id/entrada: o sexo e a linhagem sao os da caixa */
-export const entradaNaCaixa = entrada
-
-/** POST /api/caixas/:id/entrada - mais um grupo de idade do cadastro inicial na caixa de estoque */
-caixaRoutes.post('/:id/entrada', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
-  const { id } = idNaRota.parse(req.params)
-  const dados = entradaNaCaixa.parse(req.body)
-
-  res.status(201).json(await registrarEntrada(id, dados, usuarioDaRequisicao(req).id))
-})
+/** Uma ninhada aparece uma vez so na lista da edicao */
+const umaVezCada = (lista: { idParto: number }[]) =>
+  new Set(lista.map((item) => item.idParto)).size === lista.length
 
 /**
  * Corpo de PATCH /api/caixas/:id: o que mudou na caixa de estoque, sem motivo (e o engano de
- * digitacao do cadastro inicial). O que fica contraditorio e conferido no servico
+ * digitacao do cadastro inicial). A quantidade e a de cada ninhada do cadastro inicial, ao menos
+ * 1: e assim que se acrescenta ou tira animal do cadastro depois que a caixa nasceu. O que fica
+ * contraditorio e conferido no servico
  */
 export const edicaoDoEstoque = z
   .object({
@@ -79,9 +74,13 @@ export const edicaoDoEstoque = z
       .array(z.object({ idParto: idNoCorpo, dtNascimento: dataDoFato }))
       .min(1)
       .max(50)
-      .refine((lista) => new Set(lista.map((item) => item.idParto)).size === lista.length, {
-        error: 'Cada ninhada aparece uma vez só.',
-      })
+      .refine(umaVezCada, { error: 'Cada ninhada aparece uma vez só.' })
+      .optional(),
+    quantidades: z
+      .array(z.object({ idParto: idNoCorpo, quantidade: entrada.shape.quantidade }))
+      .min(1)
+      .max(50)
+      .refine(umaVezCada, { error: 'Cada ninhada aparece uma vez só.' })
       .optional(),
   })
   .refine((dados) => Object.values(dados).some((valor) => valor !== undefined), {
@@ -89,8 +88,8 @@ export const edicaoDoEstoque = z
   })
 
 /**
- * PATCH /api/caixas/:id - corrige a caixa de estoque: a linhagem, o sexo e o nascimento do que veio
- * do cadastro inicial. Devolve a ficha
+ * PATCH /api/caixas/:id - corrige a caixa de estoque: a linhagem, o sexo, e o nascimento e a
+ * quantidade do que veio do cadastro inicial. Devolve a ficha
  */
 caixaRoutes.patch('/:id', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)

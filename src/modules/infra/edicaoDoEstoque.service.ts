@@ -18,7 +18,13 @@
 //   animal). O banco nao muda o sexo do reservado nem do animal que ja saiu (morto, entregue), e a
 //   edicao recusa antes, com a mensagem;
 // - o nascimento de uma ninhada sem casal muda a idade de todos os animais dela, onde estiverem. Nao
-//   passa da entrada no estoque, que e o desmame dela (CHECK parto_datas_em_ordem).
+//   passa da entrada no estoque, que e o desmame dela (CHECK parto_datas_em_ordem);
+// - a quantidade de uma ninhada sem casal e quantos entraram no cadastro (todo animal dela, menos o
+//   registro anulado). Subir cria os que faltaram, nesta caixa, com o sexo dela, chegando com a
+//   ninhada; descer anula os registros a mais, como se nunca tivessem sido lancados (nao e baixa), e
+//   so de vivos livres desta caixa: o reservado conta no pedido, e o que ja saiu (baixa, entrega,
+//   outra caixa) aconteceu. As duas sao uma ocorrencia de correcao da ninhada, na data da chegada
+//   dela na caixa.
 
 import type { Prisma } from '@prisma/client'
 import { campoInvalido, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
@@ -26,7 +32,7 @@ import { prisma } from '../../shared/prisma.ts'
 import { agora } from '../../shared/relogio.ts'
 import { dataISO, dataLegivel, paraData } from '../../shared/traducao.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
-import { caixaLiberada } from '../colonia/liberacao.ts'
+import { caixaLiberada, liberarSeVazia } from '../colonia/liberacao.ts'
 import { lancarOcorrencia } from '../colonia/ocorrencia.ts'
 import { noNumero, quantosDoSexo } from '../colonia/tipos.ts'
 import type { Sexo } from '../colonia/tipos.ts'
@@ -42,6 +48,8 @@ export type EdicaoDoEstoque = {
   sexo?: Sexo | undefined
   /** o nascimento das ninhadas do cadastro inicial (parto sem casal) com animais na caixa */
   nascimentos?: { idParto: number; dtNascimento: string }[] | undefined
+  /** quantos entraram em cada ninhada do cadastro inicial com animais na caixa: ao menos 1 */
+  quantidades?: { idParto: number; quantidade: number }[] | undefined
 }
 
 /** Um animal que esta na caixa ou saiu dela (morto, entregue). O anulado nao existiu e nao conta */
@@ -51,6 +59,8 @@ export type AnimalDaCaixa = {
   sexo: string
   situacao: string
   idPedido: number | null
+  /** quando chegou na caixa */
+  dtMovimento: Date | null
 }
 
 /** Um parto com animais na caixa, como a edicao le */
@@ -79,6 +89,8 @@ export type RetratoDoEstoque = {
   partos: PartoDaCaixa[]
   /** os vivos das ninhadas sem casal desta caixa que estao em outra caixa */
   foraDaCaixa: { idParto: number; codigo: string; vivos: number }[]
+  /** quantos entraram em cada ninhada sem casal desta caixa: todo animal dela, onde estiver, menos o anulado */
+  cadastrados: { idParto: number; total: number }[]
   /** so quando a linhagem muda: a nova (null se nao existe) e os pedidos dos animais das ninhadas sem casal */
   linhagem?:
     | {
@@ -100,6 +112,19 @@ export type PlanoDoEstoque = {
   trocas: { idParto: number; ids: number[]; dtNascimento: string }[]
   /** os nascimentos que mudam */
   nascimentos: { idParto: number; antes: string; depois: string }[]
+  /**
+   * as quantidades que mudam: os animais que faltaram entram ('novos'), os registros a mais se
+   * anulam ('anulados'), na chegada da ninhada na caixa
+   */
+  quantidades: {
+    idParto: number
+    antes: number
+    depois: number
+    novos: number
+    anulados: number[]
+    chegada: string
+    dtNascimento: string
+  }[]
   descricao: string
   antes: Record<string, Prisma.InputJsonValue>
   depois: Record<string, Prisma.InputJsonValue>
@@ -238,6 +263,69 @@ function nascimentosNovos(retrato: RetratoDoEstoque, dados: EdicaoDoEstoque): Pl
   })
 }
 
+/** A chegada mais antiga dos animais da ninhada nesta caixa: os que faltaram chegam com ela */
+function chegadaDaNinhada(retrato: RetratoDoEstoque, parto: PartoDaCaixa): string {
+  const chegadas = retrato.animais
+    .flatMap((animal) => (animal.idParto === parto.id && animal.dtMovimento ? [dataISO(animal.dtMovimento)] : []))
+    .sort()
+
+  return chegadas[0] ?? dataISO(parto.dtEntrada ?? parto.dtNascimento)
+}
+
+/**
+ * As quantidades que mudam: so de ninhada sem casal desta caixa. A quantidade e quantos entraram no
+ * cadastro; subir cria os que faltaram nesta caixa, descer anula registros de vivos livres daqui
+ * (os ultimos lancados). O reservado conta no pedido e o que ja saiu aconteceu: a recusa diz quantos
+ * ha de cada e o minimo
+ */
+function quantidadesNovas(retrato: RetratoDoEstoque, dados: EdicaoDoEstoque): PlanoDoEstoque['quantidades'] {
+  return (dados.quantidades ?? []).flatMap(({ idParto, quantidade }, indice) => {
+    const campo = `quantidades.${indice}.quantidade`
+    const parto = retrato.partos.find((daCaixa) => daCaixa.id === idParto)
+
+    if (parto === undefined) throw campoInvalido(campo, 'Esta ninhada não tem animais nesta caixa.')
+
+    if (!semCasal(parto)) {
+      throw campoInvalido(
+        campo,
+        `${origemDoCasal(parto, retrato.animais)}: quantos nasceram se corrige pela ficha do casal.`,
+      )
+    }
+
+    const antes = retrato.cadastrados.find((cadastrado) => cadastrado.idParto === idParto)?.total ?? 0
+    if (quantidade === antes) return []
+
+    const base = { idParto, antes, depois: quantidade, chegada: chegadaDaNinhada(retrato, parto), dtNascimento: dataISO(parto.dtNascimento) }
+
+    if (quantidade > antes) return [{ ...base, novos: quantidade - antes, anulados: [] }]
+
+    const daqui = retrato.animais.filter((animal) => animal.idParto === idParto && animal.situacao === 'vivo')
+    const livres = daqui.filter((animal) => animal.idPedido === null)
+    const tirar = antes - quantidade
+
+    if (livres.length < tirar) {
+      const reservados = daqui.length - livres.length
+      const sairam = antes - daqui.length
+      const quais = [
+        ...(reservados === 0
+          ? []
+          : [`${reservados} ${noNumero(reservados, 'está reservado', 'estão reservados')} (desfaça a reserva antes)`]),
+        ...(sairam === 0
+          ? []
+          : [`${sairam} já ${noNumero(sairam, 'saiu', 'saíram')} desta caixa (baixa, entrega ou passagem para outra caixa)`]),
+      ]
+
+      throw campoInvalido(
+        campo,
+        `Só sai do cadastro animal vivo e livre nesta caixa, e desta ninhada há ${livres.length}: ${quais.join(' e ')}. A quantidade não fica abaixo de ${antes - livres.length}.`,
+      )
+    }
+
+    // os registros a mais sao os ultimos lancados
+    return [{ ...base, novos: 0, anulados: livres.slice(-tirar).map((animal) => animal.id) }]
+  })
+}
+
 /**
  * O que a edicao grava, conferido contra a caixa lida: recusa (com a mensagem no campo) o que
  * deixaria dado contraditorio, e devolve null quando nada muda
@@ -248,6 +336,7 @@ export function planejarEdicaoDoEstoque(retrato: RetratoDoEstoque, dados: Edicao
   const trocaSexo = dados.sexo !== undefined && dados.sexo !== caixa.sexo
 
   const nascimentos = nascimentosNovos(retrato, dados)
+  const quantidades = quantidadesNovas(retrato, dados)
   const partosDaLinhagem =
     trocaLinhagem && dados.idLinhagem !== undefined ? partosDaLinhagemNova(retrato, dados.idLinhagem) : []
   const trocas = trocaSexo
@@ -278,6 +367,14 @@ export function planejarEdicaoDoEstoque(retrato: RetratoDoEstoque, dados: Edicao
     depois['nascimentos'] = nascimentos.map(({ idParto, depois: para }) => ({ idParto, dtNascimento: para }))
   }
 
+  if (quantidades.length > 0) {
+    for (const { antes: de, depois: para, dtNascimento } of quantidades) {
+      mudancas.push(`quantidade do cadastro inicial nascido em ${dataLegivel(dtNascimento)} ${de} → ${para}`)
+    }
+    antes['quantidades'] = quantidades.map(({ idParto, antes: de }) => ({ idParto, quantidade: de }))
+    depois['quantidades'] = quantidades.map(({ idParto, depois: para }) => ({ idParto, quantidade: para }))
+  }
+
   if (mudancas.length === 0) return null
 
   return {
@@ -286,6 +383,7 @@ export function planejarEdicaoDoEstoque(retrato: RetratoDoEstoque, dados: Edicao
     sexo: trocaSexo && dados.sexo !== undefined ? dados.sexo : null,
     trocas,
     nascimentos,
+    quantidades,
     descricao: `Caixa de estoque ${caixa.codigo} editada: ${mudancas.join(', ')}`,
     antes,
     depois,
@@ -299,7 +397,7 @@ function animaisDaCaixa(tx: Transacao, idCaixa: number) {
   return tx.animal.findMany({
     where: { idCaixa, situacao: { not: 'anulado' } },
     orderBy: { id: 'asc' },
-    select: { id: true, idParto: true, sexo: true, situacao: true, idPedido: true },
+    select: { id: true, idParto: true, sexo: true, situacao: true, idPedido: true, dtMovimento: true },
   })
 }
 
@@ -363,6 +461,12 @@ async function lerRetrato(tx: Transacao, idCaixa: number, dados: EdicaoDoEstoque
     where: { id: { in: [...new Set(fora.map((linha) => linha.idCaixa))] } },
     select: { id: true, codigo: true },
   })
+  // quantos entraram em cada ninhada sem casal: o anulado nao existiu
+  const cadastrados = await tx.animal.groupBy({
+    by: ['idParto'],
+    where: { idParto: { in: idsSemCasal }, situacao: { not: 'anulado' } },
+    _count: { _all: true },
+  })
 
   const trocaLinhagem = dados.idLinhagem !== undefined && dados.idLinhagem !== caixa.idLinhagem
   let linhagem: RetratoDoEstoque['linhagem']
@@ -425,15 +529,23 @@ async function lerRetrato(tx: Transacao, idCaixa: number, dados: EdicaoDoEstoque
       codigo: caixasDeFora.find((outra) => outra.id === linha.idCaixa)?.codigo ?? '',
       vivos: linha._count._all,
     })),
+    cadastrados: cadastrados.map((linha) => ({ idParto: linha.idParto, total: linha._count._all })),
     linhagem,
   }
 }
 
 /**
- * Grava o plano: o nascimento e a linhagem das ninhadas sem casal, a caixa e, por ultimo, o sexo
- * dos vivos, que o trigger do animal confere contra o sexo novo da caixa
+ * Grava o plano: o nascimento e a linhagem das ninhadas sem casal, a caixa, o sexo dos vivos, que o
+ * trigger do animal confere contra o sexo novo da caixa, e por ultimo a quantidade, com os animais
+ * novos ja no sexo e na linhagem novos
  */
-async function gravarEdicao(tx: Transacao, idCaixa: number, plano: PlanoDoEstoque, idUsuario: number) {
+async function gravarEdicao(
+  tx: Transacao,
+  idCaixa: number,
+  plano: PlanoDoEstoque,
+  sexoDaCaixa: Sexo,
+  idUsuario: number,
+) {
   const quando = agora()
 
   for (const { idParto, depois } of plano.nascimentos) {
@@ -471,6 +583,31 @@ async function gravarEdicao(tx: Transacao, idCaixa: number, plano: PlanoDoEstoqu
       })
     }
   }
+
+  const sexo = plano.sexo ?? sexoDaCaixa
+
+  for (const quantidade of plano.quantidades) {
+    // o que faltou chega com a ninhada; o registro a mais nunca existiu. Uma correcao da ninhada,
+    // a mesma ocorrencia que corrige a contagem do parto de casal
+    await lancarOcorrencia(tx, {
+      tipo: 'correcao',
+      dtFato: quantidade.chegada,
+      idUsuario,
+      idParto: quantidade.idParto,
+      motivo: 'quantidade do cadastro inicial corrigida na edição da caixa de estoque',
+      anulados: quantidade.anulados,
+      novos:
+        quantidade.novos === 0
+          ? undefined
+          : { idCaixa, m: sexo === 'M' ? quantidade.novos : 0, f: sexo === 'F' ? quantidade.novos : 0, chegam: true },
+    })
+  }
+
+  // a caixa que so ficou com registros anulados fica vazia desde o ultimo fato real nela
+  if (plano.quantidades.some((quantidade) => quantidade.anulados.length > 0)) {
+    const chegada = plano.quantidades.map((quantidade) => quantidade.chegada).sort()[0] ?? ''
+    await liberarSeVazia(tx, idCaixa, chegada, 'baixa', idUsuario)
+  }
 }
 
 /**
@@ -484,7 +621,7 @@ export async function editarCaixaDeEstoque(idCaixa: number, dados: EdicaoDoEstoq
 
     if (plano === null) return
 
-    await gravarEdicao(tx, idCaixa, plano, idUsuario)
+    await gravarEdicao(tx, idCaixa, plano, retrato.caixa.sexo, idUsuario)
 
     await registrarHistorico(tx, {
       idUsuario,

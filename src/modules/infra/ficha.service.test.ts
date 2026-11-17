@@ -17,12 +17,14 @@ const banco = vi.hoisted(() => ({
   vivos: null as unknown,
   /** os vivos da caixa um a um: o pedido, a chegada e o nascimento */
   umAUm: [] as { idPedido: number | null; dtMovimento: Date | null; parto: { dtPartoReal: Date | null } }[],
+  /** quantos entraram em cada ninhada do cadastro inicial: todo animal dela, menos o anulado */
+  cadastrados: [] as { idParto: number; _count: { _all: number } }[],
 }))
 
 vi.mock('../../shared/prisma.ts', () => ({
   prisma: {
     caixa: { findUnique: async () => banco.caixa },
-    animal: { findMany: async () => banco.umAUm },
+    animal: { findMany: async () => banco.umAUm, groupBy: async () => banco.cadastrados },
     parto: {
       findMany: async ({ where }: { where: { idCasal: number } }) => banco.partos.filter((p) => p.idCasal === where.idCasal),
     },
@@ -95,6 +97,7 @@ const caixa = (campos: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   banco.caixa = caixa()
+  banco.cadastrados = []
   banco.partos = [
     { id: 10, idCasal: 1 },
     { id: 20, idCasal: 2 },
@@ -234,7 +237,7 @@ describe('a ficha da caixa de estoque', () => {
         livres: 4,
         pedidos: [],
         dtChegada: '2026-09-28',
-        origens: [{ idParto: 20, ordem: 1, casal: 'AB', codigoOrigem: 'F1A', numeroVisivelOrigem: 'E1', qtd: 4, dtEntrada: null }],
+        origens: [{ idParto: 20, ordem: 1, casal: 'AB', codigoOrigem: 'F1A', numeroVisivelOrigem: 'E1', qtd: 4, dtEntrada: null, cadastrados: null }],
       },
       {
         dtNascimento: '2026-10-01',
@@ -245,8 +248,8 @@ describe('a ficha da caixa de estoque', () => {
         pedidos: [{ idPedido: 9, qtd: 3 }],
         dtChegada: '2026-10-27',
         origens: [
-          { idParto: 30, ordem: 2, casal: 'EF', codigoOrigem: 'T2C', numeroVisivelOrigem: 'E2', qtd: 3, dtEntrada: null },
-          { idParto: 31, ordem: 1, casal: 'GH', codigoOrigem: 'F1A', numeroVisivelOrigem: 'E1', qtd: 1, dtEntrada: null },
+          { idParto: 30, ordem: 2, casal: 'EF', codigoOrigem: 'T2C', numeroVisivelOrigem: 'E2', qtd: 3, dtEntrada: null, cadastrados: null },
+          { idParto: 31, ordem: 1, casal: 'GH', codigoOrigem: 'F1A', numeroVisivelOrigem: 'E1', qtd: 1, dtEntrada: null, cadastrados: null },
         ],
       },
     ])
@@ -291,6 +294,11 @@ describe('a ficha da caixa de estoque', () => {
       ],
       [{ idPedido: 9, m: 1, f: 0 }],
     )
+    // da ninhada 40 entraram 3: 1 vivo aqui e 2 que ja sairam
+    banco.cadastrados = [
+      { idParto: 40, _count: { _all: 3 } },
+      { idParto: 41, _count: { _all: 2 } },
+    ]
 
     const ficha = await montarFicha(7)
     if (ficha.tipo !== 'estoque') throw new Error('ficha de casal')
@@ -301,14 +309,14 @@ describe('a ficha da caixa de estoque', () => {
         dtNascimento: '2026-09-19',
         pedidos: [{ idPedido: 9, qtd: 1 }],
         dtChegada: '2026-11-09',
-        origens: [{ idParto: 40, ordem: null, casal: null, codigoOrigem: null, numeroVisivelOrigem: null, qtd: 1, dtEntrada: '2026-11-09' }],
+        origens: [{ idParto: 40, ordem: null, casal: null, codigoOrigem: null, numeroVisivelOrigem: null, qtd: 1, dtEntrada: '2026-11-09', cadastrados: 3 }],
       }),
       expect.objectContaining({
         dtNascimento: '2026-10-04',
         total: 2,
         livres: 2,
         dtChegada: '2026-11-08',
-        origens: [{ idParto: 41, ordem: null, casal: null, codigoOrigem: null, numeroVisivelOrigem: null, qtd: 2, dtEntrada: '2026-11-08' }],
+        origens: [{ idParto: 41, ordem: null, casal: null, codigoOrigem: null, numeroVisivelOrigem: null, qtd: 2, dtEntrada: '2026-11-08', cadastrados: 2 }],
       }),
     ])
   })

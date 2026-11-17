@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { hojeISO } from '../../shared/traducao.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
-import { criarCaixaDeEstoque, exigirIdadeDoEstoque, registrarEntrada } from './entrada.service.ts'
+import { criarCaixaDeEstoque, exigirIdadeDoEstoque } from './entrada.service.ts'
 
 // O cadastro inicial do estoque contra um banco de mentira: a caixa nova, a ninhada sem casal, os
 // animais e a ocorrencia de entrada. O lancamento da ocorrencia e o de verdade (colonia/ocorrencia.ts)
@@ -94,8 +94,6 @@ const nova = { posicao, idLinhagem: 3, sexo: 'M' as const, quantidade: 6, dtNasc
 
 const noCampo = (campo: string, trecho: string) =>
   expect.objectContaining({ status: 400, extras: { campos: { [campo]: expect.stringContaining(trecho) } } })
-const recusa = (codigo: string, trecho: string) =>
-  expect.objectContaining({ status: 409, codigo, message: expect.stringContaining(trecho) })
 
 beforeEach(() => {
   banco.caixas = new Map([
@@ -189,42 +187,6 @@ describe('a caixa de estoque do cadastro inicial', () => {
       noCampo('dtNascimento', 'os animais têm 20 dias: a caixa de estoque só recebe desmamados, com 21 dias ou mais'),
     )
     expect(banco.caixas.size).toBe(4)
-  })
-})
-
-describe('mais um grupo de idade numa caixa de estoque', () => {
-  it('entra com o sexo e a linhagem da caixa, numa ninhada sem casal nova', async () => {
-    const resposta = await registrarEntrada(7, { quantidade: 3, dtNascimento: nascidoHa(50) }, 4)
-
-    expect(resposta).toEqual({ idCaixa: 7, codigo: 'F3C' })
-    expect(banco.travadas).toHaveLength(1)
-    expect(banco.partos).toEqual([expect.objectContaining({ idLinhagem: 3, dtPartoReal: d(nascidoHa(50)), dtDesmameReal: d(hoje) })])
-    expect(banco.animais.map((a) => [a.sexo, a.idCaixa])).toEqual([
-      ['F', 7],
-      ['F', 7],
-      ['F', 7],
-    ])
-    expect(banco.ocorrencias).toEqual([expect.objectContaining({ tipo: 'entrada', idCaixaDestino: 7, idParto: 100 })])
-  })
-
-  it('so na caixa de estoque ativa e com a linhagem ativa', async () => {
-    await expect(registrarEntrada(8, { quantidade: 1, dtNascimento: nascidoHa(30) }, 4)).rejects.toEqual(
-      recusa('SEQUENCIA_INVALIDA', 'A caixa F1A é uma caixa do casal'),
-    )
-    await expect(registrarEntrada(9, { quantidade: 1, dtNascimento: nascidoHa(30) }, 4)).rejects.toEqual(
-      recusa('CAIXA_LIBERADA', 'F2C'),
-    )
-    await expect(registrarEntrada(10, { quantidade: 1, dtNascimento: nascidoHa(30) }, 4)).rejects.toEqual(
-      recusa('SEQUENCIA_INVALIDA', 'A linhagem Kyoto desta caixa está inativa'),
-    )
-    await expect(registrarEntrada(99, { quantidade: 1, dtNascimento: nascidoHa(30) }, 4)).rejects.toEqual(
-      expect.objectContaining({ status: 404 }),
-    )
-    expect(banco.animais).toEqual([])
-  })
-
-  it('a idade minima vale tambem aqui', async () => {
-    await expect(registrarEntrada(7, { quantidade: 1, dtNascimento: hoje }, 4)).rejects.toEqual(noCampo('dtNascimento', '0 dias'))
   })
 })
 

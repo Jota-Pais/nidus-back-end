@@ -5,7 +5,7 @@ import { criarApp } from '../../app.ts'
 import { hojeISO } from '../../shared/traducao.ts'
 import type { Perfil } from '../../shared/traducao.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
-import { caixaDeEstoqueNova, edicaoDoEstoque, entradaNaCaixa, mudanca } from './caixa.routes.ts'
+import { caixaDeEstoqueNova, edicaoDoEstoque, mudanca } from './caixa.routes.ts'
 
 // Autorizacao e validacao de forma. Nenhum teste aqui chega ao banco
 
@@ -142,9 +142,6 @@ describe('o cadastro inicial do estoque', () => {
   it('so tecnico e gestor: o pesquisador recebe 403, sem sessao 401', async () => {
     expect((await request(app('pesquisador')).post('/api/caixas/estoque').send(nova)).status).toBe(403)
     expect((await request(app()).post('/api/caixas/estoque').send(nova)).status).toBe(401)
-    expect(
-      (await request(app('pesquisador')).post('/api/caixas/1/entrada').send({ quantidade: 3, dtNascimento: nascimento })).status,
-    ).toBe(403)
   })
 
   it('a posicao no formato do formar casal, o sexo, a quantidade de 1 a 999 e o nascimento ate hoje', () => {
@@ -163,13 +160,10 @@ describe('o cadastro inicial do estoque', () => {
     expect(campos({ ...nova, posicao: undefined })).toEqual(['posicao'])
   })
 
-  it('a entrada numa caixa que existe so pede a quantidade e o nascimento', async () => {
-    expect(entradaNaCaixa.safeParse({ quantidade: 3, dtNascimento: nascimento }).success).toBe(true)
-    expect(entradaNaCaixa.safeParse({ quantidade: 3 }).success).toBe(false)
+  it('acrescentar animais numa caixa que existe saiu: o cadastro so entra com a caixa nascendo', async () => {
+    const resposta = await request(app('tecnico')).post('/api/caixas/1/entrada').send({ quantidade: 3, dtNascimento: nascimento })
 
-    const resposta = await request(app('tecnico')).post('/api/caixas/1/entrada').send({ quantidade: 0, dtNascimento: nascimento })
-    expect(resposta.status).toBe(400)
-    expect(resposta.body.erro.campos).toHaveProperty('quantidade')
+    expect(resposta.status).toBe(404)
   })
 })
 
@@ -203,5 +197,23 @@ describe('edicao da caixa de estoque', () => {
         ],
       }).success,
     ).toBe(false)
+  })
+
+  it('a quantidade de cada ninhada do cadastro e de 1 a 999, uma vez por ninhada, e basta sozinha', () => {
+    expect(edicaoDoEstoque.safeParse({ quantidades: [{ idParto: 3, quantidade: 8 }] }).success).toBe(true)
+
+    const campos = (quantidades: unknown) =>
+      edicaoDoEstoque.safeParse({ quantidades }).error?.issues.map((issue) => issue.path.join('.'))
+
+    expect(campos([{ idParto: 3, quantidade: 0 }])).toEqual(['quantidades.0.quantidade'])
+    expect(campos([{ idParto: 3, quantidade: 1000 }])).toEqual(['quantidades.0.quantidade'])
+    expect(campos([{ idParto: 3, quantidade: 1.5 }])).toEqual(['quantidades.0.quantidade'])
+    expect(campos([])).toEqual(['quantidades'])
+    expect(
+      campos([
+        { idParto: 3, quantidade: 2 },
+        { idParto: 3, quantidade: 4 },
+      ]),
+    ).toEqual(['quantidades'])
   })
 })

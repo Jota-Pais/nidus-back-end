@@ -55,6 +55,22 @@ function entradaDoCadastro(vivos: VivoUmAUm[], idParto: number, semCasal: boolea
 }
 
 /**
+ * Quantos entraram em cada ninhada do cadastro inicial: todo animal dela, onde estiver, menos o
+ * registro anulado. E a quantidade que o lapis da caixa de estoque corrige
+ */
+async function cadastradosPorNinhada(idsPartos: number[]): Promise<Map<number, number>> {
+  if (idsPartos.length === 0) return new Map()
+
+  const linhas = await prisma.animal.groupBy({
+    by: ['idParto'],
+    where: { idParto: { in: idsPartos }, situacao: { not: 'anulado' } },
+    _count: { _all: true },
+  })
+
+  return new Map(linhas.map((linha) => [linha.idParto, linha._count._all]))
+}
+
+/**
  * Os vivos de uma idade na caixa: os reservados por pedido e a chegada mais recente deles na caixa,
  * a mesma que a baixa, a mudanca e a entrega conferem (chegadaDosAnimais) quando todos os escolhidos
  * sao desta idade
@@ -143,6 +159,9 @@ export async function montarFicha(idCaixa: number) {
   if (deEstoque) {
     const grupos = gruposPorNascimento(naCaixa.partos)
     const umAUm = await vivosUmAUm(idCaixa)
+    const cadastrados = await cadastradosPorNinhada(
+      naCaixa.partos.filter((parto) => parto.caixaDoCasal === null).map((parto) => parto.idParto),
+    )
 
     return {
       tipo: 'estoque' as const,
@@ -173,6 +192,8 @@ export async function montarFicha(idCaixa: number) {
           numeroVisivelOrigem: parto.caixaDoCasal?.numeroVisivel ?? null,
           qtd: parto.vivos.m + parto.vivos.f,
           dtEntrada: entradaDoCadastro(umAUm, parto.idParto, parto.caixaDoCasal === null),
+          /** quantos entraram na ninhada do cadastro inicial (o lapis corrige); null na de casal */
+          cadastrados: parto.caixaDoCasal === null ? (cadastrados.get(parto.idParto) ?? 0) : null,
         })),
       })),
       /** o que cada pedido tem reservado nesta caixa */

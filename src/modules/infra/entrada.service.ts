@@ -1,21 +1,20 @@
 // O cadastro inicial do estoque: os ratos que a colonia ja tinha antes do Nidus, de idade
-// conhecida e casal desconhecido. Entram numa caixa de estoque como uma ninhada sem casal
+// conhecida e casal desconhecido. Entram numa caixa de estoque nova como uma ninhada sem casal
 // (reproducao.parto sem casal, ordem e acasalamento), com o nascimento informado e ja desmamada
 // no dia do cadastro, porque estoque e de desmamados. A trilha ganha a ocorrencia 'entrada' com os
 // animais, e e ela que a tela Historico mostra ("Entrada de 6 machos Wistar nascidos em ... na
-// caixa F2A (cadastro inicial)")
+// caixa F2A (cadastro inicial)"). Animal do cadastro so entra assim, com a caixa nascendo: a
+// quantidade digitada errada se corrige no lapis da caixa de estoque (edicaoDoEstoque.service.ts)
 
 import type { Prisma } from '@prisma/client'
-import { campoInvalido, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
+import { campoInvalido, naoEncontrado } from '../../shared/erros.ts'
 import { IDADE_MINIMA_DO_ESTOQUE_DIAS } from '../../shared/parametros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { agora } from '../../shared/relogio.ts'
 import { dataLegivel, hojeISO, paraData } from '../../shared/traducao.ts'
-import { caixaLiberada } from '../colonia/liberacao.ts'
 import { lancarOcorrencia } from '../colonia/ocorrencia.ts'
 import { noNumero } from '../colonia/tipos.ts'
 import type { Sexo } from '../colonia/tipos.ts'
-import { travarCaixas } from '../colonia/travas.ts'
 import { diasEntre, somarDias } from '../reproducao/cadeiaTemporal.ts'
 import { exigirPosicaoVazia } from './posicao.ts'
 import type { PosicaoNaEstante } from './posicao.ts'
@@ -127,63 +126,5 @@ export async function criarCaixaDeEstoque(dados: CaixaDeEstoqueNova, idUsuario: 
     })
 
     return { idCaixa: caixa.id, codigo: caixa.codigo }
-  })
-}
-
-/**
- * POST /api/caixas/:id/entrada - mais um grupo de idade do cadastro inicial numa caixa de estoque
- * que ja existe: o sexo e a linhagem sao os da caixa, que tem de estar ativa e com a linhagem ativa
- */
-export async function registrarEntrada(idCaixa: number, dados: Entrada, idUsuario: number) {
-  const hoje = hojeISO()
-  exigirIdadeDoEstoque(dados.dtNascimento, hoje)
-
-  return prisma.$transaction(async (tx) => {
-    await travarCaixas(tx, [idCaixa])
-
-    const caixa = await tx.caixa.findUnique({
-      where: { id: idCaixa },
-      select: {
-        codigo: true,
-        ativa: true,
-        tipo: true,
-        sexo: true,
-        idEspecie: true,
-        linhagem: { select: { id: true, nome: true, ativa: true, idEspecie: true } },
-      },
-    })
-
-    if (caixa === null) throw naoEncontrado('Caixa')
-    if (!caixa.ativa) throw caixaLiberada(caixa.codigo)
-
-    const { linhagem, sexo } = caixa
-
-    if (caixa.tipo !== 'estoque' || linhagem === null || (sexo !== 'M' && sexo !== 'F')) {
-      throw erroDeRegra(
-        'SEQUENCIA_INVALIDA',
-        `A caixa ${caixa.codigo} é uma caixa do casal: a entrada do cadastro inicial vai numa caixa de estoque.`,
-      )
-    }
-
-    if (!linhagem.ativa) {
-      throw erroDeRegra('SEQUENCIA_INVALIDA', `A linhagem ${linhagem.nome} desta caixa está inativa e não recebe animais novos.`)
-    }
-
-    // a caixa ja nasce da especie da linhagem; o trigger dos animais cobra o mesmo
-    if (linhagem.idEspecie !== caixa.idEspecie) {
-      throw erroDeRegra('ANIMAL_CAIXA', `A caixa ${caixa.codigo} é de outra espécie que a linhagem ${linhagem.nome}.`)
-    }
-
-    await lancarEntrada(tx, {
-      idCaixa,
-      idLinhagem: linhagem.id,
-      sexo,
-      quantidade: dados.quantidade,
-      dtNascimento: dados.dtNascimento,
-      dtEntrada: hoje,
-      idUsuario,
-    })
-
-    return { idCaixa, codigo: caixa.codigo }
   })
 }
