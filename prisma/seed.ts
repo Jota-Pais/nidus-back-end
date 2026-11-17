@@ -21,11 +21,11 @@ async function semearEspeciesELinhagens() {
       create: { nome: especie.nome },
     })
 
-    for (const nome of especie.linhagens) {
+    for (const { nome, cruzamento } of especie.linhagens) {
       await prisma.linhagem.upsert({
         where: { idEspecie_nome: { idEspecie: gravada.id, nome } },
         update: {},
-        create: { idEspecie: gravada.id, nome },
+        create: { idEspecie: gravada.id, nome, cruzamento },
       })
     }
   }

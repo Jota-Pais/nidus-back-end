@@ -3,15 +3,25 @@
 // Sao dados de banco, nao constante de codigo. Ficam aqui so porque alguem tem
 // de escrever a primeira linha no banco vazio.
 
-/** As duas especies e as cinco linhagens. */
+/**
+ * As duas especies e as cinco linhagens, com o cruzamento das familias A-E que o CPMR
+ * descreveu: heterogenicas em rodizio, isogenicas na mesma letra.
+ */
 export const especies = [
   {
     nome: 'Rato',
-    linhagens: ['Wistar', 'SHR', 'Kyoto'],
+    linhagens: [
+      { nome: 'Wistar', cruzamento: 'rodizio' },
+      { nome: 'SHR', cruzamento: 'mesma_letra' },
+      { nome: 'Kyoto', cruzamento: 'mesma_letra' },
+    ],
   },
   {
     nome: 'Camundongo',
-    linhagens: ['Swiss', 'C57BL/6J'],
+    linhagens: [
+      { nome: 'Swiss', cruzamento: 'rodizio' },
+      { nome: 'C57BL/6J', cruzamento: 'mesma_letra' },
+    ],
   },
 ] as const
 

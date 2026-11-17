@@ -7,6 +7,11 @@ import { prisma } from '../../shared/prisma.ts'
 import { dataISO, hojeISO, paraData } from '../../shared/traducao.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
 
+/** Como se cruzam as famílias A-E da linhagem: só serve para o aviso no casal */
+type Cruzamento = 'rodizio' | 'mesma_letra'
+
+const NOME_DO_CRUZAMENTO: Record<string, string> = { rodizio: 'em rodízio', mesma_letra: 'na mesma letra' }
+
 export const SITUACAO_DO_PROJETO = { V: 'vigente', N: 'vencido', S: 'suspenso' } as const
 
 export type SituacaoDoProjeto = (typeof SITUACAO_DO_PROJETO)[keyof typeof SITUACAO_DO_PROJETO]
@@ -139,7 +144,7 @@ export async function alterarProjeto(id: number, dados: DadosDoProjeto, gestor: 
 }
 
 export async function criarLinhagem(
-  dados: { idEspecie: number; nome: string },
+  dados: { idEspecie: number; nome: string; cruzamento?: Cruzamento | null | undefined },
   gestor: UsuarioDaSessao,
 ) {
   const especie = await prisma.especie.findUnique({ where: { id: dados.idEspecie } })
@@ -157,7 +162,9 @@ export async function criarLinhagem(
   }
 
   const criada = await prisma.$transaction(async (tx) => {
-    const linhagem = await tx.linhagem.create({ data: dados })
+    const linhagem = await tx.linhagem.create({
+      data: { idEspecie: dados.idEspecie, nome: dados.nome, cruzamento: dados.cruzamento ?? null },
+    })
 
     await registrarHistorico(tx, {
       idUsuario: gestor.id,
@@ -171,12 +178,16 @@ export async function criarLinhagem(
     return linhagem
   })
 
-  return { id: criada.id, nome: criada.nome, ativa: criada.ativa }
+  return { id: criada.id, nome: criada.nome, ativa: criada.ativa, cruzamento: criada.cruzamento }
 }
 
 export async function alterarLinhagem(
   id: number,
-  dados: { nome?: string | undefined; ativa?: boolean | undefined },
+  dados: {
+    nome?: string | undefined
+    ativa?: boolean | undefined
+    cruzamento?: Cruzamento | null | undefined
+  },
   gestor: UsuarioDaSessao,
 ) {
   const linhagem = await prisma.linhagem.findUnique({ where: { id } })
@@ -205,6 +216,7 @@ export async function alterarLinhagem(
       data: {
         ...(dados.nome === undefined ? {} : { nome: dados.nome }),
         ...(dados.ativa === undefined ? {} : { ativa: dados.ativa }),
+        ...(dados.cruzamento === undefined ? {} : { cruzamento: dados.cruzamento }),
       },
     })
 
@@ -213,15 +225,19 @@ export async function alterarLinhagem(
       entidade: 'linhagem',
       idEntidade: id,
       acao: 'alteracao',
-      descricao: `Linhagem ${atualizada.nome} ${atualizada.ativa ? 'ativa' : 'inativa'}`,
+      descricao: `Linhagem ${atualizada.nome} ${atualizada.ativa ? 'ativa' : 'inativa'}, cruzamento ${NOME_DO_CRUZAMENTO[atualizada.cruzamento ?? ''] ?? 'sem regra'}`,
       dados: {
-        antes: { nome: linhagem.nome, ativa: linhagem.ativa },
-        depois: { nome: atualizada.nome, ativa: atualizada.ativa },
+        antes: { nome: linhagem.nome, ativa: linhagem.ativa, cruzamento: linhagem.cruzamento },
+        depois: {
+          nome: atualizada.nome,
+          ativa: atualizada.ativa,
+          cruzamento: atualizada.cruzamento,
+        },
       },
     })
 
     return atualizada
   })
 
-  return { id: salva.id, nome: salva.nome, ativa: salva.ativa }
+  return { id: salva.id, nome: salva.nome, ativa: salva.ativa, cruzamento: salva.cruzamento }
 }

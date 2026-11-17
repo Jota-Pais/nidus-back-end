@@ -135,6 +135,10 @@ model Linhagem {
   idEspecie Int     @map("id_especie")
   nome      String  @db.VarChar(60)
   ativa     Boolean @default(true)
+  /// Como se cruzam as familias A-E desta linhagem: 'rodizio' (heterogenica: macho A com
+  /// femea B, B com C ... E com A) ou 'mesma_letra' (isogenica). Nulo: sem regra. So serve
+  /// para avisar no casal; nunca impede o cadastro. O gestor muda nos Cadastros.
+  cruzamento String? @db.VarChar(12)
 
   especie Especie @relation(fields: [idEspecie], references: [id], onDelete: NoAction, onUpdate: NoAction)
   casais  Casal[]

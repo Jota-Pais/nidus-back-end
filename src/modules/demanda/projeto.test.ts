@@ -55,7 +55,7 @@ beforeEach(() => {
   banco.responsavel = { id: 5, ativo: true }
   banco.mesmoNumero = null
   banco.especie = { id: 1, nome: 'Rato' }
-  banco.linhagem = { id: 3, idEspecie: 1, nome: 'Wistar', ativa: true }
+  banco.linhagem = { id: 3, idEspecie: 1, nome: 'Wistar', ativa: true, cruzamento: null }
   banco.mesmoNome = null
   banco.criado = null
 })
@@ -94,15 +94,33 @@ describe('cadastro de linhagem', () => {
     )
   })
 
-  it('linhagem nova nasce ativa', async () => {
+  it('linhagem nova nasce ativa e, sem dizer o cruzamento, sem regra', async () => {
     await expect(criarLinhagem({ idEspecie: 1, nome: 'Lewis' }, gestor)).resolves.toEqual({
       id: 8,
       nome: 'Lewis',
       ativa: true,
+      cruzamento: null,
     })
+  })
+
+  it('linhagem nova com o cruzamento escolhido', async () => {
+    await expect(
+      criarLinhagem({ idEspecie: 1, nome: 'Lewis', cruzamento: 'mesma_letra' }, gestor),
+    ).resolves.toMatchObject({ cruzamento: 'mesma_letra' })
   })
 
   it('desativar a linhagem', async () => {
     await expect(alterarLinhagem(3, { ativa: false }, gestor)).resolves.toMatchObject({ ativa: false })
+  })
+
+  it('trocar só o cruzamento, ou tirar a regra', async () => {
+    await expect(alterarLinhagem(3, { cruzamento: 'rodizio' }, gestor)).resolves.toMatchObject({
+      nome: 'Wistar',
+      ativa: true,
+      cruzamento: 'rodizio',
+    })
+    await expect(alterarLinhagem(3, { cruzamento: null }, gestor)).resolves.toMatchObject({
+      cruzamento: null,
+    })
   })
 })

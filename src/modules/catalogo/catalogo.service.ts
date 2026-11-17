@@ -11,7 +11,7 @@ export async function montarCatalogo() {
       nome: true,
       linhagens: {
         orderBy: { id: 'asc' },
-        select: { id: true, nome: true, ativa: true },
+        select: { id: true, nome: true, ativa: true, cruzamento: true },
       },
     },
   })
