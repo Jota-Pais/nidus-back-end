@@ -95,18 +95,15 @@ describe('validacao da baixa', () => {
 })
 
 describe('validacao da anulacao', () => {
-  it('o motivo e obrigatorio; a caixa de cada sexo e opcional', async () => {
-    expect(anulacao.safeParse({ motivo: 'engano' }).success).toBe(true)
+  it('o motivo e opcional (em branco e o mesmo que sem), como a caixa de cada sexo', () => {
+    expect(anulacao.safeParse({}).success).toBe(true)
+    expect(anulacao.safeParse({ motivo: ' ' }).data).toEqual({ motivo: undefined })
     expect(anulacao.safeParse({ motivo: 'engano', idCaixaMachos: 7, idCaixaFemeas: 9 }).data).toEqual({
       motivo: 'engano',
       idCaixaMachos: 7,
       idCaixaFemeas: 9,
     })
-
-    const resposta = await request(app('tecnico')).post('/api/ocorrencias/3/anulacao').send({ motivo: ' ' })
-
-    expect(resposta.status).toBe(400)
-    expect(Object.keys(resposta.body.erro.campos)).toContain('motivo')
+    expect(anulacao.safeParse({ motivo: 'x'.repeat(201) }).success).toBe(false)
   })
 
   it('a caixa de um sexo que nao e um id e recusada no campo dele', async () => {

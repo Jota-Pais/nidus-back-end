@@ -19,5 +19,13 @@ export const dataDoFato = z.iso
   .refine((data) => data >= '2000-01-01', 'Use um ano a partir de 2000.')
   .refine((data) => data <= hojeISO(), 'A data não pode ser depois de hoje.')
 
-/** O motivo de uma correcao, que fica na trilha */
-export const motivoDaCorrecao = z.string().trim().min(1, 'Diga o motivo da correção.').max(200)
+/**
+ * O motivo de uma correcao ou anulacao, que fica na trilha quando escrito. Corrigir nao pede motivo:
+ * o historico ja guarda o antes, o depois e quem fez. Em branco e o mesmo que sem
+ */
+export const motivoDaCorrecao = z
+  .string()
+  .trim()
+  .max(200)
+  .optional()
+  .transform((motivo) => (motivo === '' ? undefined : motivo))

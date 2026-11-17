@@ -2,7 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Escolha, Escolhido, Grupo } from '../colonia/escolha.ts'
 import type { Lancamento } from '../colonia/ocorrencia.ts'
 import { cicloFicha } from './cicloFicha.ts'
-import { corrigirAcasalamento, corrigirDesmame, corrigirNascimento } from './correcao.service.ts'
+import {
+  corrigirAcasalamento,
+  corrigirBaixa,
+  corrigirDesmame,
+  corrigirNascimento,
+  corrigirSemNinhada,
+} from './correcao.service.ts'
 import {
   encerrarCasal,
   fecharSemNinhada,
@@ -27,6 +33,7 @@ type Caixa = {
   idEspecie: number
   sexo?: string | null
   idLinhagem?: number | null
+  dtLiberacao?: Date | null
 }
 type Casal = {
   id: number
@@ -71,6 +78,8 @@ type Ocorrencia = {
   anulada: boolean
   /** a caixa onde os animais chegaram (mudanca, a mais da correcao, volta da anulacao) */
   idCaixaDestino?: number | null
+  /** so na baixa e na anulacao: a caixa onde ela aconteceu */
+  idCaixaOrigem?: number
   /** so na baixa: morte ou eutanasia */
   causa?: string | null
 }
@@ -218,13 +227,30 @@ const db = {
     findMany: async ({ where }: { where: FiltroDeOcorrencia }) =>
       ocorrenciasQue(where)
         .sort((a, b) => a.dtFato.getTime() - b.dtFato.getTime())
-        .map((o) => ({ ...o, animais: o.ids.map((idAnimal) => ({ idAnimal })) })),
+        .map((o) => ({
+          ...o,
+          caixaOrigem: o.idCaixaOrigem === undefined ? null : { codigo: banco.caixas.get(o.idCaixaOrigem)?.codigo },
+          animais: o.ids.map((idAnimal) => ({ idAnimal, animal: banco.animais.find((a) => a.id === idAnimal) })),
+        })),
     updateMany: async ({ where, data }: { where: { idParto: number; tipo: string }; data: { dtFato: Date } }) => {
       for (const o of ocorrenciasQue(where)) o.dtFato = data.dtFato
     },
-    update: async ({ where, data }: { where: { id: number }; data: { dtFato: Date } }) => {
-      const ocorrencia = banco.ocorrencias.find((o) => o.id === where.id) as Ocorrencia
-      ocorrencia.dtFato = data.dtFato
+    update: async ({ where, data }: { where: { id: number }; data: Partial<Ocorrencia> }) => {
+      Object.assign(banco.ocorrencias.find((o) => o.id === where.id) as Ocorrencia, data)
+    },
+    // a baixa que se anula ou se corrige, como a anulacao a le
+    findUnique: async ({ where }: { where: { id: number } }) => {
+      const o = banco.ocorrencias.find((ocorrencia) => ocorrencia.id === where.id)
+      if (o === undefined) return null
+      return {
+        ...o,
+        idCaixaOrigem: o.idCaixaOrigem ?? null,
+        anulacoes: o.anulada ? [{ id: 0 }] : [],
+        animais: animaisCom(o.ids).map((a) => {
+          const parto = banco.partos.get(a.idParto) as Parto
+          return { animal: { ...a, parto: { dtDesmameReal: parto.dtDesmameReal, idLinhagem: parto.idLinhagem } } }
+        }),
+      }
     },
     aggregate: async ({ where }: { where: { idCaixaDestino: number } }) => ({
       _min: { dtFato: banco.primeiraChegada.get(where.idCaixaDestino) ?? null },
@@ -277,6 +303,8 @@ vi.mock('../colonia/consultas.ts', () => ({
     })
   },
   faltasDosPedidos: async (_tx: unknown, ids: number[]) => ids.map((idPedido) => ({ idPedido, m: 0, f: 0, qualquer: 1 })),
+  // nenhum pedido reservado comporta a volta: o reservado da baixa anulada volta livre
+  contagemDosPedidos: async () => new Map(),
 }))
 
 vi.mock('../colonia/escolha.ts', async (original) => ({
@@ -354,6 +382,17 @@ vi.mock('../colonia/ocorrencia.ts', () => ({
       ids = [...trocados, ...(l.anulados ?? []), ...(l.novaSaida?.ids ?? []), ...novos]
     }
 
+    // a volta da baixa anulada: os animais vivem de novo, os soltos sem a reserva, e a baixa sai
+    // das consultas (anulacoes: none)
+    if (l.tipo === 'anulacao') {
+      ids = l.ids
+      for (const a of animaisCom(ids)) {
+        Object.assign(a, { situacao: 'vivo', dtSaida: null, ...(l.soltos.includes(a.id) ? { idPedido: null } : {}) })
+      }
+      const anulada = banco.ocorrencias.find((o) => o.id === l.idAnulada)
+      if (anulada !== undefined) anulada.anulada = true
+    }
+
     const ocorrencia = {
       id: banco.proximoId++,
       tipo: l.tipo,
@@ -364,6 +403,8 @@ vi.mock('../colonia/ocorrencia.ts', () => ({
       anulada: false,
       idCaixaDestino: l.tipo === 'correcao' ? (l.novos?.idCaixa ?? null) : null,
       causa: l.tipo === 'baixa' ? l.causa : null,
+      ...(l.tipo === 'baixa' ? { idCaixaOrigem: l.idCaixa } : {}),
+      ...(l.tipo === 'anulacao' ? { idAnulada: l.idAnulada, idCaixaOrigem: l.idCaixaOrigem } : {}),
     }
     banco.ocorrencias.push(ocorrencia)
     return { idOcorrencia: ocorrencia.id, ids }
@@ -437,7 +478,7 @@ function morteNaCaixa(qtd: number, dtFato: string) {
   const mortos = doParto(1).filter((a) => a.sexo === 'M' && a.idCaixa === 1).slice(0, qtd)
   for (const a of mortos) Object.assign(a, { situacao: 'morto', dtSaida: d(dtFato) })
   const ids = mortos.map((a) => a.id)
-  banco.ocorrencias.push({ id: banco.proximoId++, tipo: 'baixa', dtFato: d(dtFato), idParto: null, motivo: 'morte', causa: 'morte', ids, anulada: false })
+  banco.ocorrencias.push({ id: banco.proximoId++, tipo: 'baixa', dtFato: d(dtFato), idParto: null, motivo: 'morte', causa: 'morte', ids, anulada: false, idCaixaOrigem: 1 })
   return ids
 }
 
@@ -1674,5 +1715,393 @@ describe('correcao da data do desmame', () => {
     await expect(corrigirDesmame(1, { dtDesmameReal: '2026-10-18', motivo: 'x' }, 4)).rejects.toEqual(
       recusa(409, 'SEQUENCIA_INVALIDA'),
     )
+  })
+})
+
+// ------------------------------------------------------------------ corrigir sem motivo
+
+describe('corrigir nao pede motivo', () => {
+  it('sem motivo, a trilha leva o texto do sistema, e o historico fica so com o antes e o depois', async () => {
+    nascido(3, 3)
+
+    await corrigirNascimento(1, { dtPartoReal: '2026-09-24', nascidoM: 4, nascidoF: 3 }, 4)
+
+    expect(banco.ocorrencias.at(-1)).toMatchObject({ tipo: 'correcao', motivo: 'correção do nascimento' })
+    expect(banco.historicos.at(-1)).toMatchObject({
+      acao: 'correcao_nascimento',
+      descricao: 'Correção do 1º parto (contagem de 3 machos e 3 fêmeas para 4 machos e 3 fêmeas)',
+    })
+    expect(banco.historicos.at(-1)?.dados).not.toHaveProperty('motivo')
+  })
+
+  it('a data do desmame tambem: a correcao da saida leva o texto do sistema', async () => {
+    nascido(3, 3)
+    await registrarDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 2, desmamadoF: 3 }, 4)
+
+    await corrigirDesmame(1, { dtDesmameReal: '2026-10-18' }, 4)
+
+    expect(banco.ocorrencias.at(-1)).toMatchObject({ tipo: 'correcao', motivo: 'correção do desmame' })
+    expect(banco.historicos.at(-1)?.descricao).toBe('Correção do desmame do 1º parto (de 16/10/2026 para 18/10/2026)')
+  })
+})
+
+// ------------------------------------------------------------------ contagem do desmame
+
+describe('correcao da contagem do desmame', () => {
+  const naoChegou = () => banco.ocorrencias.filter((o) => o.motivo === 'nao chegou ao desmame' && !o.anulada)
+
+  it('sobe desfazendo a baixa "nao chegou ao desmame": o animal volta vivo para a caixa do casal', async () => {
+    nascido(3, 3)
+    await registrarDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 2, desmamadoF: 3 }, 4)
+    const [antiga] = naoChegou()
+
+    const { parto: ciclo } = await corrigirDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 3 }, 4)
+
+    expect(ciclo).toMatchObject({ desmamadoM: 3, desmamadoF: 3, mortesNoAleitamento: { m: 0, f: 0 } })
+    // a baixa de antes anulada na data dela, e nenhuma nova: ninguem deixou de chegar
+    expect(antiga?.anulada).toBe(true)
+    expect(banco.ocorrencias.find((o) => o.tipo === 'anulacao')).toMatchObject({
+      idAnulada: antiga?.id,
+      dtFato: d('2026-10-16'),
+      motivo: 'correção do desmame',
+      idCaixaOrigem: 1,
+    })
+    expect(naoChegou()).toEqual([])
+    expect(contar(doParto(1).filter((a) => a.idCaixa === 1))).toEqual({ m: 3, f: 3 })
+    expect(banco.historicos.at(-1)).toMatchObject({
+      acao: 'correcao_desmame',
+      descricao: 'Correção do desmame do 1º parto (contagem de 2 machos e 3 fêmeas para 3 machos e 3 fêmeas)',
+      dados: {
+        antes: { dtDesmameReal: '2026-10-16', desmamadoM: 2, desmamadoF: 3 },
+        depois: { dtDesmameReal: '2026-10-16', desmamadoM: 3, desmamadoF: 3 },
+      },
+    })
+  })
+
+  it('sobe em parte: anula a baixa de antes e lanca a certa, uma baixa so do desmame', async () => {
+    nascido(4, 3)
+    await registrarDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 2, desmamadoF: 3 }, 4)
+
+    const { parto: ciclo } = await corrigirDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 3, desmamadoF: 3 }, 4)
+
+    expect(ciclo).toMatchObject({ desmamadoM: 3, desmamadoF: 3 })
+    const [certa] = naoChegou()
+    expect(naoChegou()).toHaveLength(1)
+    expect(certa).toMatchObject({ dtFato: d('2026-10-16'), causa: 'morte', idParto: 1 })
+    expect(contar(animaisCom(certa?.ids ?? []))).toEqual({ m: 1, f: 0 })
+  })
+
+  it('desce lancando a baixa "nao chegou ao desmame" com vivos da caixa do casal, na data do desmame', async () => {
+    nascido(3, 3)
+    await registrarDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 3, desmamadoF: 3 }, 4)
+    expect(naoChegou()).toEqual([])
+
+    const { parto: ciclo } = await corrigirDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoF: 2 }, 4)
+
+    expect(ciclo).toMatchObject({ desmamadoM: 3, desmamadoF: 2, mortesNoAleitamento: { m: 0, f: 1 } })
+    expect(naoChegou()).toHaveLength(1)
+    expect(animaisCom(naoChegou()[0]?.ids ?? []).map((a) => [a.sexo, iso(a.dtSaida)])).toEqual([['F', '2026-10-16']])
+  })
+
+  it('a data e a contagem juntas: a contagem conta na data nova', async () => {
+    nascido(3, 3)
+    morteNaCaixa(1, '2026-10-20')
+    await registrarDesmame(1, { dtDesmameReal: '2026-10-22', desmamadoM: 2, desmamadoF: 3 }, 4)
+
+    // em 18/10 o morto de 20/10 chegou ao desmame: com 2 machos, um deles nao chegou
+    const { parto: ciclo } = await corrigirDesmame(1, { dtDesmameReal: '2026-10-18', desmamadoM: 2 }, 4)
+
+    expect(ciclo).toMatchObject({ dtDesmameReal: '2026-10-18', desmamadoM: 2, desmamadoF: 3 })
+    expect(naoChegou()).toHaveLength(1)
+    expect(banco.historicos.at(-1)?.descricao).toBe('Correção do desmame do 1º parto (de 22/10/2026 para 18/10/2026)')
+  })
+
+  it('so sobe ate desfazer a baixa toda: as outras baixas antes do desmame se corrigem uma a uma', async () => {
+    nascido(3, 3)
+    await registrarSelecao(1, { dtSelecao: '2026-10-01', eutanasiadoM: 1, eutanasiadoF: 0 }, 4)
+    await registrarDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 1, desmamadoF: 3 }, 4)
+
+    await expect(corrigirDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 3 }, 4)).rejects.toEqual(
+      noCampo('desmamadoM', 'só sobe desfazendo a baixa "não chegou ao desmame" (1 macho): no máximo 2 machos'),
+    )
+  })
+
+  it('so desce com os vivos que continuam na caixa do casal: quem foi para o estoque chegou ao desmame', async () => {
+    const ids = nascido(3, 0)
+    await registrarDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 3, desmamadoF: 0 }, 4)
+    for (const a of animaisCom(ids.slice(0, 2))) Object.assign(a, { idCaixa: 6, dtMovimento: d('2026-10-17') })
+
+    await expect(corrigirDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 0 }, 4)).rejects.toEqual(
+      noCampo('desmamadoM', 'Só os vivos que continuam na caixa do casal (1 macho) passam a não ter chegado ao desmame: no mínimo 2 machos'),
+    )
+  })
+
+  it('com a ninhada do parto seguinte na caixa do casal, os que nao chegaram nao voltam para ela', async () => {
+    const ids = nascido(3, 3)
+    await registrarDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 2, desmamadoF: 3 }, 4)
+    for (const a of animaisCom(ids).filter((animal) => animal.situacao === 'vivo')) {
+      Object.assign(a, { idCaixa: a.sexo === 'M' ? 6 : 7, dtMovimento: d('2026-10-17') })
+    }
+    parto({ id: 2, ordem: 2, dtAcasalamento: d('2026-09-30'), dtPartoReal: d('2026-10-23') })
+    criarAnimais(2, 1, 2, 2)
+
+    await expect(corrigirDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 3 }, 4)).rejects.toEqual(
+      expect.objectContaining({
+        status: 409,
+        message:
+          'A caixa F1A tem agora a ninhada do 2º parto do casal AB: os animais que não chegaram ao desmame não voltam para ela, e a contagem do desmame não muda mais.',
+      }),
+    )
+    expect(naoChegou()).toHaveLength(1)
+  })
+
+  it('sem mudar data nem contagem, nada grava', async () => {
+    nascido(3, 3)
+    await registrarDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 2, desmamadoF: 3 }, 4)
+    const antes = { ocorrencias: banco.ocorrencias.length, historicos: banco.historicos.length }
+
+    await corrigirDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 2, desmamadoF: 3 }, 4)
+
+    expect({ ocorrencias: banco.ocorrencias.length, historicos: banco.historicos.length }).toEqual(antes)
+  })
+})
+
+// ------------------------------------------------------------------ baixa do parto
+
+describe('correcao de uma baixa do parto', () => {
+  const baixaAtiva = () => banco.ocorrencias.filter((o) => o.tipo === 'baixa' && !o.anulada)
+
+  /** 3 M e 3 F nascidos; a selecao de 01/10 levou 'm' machos: devolve a baixa dela */
+  async function comSelecao(m = 1) {
+    nascido(3, 3)
+    await registrarSelecao(1, { dtSelecao: '2026-10-01', eutanasiadoM: m, eutanasiadoF: 0 }, 4)
+    return baixaAtiva()[0] as Ocorrencia
+  }
+
+  it('mesma contagem: a data e a causa mudam na propria baixa, e a saida dos animais acompanha', async () => {
+    const selecao = await comSelecao()
+
+    const { parto: ciclo } = await corrigirBaixa(1, selecao.id, { dtFato: '2026-10-03', tipo: 'morte', qtdM: 1, qtdF: 0 }, 4)
+
+    // os mesmos animais: nenhuma anulacao, a baixa e a mesma
+    expect(banco.ocorrencias.some((o) => o.tipo === 'anulacao')).toBe(false)
+    expect(selecao).toMatchObject({ dtFato: d('2026-10-03'), causa: 'morte', motivo: 'morte', idParto: null })
+    expect(animaisCom(selecao.ids).map((a) => iso(a.dtSaida))).toEqual(['2026-10-03'])
+    expect(banco.ocorrencias.at(-1)).toMatchObject({ tipo: 'correcao', motivo: 'correção da baixa', ids: selecao.ids })
+    expect(ciclo).toMatchObject({ ajusteDeNinhada: { m: 0, f: 0 }, mortesNoAleitamento: { m: 1, f: 0 } })
+    expect(banco.historicos.at(-1)).toMatchObject({
+      acao: 'correcao_baixa',
+      descricao: 'Correção da baixa de 01/10/2026 do 1º parto (data de 01/10/2026 para 03/10/2026; causa de eutanásia para morte)',
+      dados: {
+        idOcorrencia: selecao.id,
+        antes: { dtFato: '2026-10-01', causa: 'eutanasia', qtdM: 1, qtdF: 0 },
+        depois: { dtFato: '2026-10-03', causa: 'morte', qtdM: 1, qtdF: 0 },
+      },
+    })
+  })
+
+  it('a eutanasia na caixa do casal ate o desmame e o ajuste de ninhada: a selecao do parto', async () => {
+    nascido(3, 3)
+    const [morto] = morteNaCaixa(1, '2026-10-03')
+    const morte = baixaAtiva()[0] as Ocorrencia
+
+    await corrigirBaixa(1, morte.id, { dtFato: '2026-10-03', tipo: 'eutanasia', qtdM: 1, qtdF: 0 }, 4)
+
+    expect(morte).toMatchObject({ causa: 'eutanasia', motivo: 'eutanasia de selecao', idParto: 1, ids: [morto] })
+    // so a causa mudou: nenhuma correcao da saida
+    expect(banco.ocorrencias.some((o) => o.tipo === 'correcao')).toBe(false)
+    expect(await cicloFicha(1)).toMatchObject({ ajusteDeNinhada: { m: 1, f: 0 }, dtUltimaSelecao: '2026-10-03' })
+  })
+
+  it('o motivo escrito no registro fica quando a causa muda', async () => {
+    nascido(3, 3)
+    morteNaCaixa(1, '2026-10-20')
+    const morte = baixaAtiva()[0] as Ocorrencia
+    morte.motivo = 'doença respiratória'
+    Object.assign(banco.partos.get(1) as Parto, { dtDesmameReal: d('2026-10-16') })
+
+    await corrigirBaixa(1, morte.id, { dtFato: '2026-10-20', tipo: 'eutanasia', qtdM: 1, qtdF: 0 }, 4)
+
+    // depois do desmame a eutanasia e a comum
+    expect(morte).toMatchObject({ causa: 'eutanasia', motivo: 'doença respiratória', idParto: null })
+  })
+
+  it('contagem menor: anula a baixa e lanca a certa com os mesmos animais; o que sobra volta vivo', async () => {
+    const selecao = await comSelecao(2)
+    const [primeiro, segundo] = selecao.ids
+
+    const { parto: ciclo } = await corrigirBaixa(1, selecao.id, { dtFato: '2026-10-01', tipo: 'eutanasia', qtdM: 1, qtdF: 0 }, 4)
+
+    expect(selecao.anulada).toBe(true)
+    expect(banco.ocorrencias.find((o) => o.tipo === 'anulacao')).toMatchObject({
+      idAnulada: selecao.id,
+      dtFato: d('2026-10-01'),
+      motivo: 'correção da baixa',
+    })
+    const [certa] = baixaAtiva()
+    expect(certa).toMatchObject({ motivo: 'eutanasia de selecao', causa: 'eutanasia', idParto: 1, ids: [primeiro] })
+    expect(animaisCom([segundo as number])[0]).toMatchObject({ situacao: 'vivo', dtSaida: null, idCaixa: 1 })
+    expect(ciclo).toMatchObject({ ajusteDeNinhada: { m: 1, f: 0 }, vivos: { m: 2, f: 3 } })
+    expect(banco.historicos.at(-1)?.descricao).toBe(
+      'Correção da baixa de 01/10/2026 do 1º parto (contagem de 2 machos para 1 macho)',
+    )
+  })
+
+  it('contagem maior: os mesmos animais primeiro, e os outros dos vivos do parto na caixa', async () => {
+    const selecao = await comSelecao()
+
+    await corrigirBaixa(1, selecao.id, { dtFato: '2026-10-02', tipo: 'eutanasia', qtdM: 2, qtdF: 1, motivo: 'contei errado' }, 4)
+
+    const [certa] = baixaAtiva()
+    expect(certa?.ids[0]).toBe(selecao.ids[0])
+    expect(contar(animaisCom(certa?.ids ?? []))).toEqual({ m: 2, f: 1 })
+    expect(animaisCom(certa?.ids ?? []).map((a) => iso(a.dtSaida))).toEqual(Array(3).fill('2026-10-02'))
+    expect(banco.ocorrencias.find((o) => o.tipo === 'anulacao')?.motivo).toBe('contei errado')
+    expect(banco.historicos.at(-1)?.descricao).toBe(
+      'Correção da baixa de 01/10/2026 do 1º parto (data de 01/10/2026 para 02/10/2026; contagem de 1 macho para 2 machos e 1 fêmea): contei errado',
+    )
+  })
+
+  it('nunca mais do que a baixa e os vivos do parto na caixa dela, campo a campo', async () => {
+    const selecao = await comSelecao()
+
+    await expect(
+      corrigirBaixa(1, selecao.id, { dtFato: '2026-10-01', tipo: 'eutanasia', qtdM: 4, qtdF: 0 }, 4),
+    ).rejects.toEqual(noCampo('qtdM', 'Não pode passar de 3 machos e 3 fêmeas: os desta baixa e os vivos deste parto na caixa F1A.'))
+    expect(selecao.anulada).toBe(false)
+  })
+
+  it('com outra ninhada na caixa do casal, a contagem nao muda; a data e a causa, sim', async () => {
+    const ids = nascido(3, 0)
+    morteNaCaixa(2, '2026-10-10')
+    Object.assign(banco.partos.get(1) as Parto, { dtDesmameReal: d('2026-10-16') })
+    for (const a of animaisCom(ids).filter((animal) => animal.situacao === 'vivo')) {
+      Object.assign(a, { idCaixa: 6, dtMovimento: d('2026-10-17') })
+    }
+    parto({ id: 2, ordem: 2, dtAcasalamento: d('2026-09-30'), dtPartoReal: d('2026-10-23') })
+    criarAnimais(2, 1, 2, 2)
+    const morte = baixaAtiva()[0] as Ocorrencia
+
+    // um dos dois voltaria a viver na caixa com a ninhada do 2o parto
+    await expect(corrigirBaixa(1, morte.id, { dtFato: '2026-10-10', tipo: 'morte', qtdM: 1, qtdF: 0 }, 4)).rejects.toEqual(
+      expect.objectContaining({
+        status: 409,
+        message:
+          'A caixa F1A tem agora a ninhada do 2º parto do casal AB: os animais desta baixa não voltam para ela, e a contagem da baixa não muda mais. Corrija só a data e a causa, ou exclua a baixa.',
+      }),
+    )
+
+    // nem depois do parto seguinte, que so nasceu com a caixa sem esta ninhada
+    await expect(corrigirBaixa(1, morte.id, { dtFato: '2026-10-24', tipo: 'morte', qtdM: 2, qtdF: 0 }, 4)).rejects.toEqual(
+      noCampo('dtFato', 'Não pode ser depois do 2º parto, que nasceu na mesma caixa (23/10/2026).'),
+    )
+
+    await corrigirBaixa(1, morte.id, { dtFato: '2026-10-12', tipo: 'eutanasia', qtdM: 2, qtdF: 0 }, 4)
+    expect(morte).toMatchObject({ dtFato: d('2026-10-12'), causa: 'eutanasia', motivo: 'eutanasia de selecao' })
+  })
+
+  it('na caixa de estoque: nem antes da chegada dos animais nela, nem depois da liberacao dela', async () => {
+    const [macho] = nascido(1, 0)
+    Object.assign(banco.partos.get(1) as Parto, { dtDesmameReal: d('2026-10-16') })
+    Object.assign(animaisCom([macho as number])[0] as Animal, {
+      idCaixa: 6,
+      dtMovimento: d('2026-10-20'),
+      situacao: 'morto',
+      dtSaida: d('2026-10-25'),
+    })
+    banco.ocorrencias.push({ id: 50, tipo: 'baixa', dtFato: d('2026-10-25'), idParto: null, motivo: 'morte', causa: 'morte', ids: [macho as number], anulada: false, idCaixaOrigem: 6 })
+    Object.assign(banco.caixas.get(6) as Caixa, { ativa: false, dtLiberacao: d('2026-10-25') })
+
+    await expect(corrigirBaixa(1, 50, { dtFato: '2026-10-19', tipo: 'morte', qtdM: 1, qtdF: 0 }, 4)).rejects.toEqual(
+      noCampo('dtFato', 'Não pode ser antes da chegada dos animais na caixa (20/10/2026).'),
+    )
+    await expect(corrigirBaixa(1, 50, { dtFato: '2026-10-26', tipo: 'morte', qtdM: 1, qtdF: 0 }, 4)).rejects.toEqual(
+      noCampo('dtFato', 'Não pode ser depois da liberação da caixa (25/10/2026).'),
+    )
+
+    // a data e a causa se corrigem mesmo com a caixa liberada: os mesmos animais, no lugar
+    await corrigirBaixa(1, 50, { dtFato: '2026-10-22', tipo: 'eutanasia', qtdM: 1, qtdF: 0 }, 4)
+    expect(banco.ocorrencias.find((o) => o.id === 50)).toMatchObject({ dtFato: d('2026-10-22'), causa: 'eutanasia', motivo: 'eutanásia' })
+  })
+
+  it('a baixa do desmame, a de outra ninhada e a que leva as duas nao se corrigem por aqui', async () => {
+    const ids = nascido(3, 3)
+    await registrarDesmame(1, { dtDesmameReal: '2026-10-16', desmamadoM: 2, desmamadoF: 3 }, 4)
+    const doDesmame = baixaAtiva()[0] as Ocorrencia
+
+    await expect(corrigirBaixa(1, doDesmame.id, { dtFato: '2026-10-16', tipo: 'morte', qtdM: 1, qtdF: 0 }, 4)).rejects.toEqual(
+      expect.objectContaining({ status: 409, message: expect.stringContaining('corrija a contagem do desmame') }),
+    )
+
+    parto({ id: 2, ordem: 2, dtAcasalamento: d('2026-09-30'), dtPartoReal: d('2026-10-23') })
+    const [deOutro] = criarAnimais(2, 1, 1, 0)
+    banco.ocorrencias.push({ id: 60, tipo: 'baixa', dtFato: d('2026-10-24'), idParto: null, motivo: 'morte', causa: 'morte', ids: [deOutro as number], anulada: false, idCaixaOrigem: 1 })
+    banco.ocorrencias.push({ id: 61, tipo: 'baixa', dtFato: d('2026-10-24'), idParto: null, motivo: 'morte', causa: 'morte', ids: [ids[1] as number, deOutro as number], anulada: false, idCaixaOrigem: 1 })
+
+    await expect(corrigirBaixa(1, 60, { dtFato: '2026-10-24', tipo: 'morte', qtdM: 1, qtdF: 0 }, 4)).rejects.toEqual(
+      expect.objectContaining({ status: 409, message: 'Esta baixa não é deste parto. Atualize a tela e tente de novo.' }),
+    )
+    await expect(corrigirBaixa(1, 61, { dtFato: '2026-10-24', tipo: 'morte', qtdM: 1, qtdF: 0 }, 4)).rejects.toEqual(
+      expect.objectContaining({ status: 409, message: expect.stringContaining('animais de outra ninhada') }),
+    )
+  })
+
+  it('sem mudar nada, nada grava', async () => {
+    const selecao = await comSelecao()
+    const antes = { ocorrencias: banco.ocorrencias.length, historicos: banco.historicos.length }
+
+    await corrigirBaixa(1, selecao.id, { dtFato: '2026-10-01', tipo: 'eutanasia', qtdM: 1, qtdF: 0 }, 4)
+
+    expect({ ocorrencias: banco.ocorrencias.length, historicos: banco.historicos.length }).toEqual(antes)
+  })
+})
+
+// ------------------------------------------------------------------ fechamento sem ninhada
+
+describe('correcao do fechamento sem ninhada', () => {
+  /** O casal AB encerrado em 27/10 com o 1o parto pendente, fechado sem ninhada em 30/10 */
+  async function fechado() {
+    Object.assign(banco.casais.get(1) as Casal, { ativo: false, dtEncerramento: d('2026-10-27') })
+    await fecharSemNinhada(1, { dtSemNinhada: '2026-10-30', motivo: 'não emprenhou' }, 4)
+  }
+
+  it('corrige a data e o motivo do fechamento, com o antes e o depois no historico', async () => {
+    await fechado()
+
+    const ciclo = await corrigirSemNinhada(1, { dtSemNinhada: '2026-10-28', motivo: 'a fêmea morreu' }, 4)
+
+    expect(ciclo).toMatchObject({ dtSemNinhada: '2026-10-28', motivoSemNinhada: 'a fêmea morreu' })
+    expect(banco.historicos.at(-1)).toMatchObject({
+      acao: 'correcao_sem_ninhada',
+      descricao:
+        'Correção do fechamento sem ninhada do 1º parto (de 30/10/2026 para 28/10/2026; motivo de "não emprenhou" para "a fêmea morreu")',
+      dados: {
+        antes: { dtSemNinhada: '2026-10-30', motivo: 'não emprenhou' },
+        depois: { dtSemNinhada: '2026-10-28', motivo: 'a fêmea morreu' },
+      },
+    })
+  })
+
+  it('nem antes do encerramento do casal, nem depois da liberacao da caixa do casal', async () => {
+    await fechado()
+    Object.assign(banco.caixas.get(1) as Caixa, { dtLiberacao: d('2026-10-30') })
+
+    await expect(corrigirSemNinhada(1, { dtSemNinhada: '2026-10-26', motivo: 'x' }, 4)).rejects.toEqual(
+      noCampo('dtSemNinhada', 'Não pode ser antes do encerramento do casal (27/10/2026).'),
+    )
+    await expect(corrigirSemNinhada(1, { dtSemNinhada: '2026-10-31', motivo: 'x' }, 4)).rejects.toEqual(
+      noCampo('dtSemNinhada', 'Não pode ser depois da liberação da caixa do casal (30/10/2026).'),
+    )
+  })
+
+  it('so corrige o parto fechado sem ninhada; sem mudanca, nada grava', async () => {
+    await expect(corrigirSemNinhada(1, { dtSemNinhada: '2026-10-28', motivo: 'x' }, 4)).rejects.toEqual(
+      recusa(409, 'SEQUENCIA_INVALIDA'),
+    )
+
+    await fechado()
+    const historicos = banco.historicos.length
+    await corrigirSemNinhada(1, { dtSemNinhada: '2026-10-30', motivo: 'não emprenhou' }, 4)
+    expect(banco.historicos).toHaveLength(historicos)
   })
 })

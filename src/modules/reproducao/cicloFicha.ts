@@ -5,10 +5,10 @@ import { erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { dataISO } from '../../shared/traducao.ts'
 import { causaDe, contarBaixasDoAleitamento } from '../colonia/causa.ts'
-import type { BaixasDoAleitamento } from '../colonia/causa.ts'
+import type { BaixasDoAleitamento, CausaDaBaixa } from '../colonia/causa.ts'
 import { animaisDoParto } from '../colonia/consultas.ts'
 import type { AnimalDoParto } from '../colonia/consultas.ts'
-import { MOTIVO_SELECAO, contarPorSexo, sexoDe, somarUm } from '../colonia/tipos.ts'
+import { MOTIVO_NAO_CHEGOU_AO_DESMAME, MOTIVO_SELECAO, contarPorSexo, sexoDe, somarUm } from '../colonia/tipos.ts'
 import type { PorSexo } from '../colonia/tipos.ts'
 import { calcularCicloInicial, calcularDesmamePrevisto } from './cadeiaTemporal.ts'
 import { baixaDoParto, limitesDoDesmame, primeiraSaida, primeiroFatoDoNascimento } from './trilhaDoParto.ts'
@@ -131,14 +131,62 @@ export function baixasDoAleitamento(
   )
 }
 
-/** A causa da baixa de cada morto do parto: a das baixas que nao foram anuladas */
-async function causasDasBaixas(idParto: number): Promise<Map<number, string | null>> {
-  const baixas = await prisma.ocorrencia.findMany({
+/** As baixas que nao foram anuladas dos animais do parto, pela data */
+function lerBaixas(idParto: number) {
+  return prisma.ocorrencia.findMany({
     where: { tipo: 'baixa', anulacoes: { none: {} }, animais: { some: { animal: { idParto } } } },
-    select: { causa: true, animais: { select: { idAnimal: true } } },
+    orderBy: [{ dtFato: 'asc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      dtFato: true,
+      causa: true,
+      motivo: true,
+      caixaOrigem: { select: { codigo: true } },
+      animais: { select: { idAnimal: true, animal: { select: { sexo: true, idParto: true } } } },
+    },
   })
+}
 
+type BaixaLida = Awaited<ReturnType<typeof lerBaixas>>[number]
+
+/** A causa da baixa de cada morto do parto: a das baixas que nao foram anuladas */
+function causasDasBaixas(baixas: BaixaLida[]): Map<number, string | null> {
   return new Map(baixas.flatMap((baixa) => baixa.animais.map((ligacao) => [ligacao.idAnimal, baixa.causa] as const)))
+}
+
+/** Uma baixa dos animais do parto, como a edicao do parto a lista para corrigir ou excluir */
+export type BaixaDoParto = {
+  idOcorrencia: number
+  dtFato: string
+  causa: CausaDaBaixa
+  /** a caixa onde a baixa aconteceu */
+  codigo: string
+  /** os animais deste parto na baixa */
+  m: number
+  f: number
+  /** a diferenca do desmame ('nao chegou ao desmame'): corrige-se pela contagem do desmame */
+  doDesmame: boolean
+  /** a baixa leva tambem animais de outra ninhada: nao se corrige pela ficha deste parto */
+  comOutraNinhada: boolean
+}
+
+/** As baixas do parto, cada uma com os animais dele */
+export function baixasDoParto(idParto: number, baixas: BaixaLida[]): BaixaDoParto[] {
+  return baixas.map((baixa) => {
+    const animais = baixa.animais.map((ligacao) => ligacao.animal)
+    const deste = contarPorSexo(animais.filter((animal) => animal.idParto === idParto))
+
+    return {
+      idOcorrencia: baixa.id,
+      dtFato: dataISO(baixa.dtFato),
+      causa: causaDe(baixa.causa),
+      codigo: baixa.caixaOrigem?.codigo ?? '',
+      m: deste.m,
+      f: deste.f,
+      doDesmame: baixa.motivo === MOTIVO_NAO_CHEGOU_AO_DESMAME,
+      comOutraNinhada: animais.some((animal) => animal.idParto !== idParto),
+    }
+  })
 }
 
 /**
@@ -189,7 +237,8 @@ export async function cicloFicha(idParto: number) {
   const desmame = nasceu ? await limitesDoDesmame(prisma, parto) : null
   const primeiroFato = nasceu ? await primeiroFatoDoNascimento(prisma, idParto) : null
   const ultimaSelecao = nasceu ? await baixaDoParto(prisma, idParto, MOTIVO_SELECAO, 'desc') : null
-  const aleitamento = baixasDoAleitamento(parto.dtDesmameReal, animais, nasceu ? await causasDasBaixas(idParto) : new Map())
+  const baixas = nasceu ? await lerBaixas(idParto) : []
+  const aleitamento = baixasDoAleitamento(parto.dtDesmameReal, animais, causasDasBaixas(baixas))
 
   return {
     id: parto.id,
@@ -226,6 +275,8 @@ export async function cicloFicha(idParto: number) {
     dtPrimeiraSaida: iso(desmame === null ? null : primeiraSaida(desmame)),
     /** a primeira baixa, mudanca ou entrega nao anulada dos animais: o nascimento nao passa dela */
     dtPrimeiroFato: iso(primeiroFato?.dtFato ?? null),
+    /** as baixas nao anuladas dos animais do parto, pela data: a edicao do parto corrige cada uma */
+    baixas: baixasDoParto(idParto, baixas),
   }
 }
 

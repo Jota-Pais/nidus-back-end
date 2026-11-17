@@ -387,7 +387,7 @@ export async function registrarNascimento(idParto: number, dados: Nascimento, id
     if (parto.dtPartoReal !== null) {
       throw erroDeRegra(
         'SEQUENCIA_INVALIDA',
-        'Este parto já tem data real registrada. Para mudar, use Corrigir no parto.',
+        'Este parto já tem data real registrada. Para mudar, use o lápis Editar da ficha.',
       )
     }
 
@@ -468,10 +468,11 @@ export async function registrarNascimento(idParto: number, dados: Nascimento, id
 // ------------------------------------------------------------ selecao e desmame
 
 /**
- * A baixa de animais do parto na caixa do casal (a selecao e a diferenca do desmame): livres
- * primeiro, depois os reservados do pedido indicado. Devolve os escolhidos, ja baixados
+ * A baixa de animais do parto na caixa do casal (a selecao e a diferenca do desmame, tambem a da
+ * correcao da contagem do desmame): livres primeiro, depois os reservados do pedido indicado.
+ * Devolve os escolhidos, ja baixados
  */
-async function baixarDoParto(
+export async function baixarDoParto(
   tx: Transacao,
   parto: PartoTravado,
   qtd: PorSexo,
@@ -608,7 +609,7 @@ export async function registrarDesmame(idParto: number, dados: Desmame, idUsuari
     if (parto.dtDesmameReal !== null) {
       throw erroDeRegra(
         'SEQUENCIA_INVALIDA',
-        'O desmame deste parto já foi registrado. Para mudar a data, use Corrigir no parto.',
+        'O desmame deste parto já foi registrado. Para mudar, use o lápis Editar da ficha.',
       )
     }
 

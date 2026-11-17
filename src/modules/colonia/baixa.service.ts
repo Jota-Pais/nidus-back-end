@@ -1,9 +1,10 @@
 // Morte ou eutanasia em qualquer caixa (uma acao so: a baixa) e a anulacao de uma baixa lancada
-// por engano
+// por engano. A correcao de uma baixa do parto (reproducao/correcao.service.ts) anula e lanca de
+// novo pelas pecas daqui
 
 import { ErroDeAplicacao, campoInvalido, camposInvalidos, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
-import { hojeISO } from '../../shared/traducao.ts'
+import { dataISO, hojeISO } from '../../shared/traducao.ts'
 import type { Prisma } from '@prisma/client'
 import { contagemDosPedidos, faltasDosPedidos, ninhadasNaCaixa } from './consultas.ts'
 import { exigirEstoqueQueRecebe, recusaDoEstoque } from './destino.ts'
@@ -14,6 +15,7 @@ import { caixaLiberada, liberarSeVazia } from './liberacao.ts'
 import { lancarOcorrencia } from './ocorrencia.ts'
 import { soltosNaAnulacao } from './reserva.ts'
 import {
+  MOTIVO_DA_ANULACAO,
   MOTIVO_SELECAO,
   ROTULO_DO_SEXO,
   SEXOS,
@@ -50,7 +52,8 @@ export type Baixa = {
   itens: ItemDaBaixa[]
 }
 
-const MOTIVO_DO_TIPO: Record<TipoDaBaixa, string> = { morte: 'morte', eutanasia: 'eutanásia' }
+/** O motivo que a baixa grava quando quem registra nao escreve um: o nome da causa */
+export const MOTIVO_DO_TIPO: Record<TipoDaBaixa, string> = { morte: 'morte', eutanasia: 'eutanásia' }
 
 /**
  * POST /api/caixas/:id/baixa - morte ou eutanasia de animais da caixa, de qualquer tipo. Saem
@@ -114,7 +117,8 @@ export async function registrarBaixa(idCaixa: number, dados: Baixa, idUsuario: n
 // ------------------------------------------------------------ anulacao
 
 export type AnulacaoDeBaixa = {
-  motivo: string
+  /** Sem ele, a trilha diz que a baixa foi lancada por engano */
+  motivo?: string | undefined
   /** Para onde voltam os machos, quando a caixa da baixa nao serve mais para eles */
   idCaixaMachos?: number | undefined
   /** Para onde voltam as femeas, quando a caixa da baixa nao serve mais para elas */
@@ -162,6 +166,8 @@ export type CaixaDaBaixa = {
   tipo: string
   sexo: string | null
   idLinhagem: number | null
+  /** a correcao da data da baixa nao passa dela */
+  dtLiberacao: Date | null
 }
 
 export const selecaoDaCaixaDaBaixa = {
@@ -171,6 +177,7 @@ export const selecaoDaCaixaDaBaixa = {
   tipo: true,
   sexo: true,
   idLinhagem: true,
+  dtLiberacao: true,
 } satisfies Prisma.CaixaSelect
 
 /** Para onde voltou cada sexo da baixa */
@@ -182,7 +189,7 @@ export type Volta = { sexo: Sexo; qtd: number; idCaixa: number; codigo: string }
  * dividem a caixa (a mesma regra do nascimento). A de estoque, tambem a de casal que virou estoque
  * depois da baixa, so recebe desmamados do sexo e da linhagem dela
  */
-async function porQueNaoVolta(
+export async function porQueNaoVolta(
   tx: Prisma.TransactionClient,
   origem: CaixaDaBaixa,
   animais: AnimalDaBaixa[],
@@ -258,14 +265,136 @@ async function caixaDaVolta(
   return { idCaixa: indicada, codigo }
 }
 
+/** A baixa que se anula, lida depois de travada e conferida: e baixa, tem caixa e esta de pe */
+export type BaixaAnulavel = {
+  id: number
+  dtFato: Date
+  causa: string | null
+  motivo: string | null
+  idParto: number | null
+  idCaixaOrigem: number
+  animais: AnimalDaBaixa[]
+}
+
+/**
+ * Le a baixa que quem chama ja travou (travarOcorrencia) e confere que ela se anula: existe, e
+ * baixa, e ainda nao foi anulada. A anulacao e as correcoes que anulam para lancar de novo leem por
+ * aqui
+ */
+export async function lerBaixaAnulavel(tx: Prisma.TransactionClient, idOcorrencia: number): Promise<BaixaAnulavel> {
+  const baixa = await tx.ocorrencia.findUnique({
+    where: { id: idOcorrencia },
+    select: {
+      tipo: true,
+      dtFato: true,
+      causa: true,
+      motivo: true,
+      idParto: true,
+      idCaixaOrigem: true,
+      anulacoes: { select: { id: true }, take: 1 },
+      animais: { orderBy: { idAnimal: 'asc' }, select: { animal: { select: selecaoDoAnimalDaBaixa } } },
+    },
+  })
+
+  if (baixa === null) throw naoEncontrado('Baixa')
+
+  if (baixa.tipo !== 'baixa' || baixa.idCaixaOrigem === null) {
+    throw erroDeRegra('SEQUENCIA_INVALIDA', 'Só a baixa se anula.')
+  }
+
+  if (baixa.anulacoes.length > 0) {
+    throw erroDeRegra('OCORRENCIA_JA_ANULADA', 'Esta baixa já foi anulada. Atualize a tela e tente de novo.')
+  }
+
+  return {
+    id: idOcorrencia,
+    dtFato: baixa.dtFato,
+    causa: baixa.causa,
+    motivo: baixa.motivo,
+    idParto: baixa.idParto,
+    idCaixaOrigem: baixa.idCaixaOrigem,
+    animais: baixa.animais.map(({ animal }) => animalDaBaixa(animal)),
+  }
+}
+
+/** A caixa onde a baixa aconteceu, lida depois de travada */
+export async function lerCaixaDaBaixa(tx: Prisma.TransactionClient, idCaixa: number): Promise<CaixaDaBaixa> {
+  const caixa = await tx.caixa.findUnique({ where: { id: idCaixa }, select: selecaoDaCaixaDaBaixa })
+
+  if (caixa === null) throw naoEncontrado('Caixa')
+
+  return caixa
+}
+
+/**
+ * Grava a volta dos animais da baixa: uma ocorrencia de anulacao por caixa de destino, todas
+ * apontando a baixa, como a mudanca (uma origem, um destino); os dois sexos que voltam para a caixa
+ * da baixa ficam numa so. A reserva volta junto quando o pedido continua reservado e comporta o
+ * animal; senao, ele volta livre. Devolve os ids dos que voltaram soltos
+ */
+async function lancarVolta(
+  tx: Prisma.TransactionClient,
+  baixa: BaixaAnulavel,
+  voltas: { idCaixa: number; animais: AnimalDaBaixa[] }[],
+  lancamento: { motivo: string; dtVolta: string; idUsuario: number },
+): Promise<number[]> {
+  const pedidos = pedidosTocados(baixa.animais)
+  await travarPedidos(tx, pedidos)
+  const soltos = soltosNaAnulacao(baixa.animais, await contagemDosPedidos(tx, pedidos))
+
+  for (const idCaixa of [...new Set(voltas.map((volta) => volta.idCaixa))]) {
+    const ids = voltas.filter((volta) => volta.idCaixa === idCaixa).flatMap((volta) => volta.animais.map((a) => a.id))
+
+    await lancarOcorrencia(tx, {
+      tipo: 'anulacao',
+      dtFato: lancamento.dtVolta,
+      idUsuario: lancamento.idUsuario,
+      idAnulada: baixa.id,
+      motivo: lancamento.motivo,
+      idParto: baixa.idParto ?? undefined,
+      idCaixaOrigem: baixa.idCaixaOrigem,
+      idCaixaDestino: idCaixa === baixa.idCaixaOrigem ? undefined : idCaixa,
+      ids,
+      soltos: soltos.filter((id) => ids.includes(id)),
+    })
+  }
+
+  return soltos
+}
+
+/**
+ * A anulacao que faz parte de uma correcao (da baixa, da contagem do desmame), na transacao de quem
+ * corrige, que ja travou a baixa e a caixa dela: os animais voltam vivos para a caixa da baixa na
+ * data da propria baixa, e quem corrige lanca logo em seguida a baixa certa. A volta e de passagem,
+ * entao nao vai para outra caixa: se a caixa da baixa nao serve mais para os animais (porQueNaoVolta),
+ * recusa com a mensagem que 'naoVolta' monta com o codigo da caixa e o motivo. Devolve os animais
+ * como ficaram, sem a reserva os que voltaram soltos
+ */
+export async function anularParaCorrigir(
+  tx: Prisma.TransactionClient,
+  baixa: BaixaAnulavel,
+  origem: CaixaDaBaixa,
+  lancamento: { motivo: string; idUsuario: number },
+  naoVolta: (caixa: string, estado: string) => string,
+): Promise<AnimalDaBaixa[]> {
+  const estado = await porQueNaoVolta(tx, origem, baixa.animais)
+  if (estado !== null) throw erroDeRegra('SEQUENCIA_INVALIDA', naoVolta(origem.codigo, estado))
+
+  const soltos = await lancarVolta(tx, baixa, [{ idCaixa: origem.id, animais: baixa.animais }], {
+    ...lancamento,
+    dtVolta: dataISO(baixa.dtFato),
+  })
+
+  return baixa.animais.map((animal) => (soltos.includes(animal.id) ? { ...animal, idPedido: null } : animal))
+}
+
 /**
  * POST /api/ocorrencias/:id/anulacao - desfaz uma baixa lancada por engano: os animais voltam a
  * viver, cada sexo na caixa onde estava ou, quando ela nao serve mais para ele, na caixa de
  * estoque indicada para o sexo (caixaDaVolta). A reserva volta junto quando o pedido continua
- * reservado e comporta o animal; senao, ele volta livre. Grava uma ocorrencia de anulacao por caixa
- * para onde os animais voltaram, todas apontando a baixa, como a mudanca (uma origem, um destino).
- * A baixa se anula uma vez so: ela fica travada, e a segunda anulacao ve a primeira. E tambem como
- * se corrige a contagem do desmame e da selecao
+ * reservado e comporta o animal; senao, ele volta livre (lancarVolta). Sem motivo escrito, a trilha
+ * diz que a baixa foi lancada por engano. A baixa se anula uma vez so: ela fica travada, e a segunda
+ * anulacao ve a primeira. E tambem o Excluir da baixa na edicao do parto
  */
 export async function anularBaixa(
   idOcorrencia: number,
@@ -275,28 +404,8 @@ export async function anularBaixa(
   return prisma.$transaction(async (tx) => {
     await travarOcorrencia(tx, idOcorrencia)
 
-    const baixa = await tx.ocorrencia.findUnique({
-      where: { id: idOcorrencia },
-      select: {
-        tipo: true,
-        idParto: true,
-        idCaixaOrigem: true,
-        anulacoes: { select: { id: true }, take: 1 },
-        animais: { orderBy: { idAnimal: 'asc' }, select: { animal: { select: selecaoDoAnimalDaBaixa } } },
-      },
-    })
-
-    if (baixa === null) throw naoEncontrado('Baixa')
-
-    if (baixa.tipo !== 'baixa' || baixa.idCaixaOrigem === null) {
-      throw erroDeRegra('SEQUENCIA_INVALIDA', 'Só a baixa se anula.')
-    }
-
-    if (baixa.anulacoes.length > 0) {
-      throw erroDeRegra('OCORRENCIA_JA_ANULADA', 'Esta baixa já foi anulada. Atualize a tela e tente de novo.')
-    }
-
-    const animais = baixa.animais.map(({ animal }) => animalDaBaixa(animal))
+    const baixa = await lerBaixaAnulavel(tx, idOcorrencia)
+    const { animais } = baixa
 
     const indicadas: Record<Sexo, number | undefined> = { M: dados.idCaixaMachos, F: dados.idCaixaFemeas }
 
@@ -308,9 +417,7 @@ export async function anularBaixa(
 
     await travarCaixas(tx, [baixa.idCaixaOrigem, ...SEXOS.flatMap((sexo) => indicadas[sexo] ?? [])])
 
-    const origem = await tx.caixa.findUnique({ where: { id: baixa.idCaixaOrigem }, select: selecaoDaCaixaDaBaixa })
-
-    if (origem === null) throw naoEncontrado('Caixa')
+    const origem = await lerCaixaDaBaixa(tx, baixa.idCaixaOrigem)
 
     const dtVolta = hojeISO()
     const voltas: (Volta & { animais: AnimalDaBaixa[] })[] = []
@@ -333,28 +440,11 @@ export async function anularBaixa(
 
     if (Object.keys(recusas).length > 0) throw camposInvalidos(recusas)
 
-    const pedidos = pedidosTocados(animais)
-    await travarPedidos(tx, pedidos)
-    const soltos = soltosNaAnulacao(animais, await contagemDosPedidos(tx, pedidos))
-
-    // uma ocorrencia por caixa de destino: os dois sexos que voltam para a caixa da baixa ficam
-    // numa so
-    for (const idCaixa of [...new Set(voltas.map((volta) => volta.idCaixa))]) {
-      const ids = voltas.filter((volta) => volta.idCaixa === idCaixa).flatMap((volta) => volta.animais.map((a) => a.id))
-
-      await lancarOcorrencia(tx, {
-        tipo: 'anulacao',
-        dtFato: dtVolta,
-        idUsuario,
-        idAnulada: idOcorrencia,
-        motivo: dados.motivo,
-        idParto: baixa.idParto ?? undefined,
-        idCaixaOrigem: origem.id,
-        idCaixaDestino: idCaixa === origem.id ? undefined : idCaixa,
-        ids,
-        soltos: soltos.filter((id) => ids.includes(id)),
-      })
-    }
+    const soltos = await lancarVolta(tx, baixa, voltas, {
+      motivo: dados.motivo ?? MOTIVO_DA_ANULACAO,
+      dtVolta,
+      idUsuario,
+    })
 
     return {
       voltaram: voltas.map(({ animais: _animais, ...volta }) => volta),

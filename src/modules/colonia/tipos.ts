@@ -71,6 +71,12 @@ export const MOTIVO_SELECAO = 'eutanasia de selecao'
 /** O motivo da baixa que o desmame lanca para a diferenca entre os vivos e os desmamados */
 export const MOTIVO_NAO_CHEGOU_AO_DESMAME = 'nao chegou ao desmame'
 
+/**
+ * O motivo que a anulacao grava quando quem anula nao escreve um. O banco cobra motivo na anulacao
+ * e na correcao (a trilha diz por que o fato mudou), e anular nao pede motivo: o texto e do sistema
+ */
+export const MOTIVO_DA_ANULACAO = 'baixa lançada por engano'
+
 /** O sexo do animal como o banco guarda (char(1)) */
 export function sexoDe(animal: { sexo: string }): Sexo {
   return animal.sexo === 'M' ? 'M' : 'F'

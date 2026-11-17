@@ -1,5 +1,8 @@
+import type { Prisma } from '@prisma/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { anularBaixa, registrarBaixa } from './baixa.service.ts'
+import { prisma } from '../../shared/prisma.ts'
+import { anularBaixa, anularParaCorrigir, registrarBaixa } from './baixa.service.ts'
+import type { BaixaAnulavel } from './baixa.service.ts'
 import type { Escolhido, Grupo } from './escolha.ts'
 import type { Lancamento } from './ocorrencia.ts'
 
@@ -586,6 +589,14 @@ describe('anulacao de baixa', () => {
     expect(banco.chegadasConferidas).toEqual([7])
   })
 
+  it('sem motivo, a trilha diz que a baixa foi lancada por engano', async () => {
+    banco.baixa = baixaDe([{ id: 1, sexo: 'M', idPedido: null }])
+
+    await anularBaixa(30, {}, 4)
+
+    expect(banco.lancados[0]).toMatchObject({ tipo: 'anulacao', motivo: 'baixa lançada por engano' })
+  })
+
   it('so a baixa se anula, e uma vez so', async () => {
     banco.baixa = { ...baixaDe([]), tipo: 'mudanca' }
     await expect(anularBaixa(30, { motivo: 'engano' }, 4)).rejects.toEqual(recusa(409, 'SEQUENCIA_INVALIDA'))
@@ -596,6 +607,71 @@ describe('anulacao de baixa', () => {
 
     banco.baixa = null
     await expect(anularBaixa(30, { motivo: 'engano' }, 4)).rejects.toEqual(recusa(404, 'NAO_ENCONTRADO'))
+    expect(banco.lancados).toEqual([])
+  })
+})
+
+describe('anulacao que faz parte de uma correcao', () => {
+  /** A baixa de 12/10 na caixa do casal F1A (6): 2 machos do 1o parto, um reservado para o #5 */
+  const baixa = (): BaixaAnulavel => ({
+    id: 30,
+    dtFato: d('2026-10-12'),
+    causa: 'morte',
+    motivo: 'morte',
+    idParto: null,
+    idCaixaOrigem: 6,
+    animais: [
+      { id: 1, sexo: 'M', idPedido: null, idParto: 1, desmamado: false, idLinhagem: 3 },
+      { id: 2, sexo: 'M', idPedido: 5, idParto: 1, desmamado: false, idLinhagem: 3 },
+    ],
+  })
+  const caixa = (ativa = true) => ({ ...caixaDeCasal(6, 'F1A', ativa), dtLiberacao: null })
+  const naoVolta = (codigo: string, estado: string) => `A caixa ${codigo} ${estado}: nao volta.`
+
+  it('os animais voltam para a caixa da baixa na data da propria baixa, e o reservado sem lugar volta livre', async () => {
+    banco.pedidos.set(5, { status: 'aprovado', pedido: { qtdM: 1, qtdF: 0, qtdQualquer: 0 }, tem: { m: 0, f: 0 } })
+
+    const voltaram = await prisma.$transaction((tx) =>
+      anularParaCorrigir(tx as Prisma.TransactionClient, baixa(), caixa(), { motivo: 'correção da baixa', idUsuario: 4 }, naoVolta),
+    )
+
+    expect(banco.lancados).toEqual([
+      {
+        tipo: 'anulacao',
+        dtFato: '2026-10-12',
+        idUsuario: 4,
+        idAnulada: 30,
+        motivo: 'correção da baixa',
+        idParto: undefined,
+        idCaixaOrigem: 6,
+        idCaixaDestino: undefined,
+        ids: [1, 2],
+        soltos: [2],
+      },
+    ])
+    expect(voltaram.map((animal) => [animal.id, animal.idPedido])).toEqual([
+      [1, null],
+      [2, null],
+    ])
+  })
+
+  it('a caixa que nao serve mais nao recebe a volta, nem de passagem: recusa com a mensagem de quem corrige', async () => {
+    banco.ninhadas.set(6, [{ idParto: 2, ordem: 2, casal: 'AB', m: 4, f: 4, desmamado: false }])
+
+    await expect(
+      prisma.$transaction((tx) => anularParaCorrigir(tx as Prisma.TransactionClient, baixa(), caixa(), { motivo: 'x', idUsuario: 4 }, naoVolta)),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        status: 409,
+        codigo: 'SEQUENCIA_INVALIDA',
+        message: 'A caixa F1A tem agora a ninhada do 2º parto do casal AB: nao volta.',
+      }),
+    )
+
+    banco.ninhadas = new Map()
+    await expect(
+      prisma.$transaction((tx) => anularParaCorrigir(tx as Prisma.TransactionClient, baixa(), caixa(false), { motivo: 'x', idUsuario: 4 }, naoVolta)),
+    ).rejects.toEqual(expect.objectContaining({ message: 'A caixa F1A já foi liberada: nao volta.' }))
     expect(banco.lancados).toEqual([])
   })
 })

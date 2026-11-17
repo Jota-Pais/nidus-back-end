@@ -71,16 +71,14 @@ describe('o pesquisador nao opera a colonia', () => {
 })
 
 describe('forma da entrada', () => {
-  it('recusa sem motivo e correcao sem motivo sao VALIDACAO', async () => {
+  it('recusa sem motivo e VALIDACAO; a correcao nao pede motivo, mas recusa a contagem que falta', async () => {
     const tecnico = app('tecnico')
     const recusa = await request(tecnico).post('/api/pedidos/1/recusa').send({ motivo: ' ' })
-    const correcao = await request(tecnico)
-      .patch('/api/partos/1/nascimento')
-      .send({ dtPartoReal: '2026-10-01', nascidoM: 1, nascidoF: 1 })
+    const correcao = await request(tecnico).patch('/api/partos/1/nascimento').send({ dtPartoReal: '2026-10-01', nascidoM: 1 })
 
     expect(recusa.status).toBe(400)
     expect(correcao.status).toBe(400)
-    expect(correcao.body.erro.campos).toHaveProperty('motivo')
+    expect(Object.keys(correcao.body.erro.campos)).toEqual(['nascidoF'])
   })
 
   it('conta nova com e-mail invalido e VALIDACAO', async () => {

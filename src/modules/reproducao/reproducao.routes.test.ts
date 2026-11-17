@@ -7,9 +7,11 @@ import type { Perfil } from '../../shared/traducao.ts'
 import { somarDias } from './cadeiaTemporal.ts'
 import {
   casalNovo,
+  correcaoDaBaixa,
   correcaoDoAcasalamento,
   correcaoDoDesmame,
   correcaoDoNascimento,
+  correcaoDoSemNinhada,
   desmame,
   edicaoDoCasal,
   selecao,
@@ -230,15 +232,22 @@ describe('validacao de entrada - modelo por rato', () => {
     ).toBe(true)
   })
 
-  it('a correcao do desmame e so a data: a contagem se corrige pelas baixas', () => {
-    const resultado = correcaoDoDesmame.safeParse({
+  it('a correcao do desmame leva a data e, se mudou, a contagem de um sexo ou dos dois', () => {
+    expect(
+      correcaoDoDesmame.safeParse({
+        dtDesmameReal: '2026-06-16',
+        desmamadoM: 4,
+        desmamadoF: 5,
+        motivo: 'data errada',
+        idPedido: 3,
+      }).data,
+    ).toEqual({ dtDesmameReal: '2026-06-16', desmamadoM: 4, desmamadoF: 5, motivo: 'data errada', idPedido: 3 })
+    expect(correcaoDoDesmame.safeParse({ dtDesmameReal: '2026-06-16', desmamadoF: 5 }).data).toEqual({
       dtDesmameReal: '2026-06-16',
-      desmamadoM: 4,
       desmamadoF: 5,
-      motivo: 'data errada',
+      motivo: undefined,
     })
-
-    expect(resultado.data).toEqual({ dtDesmameReal: '2026-06-16', motivo: 'data errada' })
+    expect(correcaoDoDesmame.safeParse({ dtDesmameReal: '2026-06-16', desmamadoM: -1 }).success).toBe(false)
   })
 
   it('a correcao do nascimento aceita a caixa dos animais a mais', () => {
@@ -253,13 +262,54 @@ describe('validacao de entrada - modelo por rato', () => {
     expect(resultado.success).toBe(true)
   })
 
-  it('a correcao sem motivo volta 400 no campo do motivo', async () => {
-    const resposta = await request(app('tecnico'))
-      .patch('/api/partos/1/desmame')
-      .send({ dtDesmameReal: '2026-05-02', motivo: '' })
+  it('corrigir nao pede motivo: sem ele, ou em branco, e o mesmo; escrito, vai junto', () => {
+    const nascimento = { dtPartoReal: '2026-05-25', nascidoM: 6, nascidoF: 5 }
 
-    expect(resposta.status).toBe(400)
-    expect(Object.keys(resposta.body.erro.campos)).toContain('motivo')
+    expect(correcaoDoNascimento.safeParse(nascimento).success).toBe(true)
+    expect(correcaoDoNascimento.safeParse({ ...nascimento, motivo: '  ' }).data?.motivo).toBeUndefined()
+    expect(correcaoDoNascimento.safeParse({ ...nascimento, motivo: ' faltou um ' }).data?.motivo).toBe('faltou um')
+    expect(correcaoDoDesmame.safeParse({ dtDesmameReal: '2026-05-02', motivo: '' }).success).toBe(true)
+    expect(correcaoDoNascimento.safeParse({ ...nascimento, motivo: 'x'.repeat(201) }).success).toBe(false)
+  })
+
+  it('a correcao da baixa tem data, causa e ao menos um animal; motivo e pedido opcionais', async () => {
+    const corpo = { dtFato: '2026-10-03', tipo: 'eutanasia', qtdM: 1, qtdF: 0 }
+
+    expect(correcaoDaBaixa.safeParse(corpo).success).toBe(true)
+    expect(correcaoDaBaixa.safeParse({ ...corpo, motivo: 'x', idPedido: 4 }).success).toBe(true)
+    expect(correcaoDaBaixa.safeParse({ ...corpo, tipo: 'doenca' }).success).toBe(false)
+
+    const nenhum = correcaoDaBaixa.safeParse({ ...corpo, qtdM: 0 })
+    expect(nenhum.success).toBe(false)
+    expect(nenhum.error?.issues[0]).toMatchObject({
+      path: ['qtdM'],
+      message: 'Informe ao menos um animal. Para desfazer a baixa toda, exclua a baixa.',
+    })
+
+    // a data no futuro e o id da baixa que nao e numero voltam 400 antes do banco
+    const futuro = await request(app('tecnico'))
+      .patch('/api/partos/1/baixas/30')
+      .send({ ...corpo, dtFato: somarDias(hojeISO(), 1) })
+    expect(futuro.status).toBe(400)
+    expect(futuro.body.erro.campos.dtFato).toBe('A data não pode ser depois de hoje.')
+    expect((await request(app('tecnico')).patch('/api/partos/1/baixas/abc').send(corpo)).status).toBe(400)
+  })
+
+  it('a correcao do fechamento sem ninhada pede a data e o motivo do fechamento', () => {
+    expect(correcaoDoSemNinhada.safeParse({ dtSemNinhada: '2026-10-30', motivo: 'não emprenhou' }).success).toBe(true)
+    expect(correcaoDoSemNinhada.safeParse({ dtSemNinhada: '2026-10-30', motivo: ' ' }).success).toBe(false)
+  })
+
+  it('pesquisador nao corrige a baixa nem o fechamento sem ninhada', async () => {
+    const pesquisador = app('pesquisador')
+
+    expect(
+      (await request(pesquisador).patch('/api/partos/1/baixas/30').send({ dtFato: '2026-10-03', tipo: 'morte', qtdM: 1, qtdF: 0 }))
+        .status,
+    ).toBe(403)
+    expect(
+      (await request(pesquisador).patch('/api/partos/1/sem-ninhada').send({ dtSemNinhada: '2026-10-30', motivo: 'x' })).status,
+    ).toBe(403)
   })
 
   it('a data do acasalamento se edita sem motivo', () => {

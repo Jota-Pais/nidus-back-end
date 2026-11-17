@@ -12,9 +12,27 @@ const banco = vi.hoisted(() => ({
   animais: [] as unknown[],
   /** o que a trilha devolve para cada limite: a selecao, a saida, a chegada fora e o primeiro fato */
   trilha: {} as Record<string, { tipo: string; dtFato: Date } | null>,
-  /** as baixas nao anuladas dos animais do parto, com a causa */
-  baixas: [] as { causa: string; animais: { idAnimal: number }[] }[],
+  /** as baixas nao anuladas dos animais do parto, com a causa e os animais */
+  baixas: [] as unknown[],
 }))
+
+/**
+ * Uma baixa como a ficha le: os animais sao os do banco (do parto 9), e o que nao esta nele e de
+ * outro parto
+ */
+function baixa(id: number, dtFato: string, causa: string, motivo: string, codigo: string, ids: number[]) {
+  return {
+    id,
+    dtFato: d(dtFato),
+    causa,
+    motivo,
+    caixaOrigem: { codigo },
+    animais: ids.map((idAnimal) => {
+      const animal = (banco.animais as AnimalDoParto[]).find((a) => a.id === idAnimal)
+      return { idAnimal, animal: { sexo: animal?.sexo ?? 'M', idParto: animal === undefined ? 12 : 9 } }
+    }),
+  }
+}
 
 /** Qual limite a consulta da trilha procura, pelo filtro que ela manda */
 function limiteDa(onde: Onde): string {
@@ -143,9 +161,10 @@ describe('cicloFicha', () => {
     }
     banco.animais = ninhada()
     banco.baixas = [
-      { causa: 'eutanasia', animais: [{ idAnimal: 1 }, { idAnimal: 2 }] },
-      { causa: 'morte', animais: [{ idAnimal: 3 }] },
-      { causa: 'morte', animais: [{ idAnimal: 4 }] },
+      baixa(31, '2026-10-03', 'eutanasia', 'eutanasia de selecao', 'F1A', [1, 2]),
+      baixa(32, '2026-10-23', 'morte', 'nao chegou ao desmame', 'F1A', [3]),
+      // a baixa na caixa de estoque levou tambem um macho de outra ninhada, do parto 12
+      baixa(33, '2026-11-01', 'morte', 'morte', 'F2C', [4, 99]),
     ]
 
     const ciclo = await cicloFicha(9)
@@ -173,6 +192,12 @@ describe('cicloFicha', () => {
       dtPrimeiraSaida: null,
       dtPrimeiroFato: null,
     })
+    // cada baixa com os animais deste parto; a do desmame e a com outra ninhada marcadas
+    expect(ciclo.baixas).toEqual([
+      { idOcorrencia: 31, dtFato: '2026-10-03', causa: 'eutanasia', codigo: 'F1A', m: 1, f: 1, doDesmame: false, comOutraNinhada: false },
+      { idOcorrencia: 32, dtFato: '2026-10-23', causa: 'morte', codigo: 'F1A', m: 0, f: 1, doDesmame: true, comOutraNinhada: false },
+      { idOcorrencia: 33, dtFato: '2026-11-01', causa: 'morte', codigo: 'F2C', m: 1, f: 0, doDesmame: false, comOutraNinhada: true },
+    ])
   })
 
   it('os limites das correcoes saem da trilha: a ultima selecao, a primeira saida (mudanca, entrega ou chegada fora) e o primeiro fato', async () => {

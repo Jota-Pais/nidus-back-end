@@ -5,7 +5,7 @@ import {
   exigirPerfil,
   usuarioDaRequisicao,
 } from '../../shared/middlewares/autorizacao.ts'
-import { dataDoFato, idNaRota, idNoCorpo } from '../../shared/validacao.ts'
+import { dataDoFato, idNaRota, idNoCorpo, motivoDaCorrecao } from '../../shared/validacao.ts'
 import { anularBaixa, registrarBaixa } from './baixa.service.ts'
 import { lerVisaoGeral } from './visaoGeral.service.ts'
 
@@ -47,11 +47,12 @@ baixaRoutes.post('/:id/baixa', exigirPerfil(...OPERA_A_COLONIA), async (req, res
 })
 
 /**
- * Corpo de POST /api/ocorrencias/:id/anulacao. A caixa de cada sexo so quando a caixa da baixa nao
- * serve mais para ele (liberada, com outra ninhada, ou agora de estoque de outro sexo)
+ * Corpo de POST /api/ocorrencias/:id/anulacao. O motivo e opcional, como na correcao. A caixa de
+ * cada sexo so quando a caixa da baixa nao serve mais para ele (liberada, com outra ninhada, ou
+ * agora de estoque de outro sexo)
  */
 export const anulacao = z.object({
-  motivo: z.string().trim().min(1, 'Diga por que a baixa foi um engano.').max(200),
+  motivo: motivoDaCorrecao,
   idCaixaMachos: idNoCorpo.optional(),
   idCaixaFemeas: idNoCorpo.optional(),
 })
