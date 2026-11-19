@@ -1,6 +1,6 @@
-// A reserva dos animais de um pedido: reservar o pedido aprovado inteiro, completar a reserva que
-// ficou em falta e desfazer a reserva. A reserva fica no animal (colonia.animal.id_pedido), e cada
-// uma vira uma ocorrencia na trilha.
+// A reserva dos animais de um pedido: reservar o pedido enviado ou aprovado inteiro, completar a
+// reserva que ficou em falta e desfazer a reserva. A reserva fica no animal
+// (colonia.animal.id_pedido), e cada uma vira uma ocorrencia na trilha.
 //
 // Uma reserva confere so o que ela mesma reserva: os animais que marca (vivos, livres, do lugar e do
 // sexo pedidos) e o teto do proprio pedido. A falta de outro pedido na mesma ninhada ou caixa e
@@ -24,10 +24,11 @@ import { faltaDaReserva, temFalta } from '../colonia/reserva.ts'
 import { SEXOS, contarPorSexo, doSexo, noNumero, quantosDoSexo } from '../colonia/tipos.ts'
 import type { PorSexo } from '../colonia/tipos.ts'
 import { travarPedidos } from '../colonia/travas.ts'
+import { registrarHistorico } from '../historico/historico.service.ts'
 import { dataDoDesmame, faixaDoPedido, porQueNaoServe } from '../motor/motor.ts'
 import type { Ninhada } from '../motor/motor.ts'
 import { PARA_O_AVISO, avisarPesquisador } from './aviso.ts'
-import { conferirReserva, exigirQueRecebeReserva, statusDo } from './pedido.ts'
+import { ACAO_APROVACAO, RESERVAM_INTEIRO, conferirReserva, exigirQueRecebeReserva, statusDo } from './pedido.ts'
 
 type Transacao = Prisma.TransactionClient
 
@@ -156,8 +157,9 @@ function exigirQueServe(lugar: Lugar, item: ItemDaReserva, pedido: PedidoDaReser
 
 /**
  * POST /api/pedidos/:id/alocacao - reserva os animais dos lugares que a busca sugeriu. No pedido
- * aprovado, os itens cobrem o pedido inteiro e ele passa a reservado; no reservado em falta,
- * completam a falta, ate cobrir. Os animais sao quaisquer vivos livres do lugar, pela ordem de id,
+ * enviado ou aprovado, os itens cobrem o pedido inteiro e ele passa a reservado (o enviado e
+ * aprovado na mesma transacao, com a aprovacao no historico); no reservado em falta, completam a
+ * falta, ate cobrir. Os animais sao quaisquer vivos livres do lugar, pela ordem de id,
  * travados (SKIP LOCKED): quem reserva ao mesmo tempo pega outros
  */
 export async function reservarAnimais(idPedido: number, itensPedidos: ItemDaReserva[], usuario: UsuarioDaSessao) {
@@ -177,7 +179,9 @@ export async function reservarAnimais(idPedido: number, itensPedidos: ItemDaRese
     }
 
     exigirQueRecebeReserva(idPedido, status, faltaDaReserva(pedido, tem))
-    conferirReserva(pedido, tem, novos, status === 'aprovado')
+
+    const inteira = RESERVAM_INTEIRO.includes(status)
+    conferirReserva(pedido, tem, novos, inteira)
 
     const escolhidos: Escolhido[] = []
 
@@ -195,6 +199,20 @@ export async function reservarAnimais(idPedido: number, itensPedidos: ItemDaRese
       }
     }
 
+    // o banco so deixa reservar para o pedido aprovado: o enviado passa por aprovado antes, com a
+    // aprovacao no historico como a de /aprovacao, e logo depois a reservado
+    if (status === 'enviado') {
+      await tx.pedido.update({ where: { id: idPedido }, data: { status: 'aprovado', dtManutencao: agora() } })
+
+      await registrarHistorico(tx, {
+        idUsuario: usuario.id,
+        entidade: 'pedido',
+        idEntidade: idPedido,
+        acao: ACAO_APROVACAO,
+        descricao: `Pedido #${idPedido} aprovado com os animais reservados para ${dataLegivel(dataISO(pedido.dtDesejada))}`,
+      })
+    }
+
     await lancarOcorrencia(tx, {
       tipo: 'reserva',
       dtFato: hojeISO(),
@@ -204,14 +222,15 @@ export async function reservarAnimais(idPedido: number, itensPedidos: ItemDaRese
     })
 
     // o banco (demanda.pedido_coerente) confere que os reservados cobrem o pedido exatamente
-    if (status === 'aprovado') {
+    if (inteira) {
       await tx.pedido.update({ where: { id: idPedido }, data: { status: 'reservado', dtManutencao: agora() } })
     }
 
-    return { pedido, passouAReservado: status === 'aprovado', novos, falta: faltaDaReserva(pedido, { m: tem.m + novos.m, f: tem.f + novos.f }) }
+    return { pedido, passouAReservado: inteira, novos, falta: faltaDaReserva(pedido, { m: tem.m + novos.m, f: tem.f + novos.f }) }
   })
 
-  // so a reserva do pedido inteiro avisa: completar a falta nao muda nada para quem pediu
+  // so a reserva do pedido inteiro avisa, e com um e-mail so, mesmo quando aprova junto: completar a
+  // falta nao muda nada para quem pediu
   if (reserva.passouAReservado) avisarPesquisador(reserva.pedido, avisarAnimaisReservados)
 
   return {

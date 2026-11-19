@@ -65,14 +65,14 @@ describe('quem recebe reserva', () => {
   const semFalta = { m: 0, f: 0, qualquer: 0 }
   const comFalta = { m: 1, f: 0, qualquer: 0 }
 
-  it('o aprovado; o reservado, so para completar a falta', () => {
+  it('o enviado e o aprovado; o reservado, so para completar a falta', () => {
+    expect(() => exigirQueRecebeReserva(7, 'enviado', semFalta)).not.toThrow()
     expect(() => exigirQueRecebeReserva(7, 'aprovado', semFalta)).not.toThrow()
     expect(() => exigirQueRecebeReserva(7, 'reservado', comFalta)).not.toThrow()
     expect(() => exigirQueRecebeReserva(7, 'reservado', semFalta)).toThrow(recusa('PEDIDO_JA_RESERVADO', '#7 já estão reservados'))
   })
 
-  it('o enviado espera a aprovacao; o entregue e o recusado nao recebem mais', () => {
-    expect(() => exigirQueRecebeReserva(7, 'enviado', semFalta)).toThrow(recusa('SEQUENCIA_INVALIDA', 'Aprove o pedido'))
+  it('o entregue e o recusado nao recebem mais', () => {
     expect(() => exigirQueRecebeReserva(7, 'entregue', semFalta)).toThrow(recusa('SEQUENCIA_INVALIDA', 'está entregue'))
     expect(() => exigirQueRecebeReserva(7, 'recusado', comFalta)).toThrow(recusa('SEQUENCIA_INVALIDA', 'está recusado'))
   })

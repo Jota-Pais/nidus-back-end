@@ -18,6 +18,11 @@ export type StatusDoPedido = (typeof STATUS_DO_PEDIDO)[number]
 /** Os status que a equipe pode recusar. O reservado solta os animais na recusa */
 export const RECUSAVEIS: readonly StatusDoPedido[] = ['enviado', 'aprovado', 'reservado']
 
+/** As acoes do pedido no historico. A reserva, a reserva desfeita e a entrega ficam na trilha */
+export const ACAO_CRIACAO = 'criacao'
+export const ACAO_APROVACAO = 'aprovacao'
+export const ACAO_RECUSA = 'recusa'
+
 /** O status como o banco guarda: o CHECK do dominio so deixa entrar estes */
 export function statusDo(pedido: { status: string }): StatusDoPedido {
   const status = STATUS_DO_PEDIDO.find((s) => s === pedido.status)
@@ -45,8 +50,9 @@ export function oQuePede(pedido: Pedido): FaltaDaReserva {
 /**
  * Confere a reserva nova contra o pedido: o que ja pesa nele ('tem', vivos reservados mais
  * entregues) mais os 'novos'. Nunca passa do pedido (PEDIDO_EXCEDIDO). Com 'inteira', cobre o
- * pedido todo (PEDIDO_INCOMPLETO): o pedido aprovado so passa a reservado assim. A reserva em
- * falta se completa aos poucos, ate cobrir. O 'qualquer' vira macho ou femea, conforme o que sobrar
+ * pedido todo (PEDIDO_INCOMPLETO): o pedido enviado ou aprovado so passa a reservado assim. A
+ * reserva em falta se completa aos poucos, ate cobrir. O 'qualquer' vira macho ou femea, conforme o
+ * que sobrar
  */
 export function conferirReserva(pedido: Pedido, tem: PorSexo, novos: PorSexo, inteira: boolean): void {
   const depois = { m: tem.m + novos.m, f: tem.f + novos.f }
@@ -80,21 +86,20 @@ export const NOME_NA_TELA: Record<StatusDoPedido, string> = {
   recusado: 'recusado',
 }
 
+/** Os status que recebem a reserva do pedido inteiro. O enviado e aprovado na mesma reserva */
+export const RESERVAM_INTEIRO: readonly StatusDoPedido[] = ['enviado', 'aprovado']
+
 /**
- * Se o pedido recebe uma reserva agora: o aprovado, inteira; o reservado, so para completar a
- * falta. 'falta' e a do pedido hoje
+ * Se o pedido recebe uma reserva agora: o enviado e o aprovado, inteira (o enviado fica aprovado
+ * junto); o reservado, so para completar a falta. 'falta' e a do pedido hoje
  */
 export function exigirQueRecebeReserva(idPedido: number, status: StatusDoPedido, falta: FaltaDaReserva): void {
-  if (status === 'aprovado') return
+  if (RESERVAM_INTEIRO.includes(status)) return
   if (status === 'reservado' && temFalta(falta)) return
 
   if (status === 'reservado') {
     // o caso comum: dois tecnicos, ou dois cliques em Reservar
     throw erroDeRegra('PEDIDO_JA_RESERVADO', `Os animais do pedido #${idPedido} já estão reservados.`)
-  }
-
-  if (status === 'enviado') {
-    throw erroDeRegra('SEQUENCIA_INVALIDA', 'Aprove o pedido antes de reservar os animais.')
   }
 
   throw erroDeRegra('SEQUENCIA_INVALIDA', `O pedido #${idPedido} está ${NOME_NA_TELA[status]} e não recebe mais animais.`)

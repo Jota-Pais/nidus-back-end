@@ -14,18 +14,13 @@ import { travarPedidos } from '../colonia/travas.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
 import { PARA_O_AVISO, avisarPesquisador } from './aviso.ts'
-import { NOME_NA_TELA, RECUSAVEIS, descreverQuantidade, statusDo } from './pedido.ts'
+import { ACAO_APROVACAO, ACAO_CRIACAO, ACAO_RECUSA, NOME_NA_TELA, RECUSAVEIS, descreverQuantidade, statusDo } from './pedido.ts'
 import type { StatusDoPedido } from './pedido.ts'
 import { soltarReservados } from './reserva.service.ts'
 
 export const PRAZO_DE_RESPOSTA_EM_DIAS = 14
 
 export const MOTIVO_SEM_RESPOSTA = `Recusado automaticamente: a equipe não respondeu em ${PRAZO_DE_RESPOSTA_EM_DIAS} dias.`
-
-/** As acoes do pedido no historico. A reserva, a reserva desfeita e a entrega ficam na trilha */
-export const ACAO_CRIACAO = 'criacao'
-export const ACAO_APROVACAO = 'aprovacao'
-export const ACAO_RECUSA = 'recusa'
 
 /** O pesquisador so ve os proprios pedidos; tecnico e gestor veem todos */
 const doPesquisador = (usuario: UsuarioDaSessao) => usuario.perfil === 'pesquisador'
@@ -190,8 +185,9 @@ export async function criarPedido(dados: PedidoNovo, usuario: UsuarioDaSessao, a
 // ------------------------------------------------------------ aprovacao
 
 /**
- * POST /api/pedidos/:id/aprovacao - a equipe aceita fazer o pedido. Aprovar nao reserva nada: os
- * animais sao reservados depois (reserva.service), quando existirem na idade pedida
+ * POST /api/pedidos/:id/aprovacao - a equipe aceita fazer o pedido sem reservar nada: os animais
+ * sao reservados depois (reserva.service), quando existirem na idade pedida. Quem ja tem os animais
+ * reserva direto o pedido enviado, e a reserva grava a aprovacao junto
  */
 export async function aprovarPedido(idPedido: number, usuario: UsuarioDaSessao) {
   const pedido = await prisma.$transaction(async (tx) => {

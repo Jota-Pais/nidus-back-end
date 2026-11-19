@@ -320,6 +320,7 @@ describe('aviso de animais reservados', () => {
     const { corpo } = chamadaUnica()
     expect(corpo.to).toEqual([{ email: 'ana@ufsc.br' }])
     expect(corpo.subject).toBe('Os animais do seu pedido estão reservados')
+    expect(corpo.textContent).toContain('A equipe aprovou o seu pedido de animais.')
     expect(corpo.textContent).toContain('Os animais do seu pedido estão reservados para a entrega de 01/12/2026.')
     expect(corpo.textContent).toContain('Animais: 1 de qualquer sexo')
     expect(corpo.textContent).toContain('Idade: 28 dias')

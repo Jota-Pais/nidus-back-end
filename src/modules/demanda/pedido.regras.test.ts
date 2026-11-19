@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UsuarioDaSessao } from '../../shared/middlewares/autorizacao.ts'
 import type { Escolha, Escolhido, Grupo, Reservado } from '../colonia/escolha.ts'
 import type { Lancamento } from '../colonia/ocorrencia.ts'
+import { hojeISO } from '../../shared/traducao.ts'
 import { passaDoPedido } from '../colonia/reserva.ts'
 import { buscarAtendimento } from '../motor/motor.service.ts'
 import { registrarEntrega } from './entrega.service.ts'
@@ -62,7 +63,17 @@ type Pedido = {
   idUsuarioSolicitante: number
   idProjeto: number | null
 }
-type Ocorrencia = { id: number; tipo: string; idPedido: number | null; motivo: string | null; ids: number[]; dtFato: Date; dtRegistro: Date }
+type Ocorrencia = {
+  id: number
+  tipo: string
+  idPedido: number | null
+  motivo: string | null
+  ids: number[]
+  dtFato: Date
+  dtRegistro: Date
+  /** quantos historicos ja existiam quando a ocorrencia foi lancada: a ordem entre as duas trilhas */
+  historicosAntes?: number
+}
 type Historico = { entidade: string; idEntidade: number; acao: string; dtHora: Date; dados?: unknown; idUsuario: number | null }
 
 const banco = vi.hoisted(() => ({
@@ -338,6 +349,7 @@ vi.mock('../colonia/ocorrencia.ts', () => ({
       ids: l.ids,
       dtFato: d(l.dtFato),
       dtRegistro: new Date(),
+      historicosAntes: banco.historicos.length,
     }
     banco.ocorrencias.push(ocorrencia)
     return { idOcorrencia: ocorrencia.id, ids: l.ids }
@@ -651,19 +663,143 @@ describe('reservar o pedido aprovado', () => {
     expect(contar(doPedido(10))).toEqual({ m: 4, f: 0 })
   })
 
-  it('o pedido enviado ainda nao recebe animais; o reservado completo, entregue ou recusado, nunca', async () => {
-    pedido(10, { status: 'enviado' })
+  it('o reservado completo, entregue ou recusado nao recebe animais', async () => {
     pedido(11, { status: 'recusado' })
     pedido(12, { qtdM: 1, qtdF: 0, qtdQualquer: 0 })
     await reservarAnimais(12, [{ idCaixa: 2, dtNascimento: '2026-09-01', machos: 1, femeas: 0 }], tecnica)
 
-    await expect(reservarAnimais(10, doParto1(), tecnica)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'Aprove o pedido'))
     await expect(reservarAnimais(11, doParto1(), tecnica)).rejects.toEqual(recusa(409, 'SEQUENCIA_INVALIDA'))
     // dois tecnicos, ou dois cliques em Reservar
     await expect(
       reservarAnimais(12, [{ idCaixa: 2, dtNascimento: '2026-09-01', machos: 1, femeas: 0 }], tecnica),
     ).rejects.toEqual(mensagem('PEDIDO_JA_RESERVADO', 'já estão reservados'))
     await expect(reservarAnimais(99, doParto1(), tecnica)).rejects.toEqual(recusa(404, 'NAO_ENCONTRADO'))
+  })
+})
+
+describe('reservar o pedido enviado', () => {
+  const todosOsEstados = () => ({
+    pedidos: structuredClone([...banco.pedidos.values()]),
+    animais: structuredClone(banco.animais),
+    ocorrencias: banco.ocorrencias.length,
+    historicos: banco.historicos.length,
+    avisos: banco.avisos.length,
+  })
+
+  it('aprova e reserva na mesma reserva: termina reservado, com a aprovacao de quem reservou antes da ocorrencia', async () => {
+    pedido(10, { status: 'enviado' })
+
+    const resposta = await reservarAnimais(10, doParto1(), tecnica)
+
+    expect(resposta).toEqual({ idPedido: 10, status: 'reservado', reservados: { m: 3, f: 2 }, falta: null })
+    expect(banco.pedidos.get(10)?.status).toBe('reservado')
+    expect(contar(doPedido(10))).toEqual({ m: 3, f: 2 })
+    expect(banco.historicos).toEqual([
+      expect.objectContaining({
+        entidade: 'pedido',
+        idEntidade: 10,
+        acao: 'aprovacao',
+        idUsuario: 2,
+        descricao: 'Pedido #10 aprovado com os animais reservados para 10/11/2026',
+      }),
+    ])
+    expect(banco.ocorrencias).toEqual([expect.objectContaining({ tipo: 'reserva', idPedido: 10, historicosAntes: 1 })])
+  })
+
+  it('manda um e-mail so, o dos animais reservados, sem o de aprovacao', async () => {
+    pedido(10, { status: 'enviado' })
+
+    await reservarAnimais(10, doParto1(), tecnica)
+
+    expect(banco.avisos).toEqual([{ aviso: 'reservados', email: 'pessoa40@ufsc.br' }])
+  })
+
+  it('a lista mostra o aceite no dia da reserva', async () => {
+    pedido(10, { status: 'enviado' })
+    await reservarAnimais(10, doParto1(), tecnica)
+
+    const [lido] = (await listarPedidos(tecnica)).pedidos
+
+    expect(lido).toMatchObject({ id: 10, status: 'reservado', dataAceite: hojeISO(), prazoResposta: null })
+  })
+
+  it('a reserva incompleta ou o lugar invalido nao grava nada: continua enviado, sem historico nem e-mail', async () => {
+    pedido(10, { status: 'enviado' })
+    const antes = todosOsEstados()
+
+    await expect(reservarAnimais(10, doParto1(2, 2), tecnica)).rejects.toEqual(mensagem('PEDIDO_INCOMPLETO', 'falta 1 de qualquer sexo'))
+    await expect(reservarAnimais(10, doParto1(6, 2), tecnica)).rejects.toEqual(recusa(409, 'PEDIDO_EXCEDIDO'))
+    await expect(reservarAnimais(10, [{ idCaixa: 4, dtNascimento: '2026-09-01', machos: 3, femeas: 2 }], tecnica)).rejects.toEqual(
+      mensagem('PEDIDO_RESERVA', 'não são da linhagem do pedido'),
+    )
+    await expect(reservarAnimais(10, [{ idCaixa: 2, dtNascimento: '2026-09-02', machos: 3, femeas: 2 }], tecnica)).rejects.toEqual(
+      recusa(409, 'SEM_ANIMAIS'),
+    )
+
+    expect(banco.pedidos.get(10)?.status).toBe('enviado')
+    expect(todosOsEstados()).toEqual(antes)
+    expect(banco.historicos).toEqual([])
+    expect(banco.avisos).toEqual([])
+  })
+
+  it('o recusado e o entregue continuam sem receber animais', async () => {
+    pedido(11, { status: 'recusado' })
+    pedido(12, { status: 'entregue' })
+
+    await expect(reservarAnimais(11, doParto1(), tecnica)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'está recusado'))
+    await expect(reservarAnimais(12, doParto1(), tecnica)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'está entregue'))
+    expect(banco.historicos).toEqual([])
+    expect(banco.avisos).toEqual([])
+  })
+
+  it('reservar o enviado e depois aprovar: ja foi aprovado, sem segundo historico nem aviso', async () => {
+    pedido(10, { status: 'enviado' })
+    await reservarAnimais(10, doParto1(), tecnica)
+
+    await expect(aprovarPedido(10, tecnica)).rejects.toEqual(mensagem('SEQUENCIA_INVALIDA', 'já foi aprovado'))
+    expect(banco.historicos).toHaveLength(1)
+    expect(banco.avisos).toHaveLength(1)
+  })
+
+  it('aprovar e depois reservar segue o fluxo antigo: uma aprovacao so, e os dois e-mails', async () => {
+    pedido(10, { status: 'enviado' })
+    await aprovarPedido(10, tecnica)
+    await reservarAnimais(10, doParto1(), tecnica)
+
+    expect(banco.pedidos.get(10)?.status).toBe('reservado')
+    expect(banco.historicos.map((h) => h.acao)).toEqual(['aprovacao'])
+    expect(banco.avisos.map((a) => a.aviso)).toEqual(['aprovado', 'reservados'])
+  })
+
+  it('desfazer a reserva volta a aprovado, e reserva de novo sem nova aprovacao', async () => {
+    pedido(10, { status: 'enviado' })
+    await reservarAnimais(10, doParto1(), tecnica)
+
+    expect((await desfazerReserva(10, tecnica)).status).toBe('aprovado')
+    expect(banco.pedidos.get(10)?.status).toBe('aprovado')
+    expect(doPedido(10)).toEqual([])
+
+    await reservarAnimais(10, doParto1(), tecnica)
+    expect(banco.pedidos.get(10)?.status).toBe('reservado')
+    expect(banco.historicos.map((h) => h.acao)).toEqual(['aprovacao'])
+  })
+
+  it('a recusa automatica nao pega o pedido reservado, mesmo com mais de 14 dias', async () => {
+    pedido(10, { status: 'enviado', dtCriacao: new Date('2026-11-01T12:00:00.000Z') })
+    await reservarAnimais(10, doParto1(), tecnica)
+
+    expect(await recusarSemResposta(new Date('2026-12-30T12:00:00.000Z'))).toBe(0)
+    expect(banco.pedidos.get(10)?.status).toBe('reservado')
+    expect(doPedido(10)).toHaveLength(5)
+  })
+
+  it('duas reservas seguidas: a segunda e PEDIDO_JA_RESERVADO, sem animais em dobro', async () => {
+    pedido(10, { status: 'enviado' })
+    await reservarAnimais(10, doParto1(), tecnica)
+
+    await expect(reservarAnimais(10, doParto1(), tecnica)).rejects.toEqual(mensagem('PEDIDO_JA_RESERVADO', 'já estão reservados'))
+    expect(doPedido(10)).toHaveLength(5)
+    expect(banco.historicos).toHaveLength(1)
   })
 })
 

@@ -115,7 +115,7 @@ pedidoRoutes.post('/', exigirPerfil('pesquisador'), async (req, res) => {
   res.status(201).json(await criarPedido(dados, usuarioDaRequisicao(req)))
 })
 
-/** POST /api/pedidos/:id/aprovacao - a equipe aceita fazer o pedido; reserva depois */
+/** POST /api/pedidos/:id/aprovacao - a equipe aceita fazer o pedido sem reservar; reserva depois */
 pedidoRoutes.post('/:id/aprovacao', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
 
@@ -146,8 +146,8 @@ export const alocacao = z.object({
 })
 
 /**
- * POST /api/pedidos/:id/alocacao - so quem opera a colonia reserva: o pedido aprovado inteiro, ou
- * o que falta no reservado em falta
+ * POST /api/pedidos/:id/alocacao - so quem opera a colonia reserva: o pedido enviado (aprovado na
+ * mesma reserva) ou aprovado inteiro, ou o que falta no reservado em falta
  */
 pedidoRoutes.post('/:id/alocacao', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)

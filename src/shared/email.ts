@@ -273,8 +273,9 @@ function linhasDoResumo(pedido: ResumoDoPedido): string[] {
 
 /**
  * O aviso de que o pedido foi aprovado (sem motivo) ou recusado (com o motivo que o tecnico
- * escreveu). Quem pediu nao precisa abrir o Nidus para saber. Aprovar nao e reservar: os animais
- * sao reservados depois, com outro aviso (avisarAnimaisReservados)
+ * escreveu). Quem pediu nao precisa abrir o Nidus para saber. Aprovar sem reservar: os animais sao
+ * reservados depois, com outro aviso (avisarAnimaisReservados). O pedido aprovado na propria
+ * reserva so recebe o aviso da reserva
  */
 export async function avisarPedidoDecidido(
   email: string,
@@ -315,7 +316,10 @@ export async function avisarPedidoDecidido(
   await enviarPelaBrevo(mensagem)
 }
 
-/** O aviso de que os animais do pedido aprovado foram separados para a entrega */
+/**
+ * O aviso de que os animais do pedido foram separados para a entrega. Serve ao pedido aprovado
+ * antes e ao aprovado na propria reserva: o texto diz que esta aprovado
+ */
 export async function avisarAnimaisReservados(email: string, pedido: ResumoDoPedido): Promise<void> {
   const mensagem: Mensagem = {
     para: email,
@@ -323,7 +327,8 @@ export async function avisarAnimaisReservados(email: string, pedido: ResumoDoPed
     texto: [
       'Olá!',
       '',
-      `Os animais do seu pedido estão reservados para a entrega de ${diaMesAno(pedido.dataEntrega)}.`,
+      'A equipe aprovou o seu pedido de animais. ' +
+        `Os animais do seu pedido estão reservados para a entrega de ${diaMesAno(pedido.dataEntrega)}.`,
       '',
       ...linhasDoResumo(pedido),
       '',
