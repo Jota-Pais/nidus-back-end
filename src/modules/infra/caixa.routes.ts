@@ -131,12 +131,33 @@ const grupoQueMuda = z
     error: 'Diga de qual pedido são os reservados que mudam.',
   })
 
+/** No maximo quantas caixas recebem os animais de um sexo numa mudanca */
+export const PARTES_POR_SEXO = 20
+
+const partesQueMudam = z
+  .array(grupoQueMuda)
+  .min(1, 'Informe ao menos uma caixa.')
+  .max(PARTES_POR_SEXO, `No máximo ${PARTES_POR_SEXO} caixas por sexo.`)
+
+/**
+ * Um sexo todo para uma caixa (o grupo) ou dividido em varias (a lista, uma parte por caixa). Le
+ * pelo formato que chegou, e nao por z.union: assim cada erro fica no campo dele
+ * ('machos.destino', 'machos.1.qtd') em vez de um erro so no sexo
+ */
+const sexoQueMuda = z.unknown().transform((valor, ctx) => {
+  const lido = Array.isArray(valor) ? partesQueMudam.safeParse(valor) : grupoQueMuda.safeParse(valor)
+  if (lido.success) return lido.data
+
+  for (const issue of lido.error.issues) ctx.addIssue({ ...issue, code: 'custom', message: issue.message })
+  return z.NEVER
+})
+
 /** Corpo de POST /api/caixas/:id/mudanca */
 export const mudanca = z
   .object({
     dtFato: dataDoFato,
-    machos: grupoQueMuda.optional(),
-    femeas: grupoQueMuda.optional(),
+    machos: sexoQueMuda.optional(),
+    femeas: sexoQueMuda.optional(),
   })
   .refine((dados) => dados.machos !== undefined || dados.femeas !== undefined, {
     path: ['machos'],
@@ -145,7 +166,9 @@ export const mudanca = z
 
 /**
  * POST /api/caixas/:id/mudanca - animais desmamados mudam desta caixa para caixas de estoque:
- * a passagem da caixa do casal e a mudanca de estoque para estoque
+ * a passagem da caixa do casal e a mudanca de estoque para estoque. Cada sexo vai para uma caixa
+ * ({ qtd, destino }) ou dividido em ate PARTES_POR_SEXO caixas ([{ qtd, destino }, ...]), tudo
+ * numa operacao so. Devolve { caixas, liberada }, uma caixa por parte
  */
 caixaRoutes.post('/:id/mudanca', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)

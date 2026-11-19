@@ -1,7 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Escolha, Escolhido, Grupo } from '../colonia/escolha.ts'
 import type { Lancamento } from '../colonia/ocorrencia.ts'
-import { registrarMudanca, viradaParaEstoque, virarCaixaDeEstoque } from './mudanca.service.ts'
+import { erroDeRegra } from '../../shared/erros.ts'
+import {
+  exigirDestinosDiferentes,
+  exigirSomaQueCabe,
+  partesDaMudanca,
+  registrarMudanca,
+  viradaParaEstoque,
+  virarCaixaDeEstoque,
+} from './mudanca.service.ts'
+import type { ParteComIdade, ParteDaMudanca } from './mudanca.service.ts'
 import type { CaixaParaVirar } from './mudanca.service.ts'
 
 // Uma colonia de mentira, em memoria: caixas, casais, partos e os animais (uma linha por rato). O
@@ -168,7 +177,8 @@ vi.mock('../colonia/escolha.ts', async (original) => {
           a.situacao === 'vivo' &&
           a.sexo === grupo.sexo &&
           a.idCaixa === grupo.idCaixa &&
-          (grupo.dtNascimento === undefined || nascimento(a) === grupo.dtNascimento),
+          (grupo.dtNascimento === undefined || nascimento(a) === grupo.dtNascimento) &&
+          !(escolha.excluir ?? []).includes(a.id),
       )
       const livres = doGrupo.filter((a) => a.idPedido === null).slice(0, qtd)
       const doPedido = (id: number | null | undefined) => doGrupo.filter((a) => a.idPedido !== null && a.idPedido === id)
@@ -181,7 +191,8 @@ vi.mock('../colonia/escolha.ts', async (original) => {
             ? livres
             : [...livres, ...doPedido(real.pedidoDosReservados(pedidos, escolha.idPedido, escolha.campoDoPedido))].slice(0, qtd)
 
-      if (escolhidos.length < qtd) throw Object.assign(new Error('sem animais'), { status: 409, codigo: 'SEM_ANIMAIS' })
+      // a recusa de verdade (409 SEM_ANIMAIS, sem campo): o servico a poe no campo da parte
+      if (escolhidos.length < qtd) throw erroDeRegra('SEM_ANIMAIS', `Pediu ${qtd}, mas so ha ${escolhidos.length} para esta operacao.`)
 
       return escolhidos.map(
         (a): Escolhido => ({
@@ -508,6 +519,591 @@ describe('o que a mudanca recusa', () => {
       registrarMudanca(1, { dtFato: '2026-09-25', machos: { qtd: 6, destino: { posicao: vazia } } }, 7),
     ).rejects.toEqual(recusa(409, 'SEM_ANIMAIS'))
     expect([...banco.caixas.values()].filter((c) => c.id >= 1000)).toEqual([])
+  })
+})
+
+describe('a mudanca de um sexo dividido em varias caixas', () => {
+  const em = (linha: number, coluna: number) => ({ ...vazia, linha, coluna })
+  const novas = () => [...banco.caixas.values()].filter((c) => c.id >= 1000)
+  const nada = () => {
+    expect(banco.ocorrencias).toEqual([])
+    expect(novas()).toEqual([])
+    expect(vivosEm(1)).toHaveLength(9)
+  }
+
+  it('os machos em duas partes, uma posicao vazia e uma caixa de estoque que existe: uma ocorrencia por parte', async () => {
+    caixa(3, 'estoque', { sexo: 'M', idLinhagem: 3 })
+
+    const feita = await registrarMudanca(
+      1,
+      {
+        dtFato: '2026-09-25',
+        machos: [
+          { qtd: 2, destino: { posicao: vazia } },
+          { qtd: 3, destino: { idCaixa: 3 } },
+        ],
+      },
+      7,
+    )
+
+    const nova = novas()[0] as Caixa
+    expect(feita).toEqual({
+      caixas: [
+        { idCaixa: nova.id, codigo: 'F2A', sexo: 'M', qtd: 2 },
+        { idCaixa: 3, codigo: 'F1C', sexo: 'M', qtd: 3 },
+      ],
+      liberada: false,
+    })
+    expect(nova).toMatchObject({ tipo: 'estoque', sexo: 'M', idLinhagem: 3 })
+    expect(vivosEm(nova.id)).toHaveLength(2)
+    expect(vivosEm(3)).toHaveLength(3)
+    expect(vivosEm(1).map((a) => a.sexo)).toEqual(['F', 'F', 'F', 'F'])
+    expect(banco.ocorrencias.map((o) => [o.tipo, o.idCaixaOrigem, o.idCaixaDestino, (o.ids as number[]).length])).toEqual([
+      ['mudanca', 1, nova.id, 2],
+      ['mudanca', 1, 3, 3],
+    ])
+  })
+
+  it('cada parte leva animais diferentes: nenhum rato vai duas vezes', async () => {
+    const feita = await registrarMudanca(
+      1,
+      {
+        dtFato: '2026-09-25',
+        machos: [
+          { qtd: 2, destino: { posicao: em(2, 1) } },
+          { qtd: 2, destino: { posicao: em(2, 2) } },
+          { qtd: 1, destino: { posicao: em(2, 3) } },
+        ],
+      },
+      7,
+    )
+
+    expect(feita.caixas.map((c) => c.qtd)).toEqual([2, 2, 1])
+    const idsPorOcorrencia = banco.ocorrencias.map((o) => o.ids as number[])
+    expect(new Set(idsPorOcorrencia.flat()).size).toBe(5)
+    expect(feita.caixas.map((c) => vivosEm(c.idCaixa).length)).toEqual([2, 2, 1])
+    expect(feita.liberada).toBe(false)
+  })
+
+  it('os dois sexos divididos: machos primeiro na resposta, mesmo escritos depois', async () => {
+    const feita = await registrarMudanca(
+      1,
+      {
+        dtFato: '2026-09-25',
+        femeas: [
+          { qtd: 1, destino: { posicao: em(3, 1) } },
+          { qtd: 3, destino: { posicao: em(3, 2) } },
+        ],
+        machos: [
+          { qtd: 4, destino: { posicao: em(2, 1) } },
+          { qtd: 1, destino: { posicao: em(2, 2) } },
+        ],
+      },
+      7,
+    )
+
+    expect(feita.caixas.map((c) => [c.sexo, c.qtd])).toEqual([
+      ['M', 4],
+      ['M', 1],
+      ['F', 1],
+      ['F', 3],
+    ])
+    expect(banco.ocorrencias).toHaveLength(4)
+    expect(vivosEm(1)).toHaveLength(0)
+  })
+
+  it('soma igual aos vivos passa, e com o casal encerrado a caixa de origem e liberada', async () => {
+    ;(banco.casais.get(10) as Casal).ativo = false
+
+    const feita = await registrarMudanca(
+      1,
+      {
+        dtFato: '2026-09-25',
+        machos: [
+          { qtd: 3, destino: { posicao: em(2, 1) } },
+          { qtd: 2, destino: { posicao: em(2, 2) } },
+        ],
+        femeas: { qtd: 4, destino: { posicao: em(3, 1) } },
+      },
+      7,
+    )
+
+    expect(feita.liberada).toBe(true)
+    expect(banco.liberadas).toEqual([{ idCaixa: 1, dtFato: '2026-09-25', motivo: 'mudanca' }])
+  })
+
+  it('soma maior que os vivos: SEM_ANIMAIS na quantidade da parte que passa, com quantos sobram, e nada grava', async () => {
+    await expect(
+      registrarMudanca(
+        1,
+        {
+          dtFato: '2026-09-25',
+          machos: [
+            { qtd: 3, destino: { posicao: em(2, 1) } },
+            { qtd: 3, destino: { posicao: em(2, 2) } },
+          ],
+        },
+        7,
+      ),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        status: 409,
+        codigo: 'SEM_ANIMAIS',
+        message: expect.stringContaining('As caixas somam 6 machos, mas só há 5 nesta caixa'),
+        extras: { campos: { 'machos.1.qtd': 'Passa do total: sobram 2 para esta caixa.' } },
+      }),
+    )
+    nada()
+  })
+
+  it('sobrando um so, o campo diz "sobra 1", e e a primeira parte que passa que leva o campo', async () => {
+    await expect(
+      registrarMudanca(
+        1,
+        {
+          dtFato: '2026-09-25',
+          machos: [
+            { qtd: 4, destino: { posicao: em(2, 1) } },
+            { qtd: 2, destino: { posicao: em(2, 2) } },
+            { qtd: 1, destino: { posicao: em(2, 3) } },
+          ],
+        },
+        7,
+      ),
+    ).rejects.toEqual(
+      expect.objectContaining({ extras: { campos: { 'machos.1.qtd': 'Passa do total: sobra 1 para esta caixa.' } } }),
+    )
+    nada()
+  })
+
+  it('a soma de um sexo nao conta o outro: 5 machos cabem, mas as femeas passam das 4', async () => {
+    await expect(
+      registrarMudanca(
+        1,
+        {
+          dtFato: '2026-09-25',
+          machos: [
+            { qtd: 2, destino: { posicao: em(2, 1) } },
+            { qtd: 3, destino: { posicao: em(2, 2) } },
+          ],
+          femeas: [
+            { qtd: 2, destino: { posicao: em(3, 1) } },
+            { qtd: 3, destino: { posicao: em(3, 2) } },
+          ],
+        },
+        7,
+      ),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        codigo: 'SEM_ANIMAIS',
+        extras: { campos: { 'femeas.1.qtd': 'Passa do total: sobram 2 para esta caixa.' } },
+      }),
+    )
+    nada()
+  })
+
+  it('a mesma caixa de estoque em duas partes do mesmo sexo e recusada, todas as repetidas de uma vez', async () => {
+    caixa(3, 'estoque', { sexo: 'M', idLinhagem: 3 })
+
+    await expect(
+      registrarMudanca(
+        1,
+        {
+          dtFato: '2026-09-25',
+          machos: [
+            { qtd: 1, destino: { idCaixa: 3 } },
+            { qtd: 1, destino: { idCaixa: 3 } },
+            { qtd: 1, destino: { posicao: vazia } },
+            { qtd: 1, destino: { posicao: vazia } },
+            { qtd: 1, destino: { idCaixa: 3 } },
+          ],
+        },
+        7,
+      ),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        status: 400,
+        codigo: 'VALIDACAO',
+        extras: {
+          campos: {
+            'machos.1.destino': 'Esta caixa já está em outra parte: junte as quantidades numa parte só.',
+            'machos.3.destino': 'Esta posição já está em outra parte: junte as quantidades numa parte só.',
+            'machos.4.destino': 'Esta caixa já está em outra parte: junte as quantidades numa parte só.',
+          },
+        },
+      }),
+    )
+    nada()
+  })
+
+  it('machos e femeas na mesma posicao ou na mesma caixa: recusa no destino das femeas', async () => {
+    await expect(
+      registrarMudanca(
+        1,
+        {
+          dtFato: '2026-09-25',
+          machos: [
+            { qtd: 1, destino: { posicao: em(2, 1) } },
+            { qtd: 1, destino: { posicao: em(2, 2) } },
+          ],
+          femeas: [
+            { qtd: 1, destino: { posicao: em(3, 1) } },
+            { qtd: 1, destino: { posicao: em(2, 2) } },
+          ],
+        },
+        7,
+      ),
+    ).rejects.toEqual(noCampo('femeas.1.destino', 'Machos e fêmeas vão em caixas diferentes.'))
+
+    caixa(3, 'estoque', { sexo: 'M', idLinhagem: 3 })
+    await expect(
+      registrarMudanca(
+        1,
+        {
+          dtFato: '2026-09-25',
+          machos: [{ qtd: 1, destino: { idCaixa: 3 } }],
+          femeas: [{ qtd: 1, destino: { idCaixa: 3 } }],
+        },
+        7,
+      ),
+    ).rejects.toEqual(noCampo('femeas.0.destino', 'caixas diferentes'))
+    nada()
+  })
+
+  it('uma parte recusada pelo destino (outro sexo) fica no campo dela, pelo indice da parte', async () => {
+    await expect(
+      registrarMudanca(
+        1,
+        {
+          dtFato: '2026-09-25',
+          machos: [
+            { qtd: 1, destino: { posicao: em(2, 1) } },
+            { qtd: 1, destino: { idCaixa: 2 } },
+          ],
+        },
+        7,
+      ),
+    ).rejects.toEqual(noCampo('machos.1.destino', 'outro sexo'))
+  })
+
+  describe('com duas idades no mesmo sexo', () => {
+    beforeEach(() => {
+      // mais 3 machos de um parto de 10/08, tambem desmamados, na caixa 1: 5 de 01/09 e 3 de 10/08
+      banco.partos.set(22, {
+        id: 22,
+        idCasal: 10,
+        ordem: 0,
+        dtPartoReal: d('2026-08-10'),
+        dtDesmameReal: d('2026-09-02'),
+        dtSemNinhada: null,
+      })
+      animais(22, 1, 'M', 3)
+    })
+
+    it('uma parte de cada idade, cada uma com a data dela', async () => {
+      const feita = await registrarMudanca(
+        1,
+        {
+          dtFato: '2026-09-25',
+          machos: [
+            { qtd: 5, dtNascimento: '2026-09-01', destino: { posicao: em(2, 1) } },
+            { qtd: 3, dtNascimento: '2026-08-10', destino: { posicao: em(2, 2) } },
+          ],
+        },
+        7,
+      )
+
+      expect(vivosEm(feita.caixas[0]?.idCaixa as number).map(nascimento)).toEqual(Array(5).fill('2026-09-01'))
+      expect(vivosEm(feita.caixas[1]?.idCaixa as number).map(nascimento)).toEqual(Array(3).fill('2026-08-10'))
+    })
+
+    it('parte sem a data da idade e recusada no campo dela, antes de qualquer animal sair', async () => {
+      await expect(
+        registrarMudanca(
+          1,
+          {
+            dtFato: '2026-09-25',
+            machos: [
+              { qtd: 5, dtNascimento: '2026-09-01', destino: { posicao: em(2, 1) } },
+              { qtd: 1, destino: { posicao: em(2, 2) } },
+            ],
+          },
+          7,
+        ),
+      ).rejects.toEqual(noCampo('machos.1.dtNascimento', 'mais de uma idade'))
+      expect(banco.ocorrencias).toEqual([])
+      expect(novas()).toEqual([])
+    })
+
+    it('a soma e por idade: 4 + 2 de 10/08 passam dos 3, ainda que os 8 machos bastem', async () => {
+      await expect(
+        registrarMudanca(
+          1,
+          {
+            dtFato: '2026-09-25',
+            machos: [
+              { qtd: 4, dtNascimento: '2026-08-10', destino: { posicao: em(2, 1) } },
+              { qtd: 2, dtNascimento: '2026-08-10', destino: { posicao: em(2, 2) } },
+            ],
+          },
+          7,
+        ),
+      ).rejects.toEqual(
+        expect.objectContaining({
+          codigo: 'SEM_ANIMAIS',
+          message: expect.stringContaining('nesta caixa e idade'),
+          extras: { campos: { 'machos.0.qtd': 'Passa do total: sobram 3 para esta caixa.' } },
+        }),
+      )
+      expect(banco.ocorrencias).toEqual([])
+      expect(novas()).toEqual([])
+    })
+  })
+
+  describe('com reservados', () => {
+    const machos = () => banco.animais.filter((a) => a.idCaixa === 1 && a.sexo === 'M')
+
+    it('so do pedido numa parte e livres na outra, no mesmo sexo', async () => {
+      for (const a of machos().slice(3)) a.idPedido = 9
+
+      const feita = await registrarMudanca(
+        1,
+        {
+          dtFato: '2026-09-25',
+          machos: [
+            { qtd: 2, idPedido: 9, soDoPedido: true, destino: { posicao: em(2, 1) } },
+            { qtd: 3, destino: { posicao: em(2, 2) } },
+          ],
+        },
+        7,
+      )
+
+      expect(vivosEm(feita.caixas[0]?.idCaixa as number).map((a) => a.idPedido)).toEqual([9, 9])
+      expect(vivosEm(feita.caixas[1]?.idCaixa as number).map((a) => a.idPedido)).toEqual([null, null, null])
+    })
+
+    it('livres que nao bastam com dois pedidos: pede o pedido no campo da parte', async () => {
+      const [, , , do7, do9] = machos()
+      if (do7 === undefined || do9 === undefined) throw new Error('sem animal')
+      do7.idPedido = 7
+      do9.idPedido = 9
+
+      await expect(
+        registrarMudanca(
+          1,
+          {
+            dtFato: '2026-09-25',
+            machos: [
+              { qtd: 1, destino: { posicao: em(2, 1) } },
+              { qtd: 4, destino: { posicao: em(2, 2) } },
+            ],
+          },
+          7,
+        ),
+      ).rejects.toEqual(
+        expect.objectContaining({
+          codigo: 'PEDIDO_NAO_INDICADO',
+          extras: { campos: { 'machos.1.idPedido': 'Escolha um dos pedidos: #7, #9.' } },
+        }),
+      )
+    })
+
+    it('reservados que faltam na parte 2: SEM_ANIMAIS no campo da quantidade dela', async () => {
+      // 2 reservados do pedido 9: a parte 1 leva 1 e a parte 2 pede 2 so do pedido, mas resta 1
+      for (const a of machos().slice(3)) a.idPedido = 9
+
+      await expect(
+        registrarMudanca(
+          1,
+          {
+            dtFato: '2026-09-25',
+            machos: [
+              { qtd: 1, idPedido: 9, soDoPedido: true, destino: { posicao: em(2, 1) } },
+              { qtd: 2, idPedido: 9, soDoPedido: true, destino: { posicao: em(2, 2) } },
+            ],
+          },
+          7,
+        ),
+      ).rejects.toEqual(
+        expect.objectContaining({
+          status: 409,
+          codigo: 'SEM_ANIMAIS',
+          extras: { campos: { 'machos.1.qtd': expect.stringContaining('Pediu 2') } },
+        }),
+      )
+    })
+
+    it('com o objeto antigo (sem lista), a falta de reservados cai em machos.qtd', async () => {
+      await expect(
+        registrarMudanca(
+          1,
+          { dtFato: '2026-09-25', machos: { qtd: 1, idPedido: 9, soDoPedido: true, destino: { posicao: vazia } } },
+          7,
+        ),
+      ).rejects.toEqual(
+        expect.objectContaining({ codigo: 'SEM_ANIMAIS', extras: { campos: { 'machos.qtd': expect.any(String) } } }),
+      )
+    })
+  })
+})
+
+describe('as funcoes da mudanca em partes', () => {
+  const posicao = (linha: number, coluna: number) => ({ posicao: { idEstante: 1, face: 'frontal' as const, linha, coluna } })
+  const parte = (sexo: 'M' | 'F', campo: string, destino: ParteDaMudanca['destino'], qtd = 1): ParteDaMudanca => ({
+    sexo,
+    campo,
+    qtd,
+    destino,
+  })
+  const comIdade = (p: ParteDaMudanca, dtNascimento?: string): ParteComIdade => ({ ...p, dtNascimento })
+
+  describe('partesDaMudanca', () => {
+    it('o objeto antigo e uma parte so, no campo do sexo', () => {
+      expect(partesDaMudanca({ dtFato: '2026-09-25', machos: { qtd: 2, destino: { idCaixa: 3 } } })).toEqual([
+        { sexo: 'M', campo: 'machos', qtd: 2, destino: { idCaixa: 3 } },
+      ])
+    })
+
+    it('a lista vira uma parte por item, com o indice no campo, e os machos vem antes das femeas', () => {
+      const partes = partesDaMudanca({
+        dtFato: '2026-09-25',
+        femeas: { qtd: 4, destino: { idCaixa: 5 } },
+        machos: [
+          { qtd: 1, destino: { idCaixa: 3 } },
+          { qtd: 2, dtNascimento: '2026-09-01', destino: posicao(2, 1) },
+        ],
+      })
+
+      expect(partes.map((p) => [p.sexo, p.campo, p.qtd])).toEqual([
+        ['M', 'machos.0', 1],
+        ['M', 'machos.1', 2],
+        ['F', 'femeas', 4],
+      ])
+      expect(partes[1]?.dtNascimento).toBe('2026-09-01')
+    })
+
+    it('sexo ausente nao gera parte', () => {
+      expect(partesDaMudanca({ dtFato: '2026-09-25' })).toEqual([])
+    })
+  })
+
+  describe('exigirDestinosDiferentes', () => {
+    it('destinos todos diferentes passam', () => {
+      expect(() =>
+        exigirDestinosDiferentes([
+          parte('M', 'machos.0', posicao(2, 1)),
+          parte('M', 'machos.1', posicao(2, 2)),
+          parte('M', 'machos.2', { idCaixa: 3 }),
+          parte('F', 'femeas', { idCaixa: 4 }),
+        ]),
+      ).not.toThrow()
+    })
+
+    it('a mesma linha e coluna em outra face ou outra estante e outro lugar', () => {
+      const outraFace = { posicao: { idEstante: 1, face: 'traseira' as const, linha: 2, coluna: 1 } }
+      const outraEstante = { posicao: { idEstante: 2, face: 'frontal' as const, linha: 2, coluna: 1 } }
+
+      expect(() =>
+        exigirDestinosDiferentes([
+          parte('M', 'machos.0', posicao(2, 1)),
+          parte('M', 'machos.1', outraFace),
+          parte('M', 'machos.2', outraEstante),
+        ]),
+      ).not.toThrow()
+    })
+
+    it('repetido no sexo: junte as quantidades; entre sexos: caixas diferentes; tudo num erro so', () => {
+      const erro = (() => {
+        try {
+          exigirDestinosDiferentes([
+            parte('M', 'machos.0', { idCaixa: 3 }),
+            parte('M', 'machos.1', { idCaixa: 3 }),
+            parte('F', 'femeas.0', posicao(2, 1)),
+            parte('F', 'femeas.1', posicao(2, 1)),
+            parte('M', 'machos.2', posicao(2, 1)),
+          ])
+        } catch (e) {
+          return e
+        }
+      })()
+
+      expect(erro).toMatchObject({
+        status: 400,
+        codigo: 'VALIDACAO',
+        extras: {
+          campos: {
+            'machos.1.destino': 'Esta caixa já está em outra parte: junte as quantidades numa parte só.',
+            'femeas.1.destino': 'Esta posição já está em outra parte: junte as quantidades numa parte só.',
+            'machos.2.destino': 'Machos e fêmeas vão em caixas diferentes.',
+          },
+        },
+      })
+    })
+  })
+
+  describe('exigirSomaQueCabe', () => {
+    const ninhadas = [{ dtNascimento: '2026-09-01', vivos: { m: 5, f: 4 } }]
+    const recusa = (partes: ParteComIdade[], ninhadasDaCaixa = ninhadas) => {
+      try {
+        exigirSomaQueCabe(partes, ninhadasDaCaixa)
+      } catch (e) {
+        return e
+      }
+    }
+    const macho = (campo: string, qtd: number, idCaixa: number, dtNascimento?: string) =>
+      comIdade(parte('M', campo, { idCaixa }, qtd), dtNascimento)
+
+    it('soma menor ou igual passa, sexo por sexo', () => {
+      expect(() =>
+        exigirSomaQueCabe(
+          [macho('machos.0', 2, 3), macho('machos.1', 3, 4), comIdade(parte('F', 'femeas', { idCaixa: 5 }, 4))],
+          ninhadas,
+        ),
+      ).not.toThrow()
+    })
+
+    it('uma parte so que passa: "Pediu 7 machos, mas so ha 5", com o limite no campo', () => {
+      expect(recusa([macho('machos', 7, 3)])).toMatchObject({
+        status: 409,
+        codigo: 'SEM_ANIMAIS',
+        message: 'Pediu 7 machos, mas só há 5 nesta caixa.',
+        extras: { campos: { 'machos.qtd': 'Só há 5 nesta caixa.' } },
+      })
+    })
+
+    it('varias partes: "As caixas somam 7 machos", e o campo e o da que estoura', () => {
+      expect(recusa([macho('machos.0', 4, 3), macho('machos.1', 3, 4)])).toMatchObject({
+        message: 'As caixas somam 7 machos, mas só há 5 nesta caixa.',
+        extras: { campos: { 'machos.1.qtd': 'Passa do total: sobra 1 para esta caixa.' } },
+      })
+    })
+
+    it('a primeira parte ja passa sozinha: o campo e o dela, com tudo o que ha', () => {
+      expect(recusa([macho('machos.0', 6, 3), macho('machos.1', 1, 4)])).toMatchObject({
+        extras: { campos: { 'machos.0.qtd': 'Passa do total: sobram 5 para esta caixa.' } },
+      })
+    })
+
+    it('sem nenhum vivo do sexo, o aviso e que nao ha', () => {
+      const semFemeas = [{ dtNascimento: '2026-09-01', vivos: { m: 5, f: 0 } }]
+
+      expect(recusa([comIdade(parte('F', 'femeas', { idCaixa: 3 }, 1))], semFemeas)).toMatchObject({
+        codigo: 'SEM_ANIMAIS',
+        message: 'Não há fêmeas vivas nesta caixa para esta mudança.',
+      })
+    })
+
+    it('com a idade, so os vivos daquela idade contam; havendo mais de uma idade a mensagem diz "caixa e idade"', () => {
+      const duas = [
+        { dtNascimento: '2026-09-01', vivos: { m: 5, f: 0 } },
+        { dtNascimento: '2026-08-10', vivos: { m: 3, f: 0 } },
+      ]
+
+      expect(() => exigirSomaQueCabe([macho('machos.0', 5, 3, '2026-09-01'), macho('machos.1', 3, 4, '2026-08-10')], duas)).not.toThrow()
+      expect(recusa([macho('machos.0', 4, 3, '2026-08-10')], duas)).toMatchObject({
+        message: 'Pediu 4 machos, mas só há 3 nesta caixa e idade.',
+      })
+    })
   })
 })
 

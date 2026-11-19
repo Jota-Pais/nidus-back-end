@@ -5,7 +5,7 @@ import { criarApp } from '../../app.ts'
 import { hojeISO } from '../../shared/traducao.ts'
 import type { Perfil } from '../../shared/traducao.ts'
 import { somarDias } from '../reproducao/cadeiaTemporal.ts'
-import { caixaDeEstoqueNova, edicaoDoEstoque, mudanca } from './caixa.routes.ts'
+import { PARTES_POR_SEXO, caixaDeEstoqueNova, edicaoDoEstoque, mudanca } from './caixa.routes.ts'
 
 // Autorizacao e validacao de forma. Nenhum teste aqui chega ao banco
 
@@ -126,6 +126,110 @@ describe('mudanca de animais', () => {
       mudanca.safeParse({ dtFato: ontem, machos: { qtd: 1, destino: { posicao: { idEstante: 1, face: 'lateral', linha: 1, coluna: 1 } } } })
         .success,
     ).toBe(false)
+  })
+})
+
+describe('mudanca de animais em varias caixas: a forma do corpo', () => {
+  const ontem = somarDias(hojeISO(), -1)
+  const parte = (n: number) => ({ qtd: 1, destino: { idCaixa: n } })
+  const campos = (corpo: Record<string, unknown>) =>
+    mudanca.safeParse({ dtFato: ontem, ...corpo }).error?.issues.map((issue) => issue.path.join('.'))
+
+  it('o objeto antigo e a lista de 1 a 20 partes passam, nos dois sexos', () => {
+    expect(mudanca.safeParse({ dtFato: ontem, machos: parte(2) }).success).toBe(true)
+    expect(mudanca.safeParse({ dtFato: ontem, machos: [parte(2)] }).success).toBe(true)
+    expect(mudanca.safeParse({ dtFato: ontem, machos: [parte(2), parte(3)], femeas: [parte(4), parte(5)] }).success).toBe(true)
+    expect(
+      mudanca.safeParse({ dtFato: ontem, femeas: Array.from({ length: PARTES_POR_SEXO }, (_, i) => parte(i + 2)) }).success,
+    ).toBe(true)
+  })
+
+  it('cada parte da lista traz a data, o pedido e o so do pedido', () => {
+    const lida = mudanca.safeParse({
+      dtFato: ontem,
+      machos: [
+        { qtd: 2, dtNascimento: '2026-09-01', idPedido: 9, soDoPedido: true, destino: { idCaixa: 2 } },
+        { qtd: 1, destino: { posicao: { idEstante: 1, face: 'frontal', linha: 2, coluna: 1 } } },
+      ],
+    })
+
+    expect(lida.success).toBe(true)
+    expect(lida.data?.machos).toEqual([
+      { qtd: 2, dtNascimento: '2026-09-01', idPedido: 9, soDoPedido: true, destino: { idCaixa: 2 } },
+      { qtd: 1, destino: { posicao: { idEstante: 1, face: 'frontal', linha: 2, coluna: 1 } } },
+    ])
+  })
+
+  it('lista vazia: "Informe ao menos uma caixa." no campo do sexo', () => {
+    const lida = mudanca.safeParse({ dtFato: ontem, machos: [] })
+
+    expect(lida.error?.issues.map((i) => [i.path.join('.'), i.message])).toEqual([['machos', 'Informe ao menos uma caixa.']])
+  })
+
+  it('21 partes: "No maximo 20 caixas por sexo."', () => {
+    const lida = mudanca.safeParse({ dtFato: ontem, femeas: Array.from({ length: PARTES_POR_SEXO + 1 }, (_, i) => parte(i + 2)) })
+
+    expect(lida.error?.issues.map((i) => [i.path.join('.'), i.message])).toEqual([['femeas', 'No máximo 20 caixas por sexo.']])
+  })
+
+  it('o erro de uma parte cai no campo dela: quantidade zero, destino faltando', () => {
+    expect(campos({ machos: [parte(2), { qtd: 0, destino: { idCaixa: 3 } }] })).toEqual(['machos.1.qtd'])
+    expect(campos({ machos: [parte(2), { qtd: 1 }] })).toEqual(['machos.1.destino'])
+    expect(campos({ femeas: [{ qtd: 1.5, destino: { idCaixa: 3 } }, parte(2)] })).toEqual(['femeas.0.qtd'])
+    expect(campos({ machos: [{ qtd: 1, destino: { posicao: { idEstante: 1, face: 'lateral', linha: 1, coluna: 1 } } }] })).toEqual([
+      'machos.0.destino',
+    ])
+  })
+
+  it('so do pedido sem pedido: o erro vai em machos.N.idPedido, e no objeto antigo em machos.idPedido', () => {
+    expect(campos({ machos: [parte(2), { ...parte(3), soDoPedido: true }] })).toEqual(['machos.1.idPedido'])
+    expect(campos({ machos: { ...parte(2), soDoPedido: true } })).toEqual(['machos.idPedido'])
+    expect(campos({ machos: [{ ...parte(2), soDoPedido: true }] })).toEqual(['machos.0.idPedido'])
+  })
+
+  it('o que nao e objeto nem lista e recusado no campo do sexo', () => {
+    expect(campos({ machos: 'tres' })).toEqual(['machos'])
+    expect(campos({ femeas: 3 })).toEqual(['femeas'])
+    expect(campos({ machos: null })).toEqual(['machos'])
+  })
+
+  it('os erros de varias partes e dos dois sexos vem juntos, cada um no seu campo', () => {
+    expect(campos({ machos: [{ qtd: 0, destino: { idCaixa: 3 } }, { qtd: 1 }], femeas: [{ qtd: 0, destino: { idCaixa: 4 } }] })).toEqual([
+      'machos.0.qtd',
+      'machos.1.destino',
+      'femeas.0.qtd',
+    ])
+  })
+
+  it('sem nenhum dos dois sexos, e uma lista vazia de um nao basta', () => {
+    expect(campos({})).toEqual(['machos'])
+    expect(campos({ femeas: [] })).toEqual(['femeas'])
+  })
+
+  it('pela rota, o erro de parte volta 400 VALIDACAO com o campo da parte', async () => {
+    const resposta = await request(app('tecnico'))
+      .post('/api/caixas/1/mudanca')
+      .send({ dtFato: ontem, machos: [parte(2), { qtd: 0, destino: { idCaixa: 3 } }] })
+
+    expect(resposta.status).toBe(400)
+    expect(resposta.body.erro.codigo).toBe('VALIDACAO')
+    expect(resposta.body.erro.campos).toHaveProperty(['machos.1.qtd'])
+  })
+
+  it('pela rota, lista vazia e 21 partes voltam 400 no campo do sexo', async () => {
+    const vazia = await request(app('tecnico')).post('/api/caixas/1/mudanca').send({ dtFato: ontem, machos: [] })
+    expect(vazia.status).toBe(400)
+    expect(vazia.body.erro.campos).toEqual({ machos: 'Informe ao menos uma caixa.' })
+
+    const muitas = await request(app('tecnico'))
+      .post('/api/caixas/1/mudanca')
+      .send({ dtFato: ontem, femeas: Array.from({ length: 21 }, (_, i) => parte(i + 2)) })
+    expect(muitas.status).toBe(400)
+    expect(muitas.body.erro.campos).toEqual({ femeas: 'No máximo 20 caixas por sexo.' })
+  })
+
+  it('pela rota, o formato antigo do pedido sem soDoPedido ainda e aceito (so falha no banco)', () => {
+    expect(mudanca.safeParse({ dtFato: ontem, machos: { ...parte(2), idPedido: 9 } }).success).toBe(true)
   })
 })
 

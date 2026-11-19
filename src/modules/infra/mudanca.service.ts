@@ -7,7 +7,7 @@
 
 import { agora } from '../../shared/relogio.ts'
 import type { Prisma } from '@prisma/client'
-import { campoInvalido, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
+import { ErroDeAplicacao, campoInvalido, camposInvalidos, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import type { CodigoErro } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
@@ -18,7 +18,7 @@ import { escolherAnimais, exigirDepoisDaChegada, idadeDoGrupo } from '../colonia
 import type { Escolhido } from '../colonia/escolha.ts'
 import { caixaLiberada, liberarSeVazia, partoPendente } from '../colonia/liberacao.ts'
 import { lancarOcorrencia } from '../colonia/ocorrencia.ts'
-import { SEXOS, origemDaNinhada, quantosDoSexo } from '../colonia/tipos.ts'
+import { ROTULO_DO_SEXO, SEXOS, doSexo, noNumero, origemDaNinhada, quantosDoSexo } from '../colonia/tipos.ts'
 import type { Sexo } from '../colonia/tipos.ts'
 import { travarCaixas } from '../colonia/travas.ts'
 import { exigirOrdem } from '../reproducao/ordemDasDatas.ts'
@@ -32,7 +32,7 @@ type Transacao = Prisma.TransactionClient
 /** Para onde vao os animais: uma caixa de estoque que ja existe, ou uma posicao vazia */
 export type DestinoDaMudanca = { idCaixa: number } | { posicao: PosicaoNaEstante }
 
-/** Os animais de um sexo que mudam */
+/** Os animais de um sexo que mudam para um destino */
 export type GrupoQueMuda = {
   qtd: number
   /** So quando a caixa tem mais de uma idade naquele sexo */
@@ -47,13 +47,32 @@ export type GrupoQueMuda = {
   destino: DestinoDaMudanca
 }
 
-export type Mudanca = { dtFato: string; machos?: GrupoQueMuda | undefined; femeas?: GrupoQueMuda | undefined }
+/** Um sexo vai todo para uma caixa (um grupo) ou dividido em varias (uma lista, uma parte por caixa) */
+export type SexoQueMuda = GrupoQueMuda | GrupoQueMuda[]
+
+export type Mudanca = { dtFato: string; machos?: SexoQueMuda | undefined; femeas?: SexoQueMuda | undefined }
+
+/**
+ * Uma parte da mudanca: os animais de um sexo que vao para um destino. 'campo' e o prefixo dos
+ * campos dela no formulario: 'machos' no grupo unico, 'machos.1' na segunda parte da lista
+ */
+export type ParteDaMudanca = GrupoQueMuda & { sexo: Sexo; campo: string }
 
 /** A caixa de onde os animais saem, travada */
 type Origem = { id: number; codigo: string; idEspecie: number }
 
 /** O campo do formulario de cada sexo */
 const CAMPO: Record<Sexo, string> = { M: 'machos', F: 'femeas' }
+
+/** As partes da mudanca, machos primeiro e na ordem da lista, cada uma com o campo dela */
+export function partesDaMudanca(dados: Mudanca): ParteDaMudanca[] {
+  return SEXOS.flatMap((sexo) => {
+    const oQueMuda = sexo === 'M' ? dados.machos : dados.femeas
+    if (oQueMuda === undefined) return []
+    if (!Array.isArray(oQueMuda)) return [{ ...oQueMuda, sexo, campo: CAMPO[sexo] }]
+    return oQueMuda.map((parte, i) => ({ ...parte, sexo, campo: `${CAMPO[sexo]}.${i}` }))
+  })
+}
 
 /**
  * A linhagem dos animais escolhidos e a recusa de quem ainda nao desmamou: filhote que mama fica
@@ -128,39 +147,138 @@ async function caixaDeDestino(
   })
 }
 
-/** Machos e femeas nao dividem a caixa de estoque: duas posicoes iguais na mesma mudanca e recusa */
-function exigirPosicoesDiferentes(dados: Mudanca): void {
-  const [machos, femeas] = [dados.machos?.destino, dados.femeas?.destino]
-  if (machos === undefined || femeas === undefined || !('posicao' in machos) || !('posicao' in femeas)) return
+function chaveDoDestino(destino: DestinoDaMudanca): string {
+  if ('idCaixa' in destino) return `caixa ${destino.idCaixa}`
 
-  const mesma =
-    machos.posicao.idEstante === femeas.posicao.idEstante &&
-    machos.posicao.face === femeas.posicao.face &&
-    machos.posicao.linha === femeas.posicao.linha &&
-    machos.posicao.coluna === femeas.posicao.coluna
+  const { idEstante, face, linha, coluna } = destino.posicao
+  return `posicao ${idEstante} ${face} ${linha} ${coluna}`
+}
 
-  if (mesma) throw campoInvalido('femeas.destino', 'Machos e fêmeas vão em caixas diferentes.')
+/**
+ * Cada parte vai para um destino so dela: duas partes na mesma caixa de estoque ou na mesma
+ * posicao vazia e recusa, todas de uma vez, no destino da parte que repete. Do mesmo sexo, as
+ * quantidades ficam numa parte so; de sexos diferentes, machos e femeas nao dividem caixa
+ */
+export function exigirDestinosDiferentes(partes: ParteDaMudanca[]): void {
+  const vistos = new Map<string, ParteDaMudanca>()
+  const campos: Record<string, string> = {}
+
+  for (const parte of partes) {
+    const chave = chaveDoDestino(parte.destino)
+    const antes = vistos.get(chave)
+
+    if (antes === undefined) {
+      vistos.set(chave, parte)
+    } else if (antes.sexo !== parte.sexo) {
+      campos[`${parte.campo}.destino`] = 'Machos e fêmeas vão em caixas diferentes.'
+    } else {
+      const qual = 'idCaixa' in parte.destino ? 'Esta caixa' : 'Esta posição'
+      campos[`${parte.campo}.destino`] = `${qual} já está em outra parte: junte as quantidades numa parte só.`
+    }
+  }
+
+  if (Object.keys(campos).length > 0) throw camposInvalidos(campos)
+}
+
+/** Uma parte com a idade ja decidida (idadeDoGrupo): undefined quando o sexo tem uma idade so */
+export type ParteComIdade = ParteDaMudanca & { dtNascimento: string | undefined }
+
+/**
+ * As partes de cada sexo e idade, somadas, nao passam dos vivos daquele sexo e idade na caixa.
+ * Recusa com SEM_ANIMAIS, como a escolha, com a mensagem na quantidade da primeira parte que
+ * passa do total. Os reservados ainda podem faltar na escolha de cada parte (escolherAnimais)
+ */
+export function exigirSomaQueCabe(
+  partes: ParteComIdade[],
+  ninhadas: Pick<VivosDoParto, 'dtNascimento' | 'vivos'>[],
+): void {
+  const grupos = new Map<string, ParteComIdade[]>()
+
+  for (const parte of partes) {
+    const chave = `${parte.sexo} ${parte.dtNascimento ?? ''}`
+    grupos.set(chave, [...(grupos.get(chave) ?? []), parte])
+  }
+
+  for (const doGrupo of grupos.values()) {
+    const [primeira] = doGrupo
+    if (primeira === undefined) continue
+
+    const { sexo, dtNascimento } = primeira
+    const ha = ninhadas
+      .filter((ninhada) => dtNascimento === undefined || ninhada.dtNascimento === dtNascimento)
+      .reduce((soma, ninhada) => soma + doSexo(ninhada.vivos, sexo), 0)
+    const soma = doGrupo.reduce((total, parte) => total + parte.qtd, 0)
+
+    if (soma <= ha) continue
+
+    const idades = new Set(ninhadas.filter((ninhada) => doSexo(ninhada.vivos, sexo) > 0).map((ninhada) => ninhada.dtNascimento))
+    const onde = idades.size > 1 ? 'nesta caixa e idade' : 'nesta caixa'
+    const uma = doGrupo.length === 1
+    const mensagem =
+      ha === 0
+        ? `Não há ${ROTULO_DO_SEXO[sexo]} ${sexo === 'F' ? 'vivas' : 'vivos'} ${onde} para esta mudança.`
+        : `${uma ? 'Pediu' : 'As caixas somam'} ${quantosDoSexo(soma, sexo)}, mas só há ${ha} ${onde}.`
+
+    // a primeira parte que, somada as de antes, passa do que ha
+    let antes = 0
+    for (const parte of doGrupo) {
+      if (antes + parte.qtd > ha) {
+        const sobram = Math.max(ha - antes, 0)
+        const noCampo = uma
+          ? `Só há ${ha} ${onde}.`
+          : `Passa do total: ${noNumero(sobram, 'sobra', 'sobram')} ${sobram} para esta caixa.`
+
+        throw erroDeRegra('SEM_ANIMAIS', mensagem, { campos: { [`${parte.campo}.qtd`]: noCampo } })
+      }
+      antes += parte.qtd
+    }
+  }
+}
+
+/**
+ * Escolhe e trava os animais da parte, sem repetir os que outra parte ja levou. A falta de
+ * animais (os reservados que nao bastam) volta com a mensagem na quantidade da parte
+ */
+async function escolherDaParte(
+  tx: Transacao,
+  idOrigem: number,
+  parte: ParteComIdade,
+  jaEscolhidos: number[],
+): Promise<Escolhido[]> {
+  const grupo = { idCaixa: idOrigem, sexo: parte.sexo, dtNascimento: parte.dtNascimento }
+
+  try {
+    return await escolherAnimais(tx, grupo, parte.qtd, {
+      idPedido: parte.idPedido,
+      soDoPedido: parte.soDoPedido === true,
+      excluir: jaEscolhidos,
+      campoDoPedido: `${parte.campo}.idPedido`,
+    })
+  } catch (erro) {
+    if (erro instanceof ErroDeAplicacao && erro.codigo === 'SEM_ANIMAIS' && erro.extras.campos === undefined) {
+      throw erroDeRegra('SEM_ANIMAIS', erro.message, { campos: { [`${parte.campo}.qtd`]: erro.message } })
+    }
+    throw erro
+  }
 }
 
 /**
  * POST /api/caixas/:id/mudanca - animais desmamados mudam de caixa: da caixa do casal para o
- * estoque (a passagem) ou de uma caixa de estoque para outra, para juntar ou separar. Machos e
- * femeas, cada sexo para uma caixa de estoque que ja existe ou para uma nova, numa posicao vazia.
- * Saem os livres primeiro e, se nao bastarem, os reservados do pedido indicado (escolherAnimais);
- * com soDoPedido, so os reservados dele. A reserva vai junto. A
- * caixa de onde sairam e liberada se esvaziou (a de casal, so com o casal encerrado e sem parto
- * pendente)
+ * estoque (a passagem) ou de uma caixa de estoque para outra, para juntar ou separar. Cada sexo
+ * vai todo para uma caixa ou dividido em partes, cada parte para uma caixa de estoque que ja
+ * existe ou para uma nova, numa posicao vazia. Duas partes nunca vao para o mesmo destino
+ * (exigirDestinosDiferentes) e a soma nao passa dos vivos (exigirSomaQueCabe). Em cada parte saem
+ * os livres primeiro e, se nao bastarem, os reservados do pedido indicado (escolherAnimais); com
+ * soDoPedido, so os reservados dele. A reserva vai junto. Tudo ou nada, numa transacao so. A caixa
+ * de onde sairam e liberada se esvaziou (a de casal, so com o casal encerrado e sem parto
+ * pendente). Devolve uma caixa por parte, na ordem das partes
  */
 export async function registrarMudanca(idOrigem: number, dados: Mudanca, idUsuario: number) {
-  exigirPosicoesDiferentes(dados)
-
-  const grupos = SEXOS.flatMap((sexo) => {
-    const grupo = sexo === 'M' ? dados.machos : dados.femeas
-    return grupo === undefined ? [] : [{ sexo, campo: CAMPO[sexo], ...grupo }]
-  })
+  const partes = partesDaMudanca(dados)
+  exigirDestinosDiferentes(partes)
 
   return prisma.$transaction(async (tx) => {
-    const destinosQueExistem = grupos.flatMap((grupo) => ('idCaixa' in grupo.destino ? [grupo.destino.idCaixa] : []))
+    const destinosQueExistem = partes.flatMap((parte) => ('idCaixa' in parte.destino ? [parte.destino.idCaixa] : []))
     await travarCaixas(tx, [idOrigem, ...destinosQueExistem])
 
     const origem = await tx.caixa.findUnique({
@@ -171,16 +289,21 @@ export async function registrarMudanca(idOrigem: number, dados: Mudanca, idUsuar
     if (origem === null) throw naoEncontrado('Caixa')
     if (!origem.ativa) throw caixaLiberada(origem.codigo)
 
+    // a idade de cada parte, decidida antes de qualquer animal sair da caixa
+    const comIdade: ParteComIdade[] = []
+    for (const parte of partes) {
+      const dtNascimento = await idadeDoGrupo(tx, idOrigem, parte.sexo, parte.dtNascimento, `${parte.campo}.dtNascimento`)
+      comIdade.push({ ...parte, dtNascimento })
+    }
+
+    exigirSomaQueCabe(comIdade, (await vivosNasCaixas(tx, [idOrigem])).get(idOrigem)?.partos ?? [])
+
     const caixas: { idCaixa: number; codigo: string; sexo: Sexo; qtd: number }[] = []
+    const jaEscolhidos: number[] = []
 
-    for (const grupo of grupos) {
-      const dtNascimento = await idadeDoGrupo(tx, idOrigem, grupo.sexo, grupo.dtNascimento, `${grupo.campo}.dtNascimento`)
-
-      const escolhidos = await escolherAnimais(tx, { idCaixa: idOrigem, sexo: grupo.sexo, dtNascimento }, grupo.qtd, {
-        idPedido: grupo.idPedido,
-        soDoPedido: grupo.soDoPedido === true,
-        campoDoPedido: `${grupo.campo}.idPedido`,
-      })
+    for (const parte of comIdade) {
+      const escolhidos = await escolherDaParte(tx, idOrigem, parte, jaEscolhidos)
+      jaEscolhidos.push(...escolhidos.map((animal) => animal.id))
 
       exigirDepoisDaChegada('dtFato', dados.dtFato, escolhidos)
       const idLinhagem = await linhagemDosDesmamados(tx, escolhidos, dados.dtFato)
@@ -188,9 +311,9 @@ export async function registrarMudanca(idOrigem: number, dados: Mudanca, idUsuar
       const destino = await caixaDeDestino(
         tx,
         origem,
-        grupo.destino,
-        `${grupo.campo}.destino`,
-        { sexo: grupo.sexo, idLinhagem },
+        parte.destino,
+        `${parte.campo}.destino`,
+        { sexo: parte.sexo, idLinhagem },
         dados.dtFato,
       )
 
@@ -203,7 +326,7 @@ export async function registrarMudanca(idOrigem: number, dados: Mudanca, idUsuar
         ids: escolhidos.map((animal) => animal.id),
       })
 
-      caixas.push({ idCaixa: destino.id, codigo: destino.codigo, sexo: grupo.sexo, qtd: escolhidos.length })
+      caixas.push({ idCaixa: destino.id, codigo: destino.codigo, sexo: parte.sexo, qtd: escolhidos.length })
     }
 
     const liberada = await liberarSeVazia(tx, idOrigem, dados.dtFato, 'mudanca', idUsuario)
