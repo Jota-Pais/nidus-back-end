@@ -10,12 +10,39 @@ import { mudarDePosicao } from './caixa.service.ts'
 import { editarCaixaDeEstoque } from './edicaoDoEstoque.service.ts'
 import { criarCaixaDeEstoque } from './entrada.service.ts'
 import { montarFicha } from './ficha.service.ts'
+import { listarLiberadas } from './liberadas.service.ts'
 import { registrarMudanca, virarCaixaDeEstoque } from './mudanca.service.ts'
 
 /** /api/caixas e a ficha, a posicao, os animais que mudam e o cadastro inicial do estoque */
 export const caixaRoutes = Router()
 
-/** GET /api/caixas/:id - a ficha da caixa */
+const idNaConsulta = z.coerce.number().int().positive().max(2147483647)
+const diaNaConsulta = z.iso.date('Data inválida. Use aaaa-mm-dd.')
+
+/** A consulta de GET /api/caixas/liberadas: a especie e, se quiser, a linhagem, a busca e o periodo */
+export const filtroDasLiberadas = z
+  .object({
+    idEspecie: idNaConsulta,
+    idLinhagem: idNaConsulta.optional(),
+    busca: z.string().trim().min(1).max(40).optional(),
+    de: diaNaConsulta.optional(),
+    ate: diaNaConsulta.optional(),
+    limite: z.coerce.number().int().min(1).max(200).default(50),
+  })
+  .refine((filtro) => filtro.de === undefined || filtro.ate === undefined || filtro.de <= filtro.ate, {
+    path: ['ate'],
+    error: 'O fim do período não pode ser antes do início.',
+  })
+
+/**
+ * GET /api/caixas/liberadas - as caixas que sairam da estante, da especie pedida, a liberacao mais
+ * recente primeiro. Antes de '/:id', que leria 'liberadas' como id
+ */
+caixaRoutes.get('/liberadas', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+  res.json(await listarLiberadas(filtroDasLiberadas.parse(req.query)))
+})
+
+/** GET /api/caixas/:id - a ficha da caixa, tambem a da caixa liberada */
 caixaRoutes.get('/:id', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
 
