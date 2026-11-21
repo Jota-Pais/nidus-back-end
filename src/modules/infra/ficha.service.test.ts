@@ -19,12 +19,16 @@ const banco = vi.hoisted(() => ({
   umAUm: [] as { idPedido: number | null; dtMovimento: Date | null; parto: { dtPartoReal: Date | null } }[],
   /** quantos entraram em cada ninhada do cadastro inicial: todo animal dela, menos o anulado */
   cadastrados: [] as { idParto: number; _count: { _all: number } }[],
+  /** as ocorrencias que a trilha da caixa de estoque le */
+  ocorrencias: [] as unknown[],
 }))
 
 vi.mock('../../shared/prisma.ts', () => ({
   prisma: {
     caixa: { findUnique: async () => banco.caixa },
     animal: { findMany: async () => banco.umAUm, groupBy: async () => banco.cadastrados },
+    // a trilha da caixa de estoque: o teste dela esta em trilhaDoEstoque.test.ts
+    ocorrencia: { findMany: async () => banco.ocorrencias },
     parto: {
       findMany: async ({ where }: { where: { idCasal: number } }) => banco.partos.filter((p) => p.idCasal === where.idCasal),
     },
@@ -98,6 +102,7 @@ const caixa = (campos: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   banco.caixa = caixa()
   banco.cadastrados = []
+  banco.ocorrencias = []
   banco.partos = [
     { id: 10, idCasal: 1 },
     { id: 20, idCasal: 2 },
@@ -343,5 +348,68 @@ describe('a ficha da caixa de estoque', () => {
     banco.vivos = naCaixa([])
 
     expect(await montarFicha(7)).toMatchObject({ caixa: { fase: null, ativa: false }, total: 0, grupos: [] })
+  })
+
+  /** Uma entrada do cadastro inicial de 4 machos, como a trilha le */
+  const entrada = {
+    id: 1,
+    tipo: 'entrada',
+    dtFato: d('2026-10-01'),
+    causa: null,
+    motivo: null,
+    idCaixaOrigem: null,
+    idCaixaDestino: 7,
+    idPedido: null,
+    caixaOrigem: null,
+    caixaDestino: { id: 7, codigo: 'F1A', estante: { numeroVisivel: 'E1' } },
+    animais: Array.from({ length: 4 }, () => ({
+      animal: {
+        sexo: 'M',
+        idCaixa: 7,
+        situacao: 'vivo',
+        idParto: 10,
+        parto: { ordem: null, dtPartoReal: d('2026-09-01'), casal: null },
+        ocorrencias: [{ idOcorrencia: 1 }],
+      },
+    })),
+  }
+
+  it('a caixa de estoque ativa devolve a trilha dos animais', async () => {
+    banco.caixa = caixa({ tipo: 'estoque', sexo: 'M', idLinhagem: 3, linhagem: { nome: 'Wistar' }, casais: [] })
+    banco.ocorrencias = [entrada]
+
+    const ficha = await montarFicha(7)
+    if (ficha.tipo !== 'estoque') throw new Error('ficha de casal')
+
+    expect(ficha.trilha).toEqual([
+      expect.objectContaining({ idOcorrencia: 1, sentido: 'chegada', tipo: 'entrada', m: 4, f: 0, dtFato: '2026-10-01' }),
+    ])
+  })
+
+  it('a liberada tambem devolve a trilha, mesmo sem nenhum vivo', async () => {
+    banco.caixa = caixa({
+      tipo: 'estoque',
+      sexo: 'M',
+      idLinhagem: 3,
+      linhagem: { nome: 'Wistar' },
+      casais: [],
+      ativa: false,
+      motivoLiberacao: 'entrega',
+      dtLiberacao: new Date(),
+    })
+    banco.vivos = naCaixa([])
+    banco.ocorrencias = [entrada]
+
+    const ficha = await montarFicha(7)
+    if (ficha.tipo !== 'estoque') throw new Error('ficha de casal')
+
+    expect(ficha.total).toBe(0)
+    expect(ficha.trilha).toHaveLength(1)
+  })
+
+  it('sem ocorrencia nenhuma, a trilha e vazia', async () => {
+    banco.caixa = caixa({ tipo: 'estoque', sexo: 'M', idLinhagem: 3, linhagem: { nome: 'Wistar' }, casais: [] })
+
+    expect(await montarFicha(7)).toMatchObject({ trilha: [] })
   })
 })

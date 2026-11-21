@@ -1,8 +1,8 @@
 // A ficha da caixa (GET /api/caixas/:id). A de casal mostra o casal, os partos (1 a 5; o casal que
 // ja estava no Nº parto quando foi cadastrado tem so do Nº em diante, e casal.partoInicial diz
 // qual e), os casais que vieram antes; a de estoque, os vivos por data de nascimento com as
-// origens, os pedidos com reservado nela e os casais da caixa, se ela ja foi de casal. Tudo
-// contado nos animais: nenhum numero vem gravado
+// origens, os pedidos com reservado nela, os casais da caixa, se ela ja foi de casal, e a trilha
+// dos animais que passaram por ela. Tudo contado nos animais: nenhum numero vem gravado
 
 import { naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
@@ -15,6 +15,7 @@ import { cicloFicha } from '../reproducao/cicloFicha.ts'
 import { casalFicha } from '../reproducao/reproducao.service.ts'
 import { gruposPorNascimento, partoPrevisto } from './card.ts'
 import { viradaParaEstoque } from './mudanca.service.ts'
+import { trilhaDaCaixa } from './trilhaDoEstoque.ts'
 
 /** Os partos do casal, do 1o ao ultimo, como a ficha mostra */
 async function partosDoCasal(idCasal: number) {
@@ -162,6 +163,7 @@ export async function montarFicha(idCaixa: number) {
     const cadastrados = await cadastradosPorNinhada(
       naCaixa.partos.filter((parto) => parto.caixaDoCasal === null).map((parto) => parto.idParto),
     )
+    const trilha = await trilhaDaCaixa(idCaixa)
 
     return {
       tipo: 'estoque' as const,
@@ -200,6 +202,11 @@ export async function montarFicha(idCaixa: number) {
       pedidos: naCaixa.pedidos.map((pedido) => ({ idPedido: pedido.idPedido, qtd: pedido.m + pedido.f })),
       /** os casais da caixa, quando ela era de casal antes de virar de estoque */
       casaisAnteriores: casais,
+      /**
+       * os animais que passaram pela caixa, da passagem mais antiga para a mais recente: de onde
+       * vieram e para onde foram, tambem os que ja sairam (trilhaDaCaixa)
+       */
+      trilha,
     }
   }
 
