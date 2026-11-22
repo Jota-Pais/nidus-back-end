@@ -41,6 +41,10 @@ type Traducao = {
  * nosso, e o 500 com log e o que avisa a equipe
  */
 const POR_CONSTRAINT: Record<string, Traducao> = {
+  viuva_id_casal_key: {
+    codigo: 'SEQUENCIA_INVALIDA',
+    mensagem: 'A fêmea deste casal já foi para uma caixa de viúvas. Atualize a tela e tente de novo.',
+  },
   // unicidade parcial
   caixa_uma_por_posicao: {
     codigo: 'POSICAO_OCUPADA',
@@ -90,7 +94,7 @@ const POR_CONSTRAINT: Record<string, Traducao> = {
 }
 
 /**
- * Os prefixos que os tres triggers poem no RAISE ('ANIMAL_CAIXA: a caixa F2A ...'), com o codigo
+ * Os prefixos que os triggers poem no RAISE ('ANIMAL_CAIXA: a caixa F2A ...'), com o codigo
  * de erro da API de cada um. O RAISE nao informa o nome do trigger, entao a chave e o prefixo; a
  * mensagem e o proprio texto do trigger, que ja e em portugues e traz os numeros do caso
  */
@@ -107,6 +111,8 @@ const POR_PREFIXO: Record<string, CodigoErro> = {
   PEDIDO_INCOMPLETO: 'PEDIDO_INCOMPLETO',
   PEDIDO_COM_RESERVA: 'PEDIDO_COM_RESERVA',
   PEDIDO_ENTREGUE: 'PEDIDO_ENTREGUE',
+  // reproducao.viuva_coerente
+  VIUVA_CAIXA: 'CAIXA_DE_VIUVAS',
 }
 
 /** Acha o nome da constraint dentro da mensagem do Postgres */

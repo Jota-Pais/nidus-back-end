@@ -80,13 +80,14 @@ model Caixa {
   codigo    String @default("") @db.VarChar(20)
   /// A segregacao por especie e aplicada no servidor.
   idEspecie Int @map("id_especie")
-  /// casal | estoque. Qualquer posicao vazia vira uma ou outra, e a caixa do casal
-  /// encerrado pode virar de estoque no lugar.
+  /// casal | estoque | viuvas. Qualquer posicao vazia vira uma delas, e a caixa do
+  /// casal encerrado pode virar de estoque no lugar. A de viuvas guarda as femeas dos
+  /// casais encerrados no 5o parto (no maximo 3).
   tipo      String  @default("casal") @db.VarChar(10)
   /// So na caixa de estoque, e ela sempre tem: M ou F
   sexo      String? @db.Char(1)
-  /// So na caixa de estoque, e ela sempre tem. A especie dela e conferida pelo
-  /// trigger dos animais.
+  /// Na caixa de estoque e na de viuvas, e elas sempre tem. A especie dela e
+  /// conferida pelo trigger dos animais.
   idLinhagem Int?   @map("id_linhagem")
   ativa      Boolean @default(true)
   /// Data do fato que esvaziou a caixa (a entrega, a baixa, a mudanca), nao o
@@ -101,6 +102,7 @@ model Caixa {
   especie  Especie   @relation(fields: [idEspecie], references: [id], onDelete: NoAction, onUpdate: NoAction)
   linhagem Linhagem? @relation(fields: [idLinhagem], references: [id], onDelete: NoAction, onUpdate: NoAction)
   casais   Casal[]
+  viuvas   Viuva[]
   /// Os vivos que estao nela e os que sairam dela (mortos e entregues ficam onde
   /// estavam quando sairam)
   animais  Animal[]
@@ -143,8 +145,9 @@ model Linhagem {
   especie Especie @relation(fields: [idEspecie], references: [id], onDelete: NoAction, onUpdate: NoAction)
   casais  Casal[]
   pedidos Pedido[]
-  /// As caixas de estoque desta linhagem
+  /// As caixas de estoque e de viuvas desta linhagem
   caixas  Caixa[]
+  viuvas  Viuva[]
   /// As ninhadas desta linhagem, com casal ou sem
   partos  Parto[]
 
@@ -181,8 +184,10 @@ model Casal {
   caixa    Caixa    @relation(fields: [idCaixa], references: [id], onDelete: NoAction, onUpdate: NoAction)
   linhagem Linhagem @relation(fields: [idLinhagem], references: [id], onDelete: NoAction, onUpdate: NoAction)
   partos   Parto[]
+  viuvas   Viuva[]
 
-  /// Alvo da FK composta (id_casal, id_linhagem) do parto: a ninhada e da linhagem do casal.
+  /// Alvo das FKs compostas (id_casal, id_linhagem) do parto e da viuva: a ninhada e a viuva
+  /// sao da linhagem do casal.
   @@unique([id, idLinhagem])
   @@index([idCaixa, ativo])
   @@map("casal")
@@ -239,6 +244,29 @@ model Parto {
 
   @@unique([idCasal, ordem])
   @@map("parto")
+  @@schema("reproducao")
+}
+
+/// A femea do casal encerrado no 5o parto, levada para uma caixa de viuvas: guarda a data
+/// e, pelo casal, a caixa de onde ela veio.
+model Viuva {
+  id         Int      @id @default(autoincrement())
+  idCaixa    Int      @map("id_caixa")
+  idCasal    Int      @unique @map("id_casal")
+  idLinhagem Int      @map("id_linhagem")
+  dtViuvez   DateTime @map("dt_viuvez") @db.Date
+  idUsuario  Int?     @map("id_usuario")
+
+  dtCriacao    DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
+  dtManutencao DateTime? @map("dt_manutencao") @db.Timestamptz(6)
+
+  caixa    Caixa    @relation(fields: [idCaixa], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  casal    Casal    @relation(fields: [idCasal, idLinhagem], references: [id, idLinhagem], onDelete: NoAction, onUpdate: NoAction)
+  linhagem Linhagem @relation(fields: [idLinhagem], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuario  Usuario? @relation(fields: [idUsuario], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([idCaixa])
+  @@map("viuva")
   @@schema("reproducao")
 }
 
@@ -369,6 +397,7 @@ model Usuario {
   desmamesRegistrados Parto[]      @relation("RegistrouDesmame")
   ocorrencias         Ocorrencia[]
   historico           Historico[]
+  viuvasRegistradas   Viuva[]
 
   @@map("usuario")
   @@schema("login")

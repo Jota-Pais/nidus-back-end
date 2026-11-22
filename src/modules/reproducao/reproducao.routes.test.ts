@@ -14,6 +14,7 @@ import {
   correcaoDoSemNinhada,
   desmame,
   edicaoDoCasal,
+  idaParaViuvas,
   selecao,
 } from './reproducao.routes.ts'
 
@@ -351,5 +352,22 @@ describe('validacao de entrada - edicao do casal', () => {
     expect(edicaoDoCasal.safeParse({ partoInicial: 6 }).success).toBe(false)
     expect(edicaoDoCasal.safeParse({ partoInicial: 0 }).success).toBe(false)
     expect(edicaoDoCasal.safeParse({ dtFormacao: somarDias(hojeISO(), 1) }).success).toBe(false)
+  })
+})
+
+describe('validacao de entrada - caixa de viuvas', () => {
+  it('pesquisador nao leva femea para as viuvas, e sem sessao e 401', async () => {
+    expect((await request(app()).post('/api/casais/1/viuva').send({ dtViuvez: '2026-05-02', idCaixa: 3 })).status).toBe(401)
+    expect((await request(app('pesquisador')).post('/api/casais/1/viuva').send({ dtViuvez: '2026-05-02', idCaixa: 3 })).status).toBe(403)
+  })
+
+  it('pede a data e a caixa de viuvas ou a posicao vazia, uma das duas, e nunca no futuro', () => {
+    const posicao = { idEstante: 1, face: 'frontal', linha: 1, coluna: 2 }
+
+    expect(idaParaViuvas.safeParse({ dtViuvez: '2026-05-02', idCaixa: 3 }).success).toBe(true)
+    expect(idaParaViuvas.safeParse({ dtViuvez: '2026-05-02', posicao }).success).toBe(true)
+    expect(idaParaViuvas.safeParse({ dtViuvez: '2026-05-02' }).success).toBe(false)
+    expect(idaParaViuvas.safeParse({ dtViuvez: '2026-05-02', idCaixa: 3, posicao }).success).toBe(false)
+    expect(idaParaViuvas.safeParse({ dtViuvez: somarDias(hojeISO(), 1), idCaixa: 3 }).success).toBe(false)
   })
 })

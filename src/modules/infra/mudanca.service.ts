@@ -363,6 +363,7 @@ export function viradaParaEstoque(caixa: CaixaParaVirar): Virada {
     const liberada = caixaLiberada(caixa.codigo)
     return recusa(liberada.codigo, liberada.message)
   }
+  if (caixa.tipo === 'viuvas') return recusa('CAIXA_DE_VIUVAS', 'A caixa de viúvas não vira caixa de estoque.')
   if (caixa.tipo !== 'casal') return recusa('CAIXA_DE_ESTOQUE', 'Esta caixa já é de estoque.')
   if (caixa.casalAtivo) return recusa('SEQUENCIA_INVALIDA', 'O casal desta caixa está ativo: encerre o casal antes.')
 

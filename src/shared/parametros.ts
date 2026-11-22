@@ -14,6 +14,8 @@ export const INTERVALO_ACASALAMENTO_DIAS = 6
 /** do 1o ao 5o parto; no 5o o casal encerra */
 export const MAX_PARTOS_POR_CASAL = 5
 
+export const MAX_VIUVAS_POR_CAIXA = 3
+
 /**
  * A menor idade que entra numa caixa de estoque no cadastro inicial: estoque e de desmamados, e
  * 21 dias e a menor idade que um pedido aceita (FAIXAS_IDADE)

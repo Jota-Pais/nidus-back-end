@@ -15,6 +15,8 @@ import {
   corrigirSemNinhada,
 } from './correcao.service.ts'
 import { editarCasal } from './edicao.service.ts'
+import { levarParaViuvas } from './viuva.service.ts'
+import { montarFicha } from '../infra/ficha.service.ts'
 import {
   encerrarCasal,
   fecharSemNinhada,
@@ -115,6 +117,27 @@ casalRoutes.post('/:id/encerramento', exigirPerfil(...OPERA_A_COLONIA), async (r
   const dados = encerramento.parse(req.body)
 
   res.json(await encerrarCasal(id, dados, usuarioDaRequisicao(req).id))
+})
+
+export const idaParaViuvas = z
+  .object({
+    dtViuvez: dataDoFato,
+    idCaixa: idNoCorpo.optional(),
+    posicao: z
+      .object({ idEstante: idNoCorpo, face: z.enum(['frontal', 'traseira']), linha: idNoCorpo, coluna: idNoCorpo })
+      .optional(),
+  })
+  .refine((dados) => (dados.idCaixa === undefined) !== (dados.posicao === undefined), {
+    path: ['idCaixa'],
+    error: 'Informe a caixa de viúvas ou a posição vazia, uma das duas.',
+  })
+
+casalRoutes.post('/:id/viuva', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
+  const { id } = idNaRota.parse(req.params)
+  const dados = idaParaViuvas.parse(req.body)
+  const { idCaixa } = await levarParaViuvas(id, dados, usuarioDaRequisicao(req).id)
+
+  res.status(201).json(await montarFicha(idCaixa))
 })
 
 const nascimento = z.object({

@@ -49,6 +49,14 @@ export function somarUm(contagem: PorSexo, sexo: Sexo): PorSexo {
 /** vivo | morto (morte ou eutanasia) | entregue | anulado (registro de animal que nao existiu) */
 export type Situacao = 'vivo' | 'morto' | 'entregue' | 'anulado'
 
+/** O que a caixa guarda: a ninhada do casal, desmamados de um sexo, ou as viuvas */
+export type TipoDeCaixa = 'casal' | 'estoque' | 'viuvas'
+
+/** O tipo da caixa como o banco guarda (varchar com CHECK) */
+export function tipoDeCaixa(tipo: string): TipoDeCaixa {
+  return tipo === 'estoque' || tipo === 'viuvas' ? tipo : 'casal'
+}
+
 /** Por que a caixa foi liberada: o fato que a esvaziou */
 export type MotivoDaLiberacao = 'entrega' | 'baixa' | 'mudanca' | 'casal_encerrado'
 

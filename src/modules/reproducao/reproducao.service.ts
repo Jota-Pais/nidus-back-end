@@ -35,6 +35,7 @@ import { travarCaixas, travarCasal, travarParto } from '../colonia/travas.ts'
 import { calcularProximoCiclo } from './cadeiaTemporal.ts'
 import { cicloFicha, ninhadaSemCasal } from './cicloFicha.ts'
 import { exigirOrdem } from './ordemDasDatas.ts'
+import { viuvaNaFichaDoCasal } from './viuva.service.ts'
 import {
   contarNoDesmame,
   exigirDataDoDesmame,
@@ -66,14 +67,22 @@ export async function casalFicha(idCasal: number) {
     where: { id: idCasal },
     include: {
       linhagem: { select: { nome: true } },
-      // o primeiro parto do casal no Nidus, que nunca se desfaz (encerrarCasal)
-      partos: { orderBy: { ordem: 'asc' }, take: 1, select: { ordem: true } },
+      // em ordem: o primeiro e o parto em que o casal entrou no Nidus, que nunca se desfaz (encerrarCasal)
+      partos: {
+        orderBy: { ordem: 'asc' },
+        select: { ordem: true, dtPartoReal: true, dtDesmameReal: true, dtSemNinhada: true },
+      },
+      viuvas: {
+        select: { idCaixa: true, dtViuvez: true, caixa: { select: { codigo: true, estante: { select: { numeroVisivel: true } } } } },
+      },
     },
   })
 
   if (casal === null) {
     throw naoEncontrado('Casal')
   }
+
+  const viuva = await viuvaNaFichaDoCasal(prisma, casal)
 
   return {
     id: casal.id,
@@ -90,6 +99,7 @@ export async function casalFicha(idCasal: number) {
      * parto quando foi cadastrado. Os partos antes dele foram anteriores ao Nidus e nao tem ficha
      */
     partoInicial: casal.partos[0]?.ordem ?? 1,
+    ...viuva,
   }
 }
 
