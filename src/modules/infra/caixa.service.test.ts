@@ -90,6 +90,7 @@ describe('a grade da estante', () => {
     expect(face?.posicoes[0]?.caixa).toBeNull()
     expect(face?.posicoes[1]?.caixa).toEqual({
       id: 2,
+      tipo: 'estoque',
       fase: 'estoque',
       atrasado: false,
       idLinhagem: 3,
@@ -97,6 +98,7 @@ describe('a grade da estante', () => {
       casal: null,
       // a MiniGrade filtra os destinos da mudanca pelo sexo e pela linhagem
       estoque: expect.objectContaining({ sexo: 'F', idLinhagem: 3, total: 4, reservado: 1 }),
+      viuvas: null,
     })
     expect(banco.onde).toEqual({ idEstante: 1, ativa: true })
   })

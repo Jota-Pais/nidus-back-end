@@ -5,14 +5,15 @@
 import { ALEITAMENTO_DIAS } from '../../shared/parametros.ts'
 import { hojeISO } from '../../shared/traducao.ts'
 import { diasEntre } from '../reproducao/cadeiaTemporal.ts'
+import type { TipoDeCaixa } from './tipos.ts'
 
-/** As fases, na ordem do ciclo da caixa de casal, e a da caixa de estoque */
-export const FASES = ['acasalado', 'mamando', 'pronto_estoque', 'estoque'] as const
+/** As fases, na ordem do ciclo da caixa de casal, a da caixa de estoque e a da de viuvas */
+export const FASES = ['acasalado', 'mamando', 'pronto_estoque', 'estoque', 'viuvas'] as const
 
 export type Fase = (typeof FASES)[number]
 
 export type CaixaParaFase = {
-  tipo: 'casal' | 'estoque'
+  tipo: TipoDeCaixa
   ativa: boolean
   /** os vivos da caixa por parto: se o parto ja desmamou e quando nasceu ('aaaa-mm-dd') */
   ninhadas: { desmamado: boolean; dtNascimento: string }[]
@@ -36,6 +37,7 @@ export type FaseDaCaixa = {
 export function faseDaCaixa(caixa: CaixaParaFase, hoje: string = hojeISO()): FaseDaCaixa {
   if (!caixa.ativa) return { fase: null, atrasado: false }
   if (caixa.tipo === 'estoque') return { fase: 'estoque', atrasado: false }
+  if (caixa.tipo === 'viuvas') return { fase: 'viuvas', atrasado: false }
 
   const mamando = caixa.ninhadas.filter((ninhada) => !ninhada.desmamado)
   const desmameAtrasado = mamando.some((ninhada) => diasEntre(ninhada.dtNascimento, hoje) > ALEITAMENTO_DIAS)

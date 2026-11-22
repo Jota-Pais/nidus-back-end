@@ -63,4 +63,9 @@ describe('fase da caixa', () => {
       atrasado: true,
     })
   })
+
+  it('a caixa de viuvas ativa fica em viuvas, e a liberada nao tem fase', () => {
+    expect(faseDaCaixa(casal({ tipo: 'viuvas' }))).toEqual({ fase: 'viuvas', atrasado: false })
+    expect(faseDaCaixa(casal({ tipo: 'viuvas', ativa: false }))).toEqual({ fase: null, atrasado: false })
+  })
 })

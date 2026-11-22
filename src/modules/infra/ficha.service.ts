@@ -5,14 +5,17 @@
 // dos animais que passaram por ela. Tudo contado nos animais: nenhum numero vem gravado
 
 import { naoEncontrado } from '../../shared/erros.ts'
+import { MAX_VIUVAS_POR_CAIXA } from '../../shared/parametros.ts'
 import { prisma } from '../../shared/prisma.ts'
 import { codigoDaEspecie, dataISO } from '../../shared/traducao.ts'
 import { chegadaDosAnimais } from '../colonia/escolha.ts'
 import { semVivos, vivosNasCaixas } from '../colonia/consultas.ts'
 import { faseDaCaixa } from '../colonia/fase.ts'
+import { tipoDeCaixa } from '../colonia/tipos.ts'
 import type { MotivoDaLiberacao, Sexo } from '../colonia/tipos.ts'
 import { cicloFicha } from '../reproducao/cicloFicha.ts'
 import { casalFicha } from '../reproducao/reproducao.service.ts'
+import { viuvasDaFicha } from '../reproducao/viuva.service.ts'
 import { gruposPorNascimento, partoPrevisto } from './card.ts'
 import { viradaParaEstoque } from './mudanca.service.ts'
 import { trilhaDaCaixa } from './trilhaDoEstoque.ts'
@@ -95,8 +98,8 @@ function daIdade(vivos: VivoUmAUm[], dtNascimento: string) {
 }
 
 /**
- * GET /api/caixas/:id - a ficha da caixa, de casal ou de estoque. 'fase' e 'atrasado' sao os da
- * grade (faseDaCaixa): null na caixa liberada
+ * GET /api/caixas/:id - a ficha da caixa, de casal, de estoque ou de viuvas. 'fase' e 'atrasado' sao
+ * os da grade (faseDaCaixa): null na caixa liberada
  */
 export async function montarFicha(idCaixa: number) {
   const caixa = await prisma.caixa.findUnique({
@@ -139,22 +142,34 @@ export async function montarFicha(idCaixa: number) {
   const reservado = naCaixa.reservados.m + naCaixa.reservados.f
   const dtLiberacao = caixa.dtLiberacao === null ? null : dataISO(caixa.dtLiberacao)
   const motivoLiberacao = caixa.motivoLiberacao as MotivoDaLiberacao | null
-  const deEstoque = caixa.tipo === 'estoque'
+  const tipo = tipoDeCaixa(caixa.tipo)
+  const deEstoque = tipo === 'estoque'
 
   const dadosDaCaixa = {
     id: caixa.id,
     endereco: { numeroVisivel: caixa.estante.numeroVisivel, sala: caixa.estante.sala.nome, codigo: caixa.codigo },
     especie: codigoDaEspecie(caixa.especie.nome),
     ...faseDaCaixa({
-      tipo: deEstoque ? 'estoque' : 'casal',
+      tipo,
       ativa: caixa.ativa,
       ninhadas: naCaixa.partos,
       // o casal da caixa e o primeiro: o ativo, ou o mais recente
-      partoPrevisto: deEstoque || caixa.casais[0] === undefined ? null : partoPrevisto(caixa.casais[0].partos),
+      partoPrevisto: tipo !== 'casal' || caixa.casais[0] === undefined ? null : partoPrevisto(caixa.casais[0].partos),
     }),
     ativa: caixa.ativa,
     dtLiberacao,
     motivoLiberacao,
+  }
+
+  if (tipo === 'viuvas') {
+    const viuvas = await viuvasDaFicha(idCaixa)
+
+    return {
+      tipo: 'viuvas' as const,
+      caixa: { ...dadosDaCaixa, linhagem: caixa.linhagem?.nome ?? '', idLinhagem: caixa.idLinhagem ?? 0 },
+      vagas: caixa.ativa ? Math.max(MAX_VIUVAS_POR_CAIXA - viuvas.length, 0) : 0,
+      viuvas,
+    }
   }
 
   if (deEstoque) {

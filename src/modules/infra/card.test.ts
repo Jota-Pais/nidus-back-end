@@ -273,4 +273,10 @@ describe('a leitura dos cards', () => {
 
     expect(card?.fase).toBeNull()
   })
+
+  it('a caixa de viuvas tem fase propria, a linhagem dela e quantas viuvas e vagas tem', async () => {
+    const [card] = await lerCards(banco([caixa(1, { tipo: 'viuvas', sexo: null, _count: { viuvas: 2 } })], []) as never, {}, hoje)
+
+    expect(card).toMatchObject({ tipo: 'viuvas', fase: 'viuvas', linhagem: 'Wistar', casal: null, estoque: null, viuvas: { viuvas: 2, vagas: 1 } })
+  })
 })

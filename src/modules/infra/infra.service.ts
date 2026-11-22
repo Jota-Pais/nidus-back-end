@@ -63,8 +63,8 @@ export async function listarEstantes() {
 /**
  * GET /api/estantes/:id/grade - as duas faces, com posicao vazia como 'caixa: null'. Cada caixa
  * vem com a coluna (a cor), a linhagem (o id, para a grade filtrar por ela, e o nome) e o card: o
- * casal, ou o sexo e os vivos da caixa de estoque (a MiniGrade filtra os destinos da mudanca pelo
- * sexo e pela linhagem)
+ * casal, o sexo e os vivos da caixa de estoque (a MiniGrade filtra os destinos da mudanca pelo
+ * sexo e pela linhagem), ou quantas viuvas e vagas tem a caixa de viuvas
  */
 export async function montarGrade(id: number) {
   const estante = await prisma.estante.findFirst({ where: { id, ativa: true } })
@@ -93,12 +93,14 @@ export async function montarGrade(id: number) {
               ? null
               : {
                   id: caixa.id,
+                  tipo: caixa.tipo,
                   fase: caixa.fase,
                   atrasado: caixa.atrasado,
                   idLinhagem: caixa.idLinhagem,
                   linhagem: caixa.linhagem,
                   casal: caixa.casal,
                   estoque: caixa.estoque,
+                  viuvas: caixa.viuvas,
                 },
         })
       }

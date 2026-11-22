@@ -4,13 +4,14 @@
 // todos contados nos animais (vivosNasCaixas), e a fase (a cor na grade) sai de faseDaCaixa
 
 import type { Prisma } from '@prisma/client'
-import { MAX_PARTOS_POR_CASAL } from '../../shared/parametros.ts'
+import { MAX_PARTOS_POR_CASAL, MAX_VIUVAS_POR_CAIXA } from '../../shared/parametros.ts'
 import { dataISO, hojeISO } from '../../shared/traducao.ts'
 import { semVivos, vivosNasCaixas } from '../colonia/consultas.ts'
 import { faseDaCaixa } from '../colonia/fase.ts'
 import type { Fase } from '../colonia/fase.ts'
 import type { VivosDoParto, VivosNaCaixa } from '../colonia/consultas.ts'
-import type { PorSexo, Sexo } from '../colonia/tipos.ts'
+import { tipoDeCaixa } from '../colonia/tipos.ts'
+import type { PorSexo, Sexo, TipoDeCaixa } from '../colonia/tipos.ts'
 import { calcularCicloInicial, diasEntre } from '../reproducao/cadeiaTemporal.ts'
 
 // ------------------------------------------------------------ o casal
@@ -202,6 +203,7 @@ const selecaoDaCaixaDoCard = {
   ativa: true,
   estante: { select: { numeroVisivel: true } },
   linhagem: { select: { nome: true } },
+  _count: { select: { viuvas: true } },
   // o casal da caixa: o ativo, ou o mais recente
   casais: {
     orderBy: [{ ativo: 'desc' }, { dtFormacao: 'desc' }, { id: 'desc' }],
@@ -229,15 +231,17 @@ export type CardDaCaixa = {
   coluna: number
   codigo: string
   numeroVisivel: string
+  tipo: TipoDeCaixa
   /** a fase da caixa (faseDaCaixa); null na liberada e na de casal sem ciclo aberto */
   fase: Fase | null
   /** o parto previsto passou sem nascimento, ou um filhote passou da idade de desmamar */
   atrasado: boolean
-  /** a linhagem da caixa de estoque, ou a do casal da caixa; null sem nenhuma */
+  /** a linhagem da caixa de estoque ou de viuvas, ou a do casal da caixa; null sem nenhuma */
   idLinhagem: number | null
   linhagem: string | null
   casal: ReturnType<typeof casalNoCard>
   estoque: ReturnType<typeof estoqueNoCard> | null
+  viuvas: { viuvas: number; vagas: number } | null
 }
 
 /**
@@ -259,7 +263,9 @@ export async function lerCards(banco: Leitura, onde: Prisma.CaixaWhereInput, hoj
   return caixas.map((caixa): CardDaCaixa => {
     const naCaixa = vivos.get(caixa.id) ?? semVivos()
     const [casal] = caixa.casais
-    const deEstoque = caixa.tipo === 'estoque'
+    const tipo = tipoDeCaixa(caixa.tipo)
+    const deEstoque = tipo === 'estoque'
+    const daCaixa = tipo !== 'casal'
 
     return {
       id: caixa.id,
@@ -268,19 +274,24 @@ export async function lerCards(banco: Leitura, onde: Prisma.CaixaWhereInput, hoj
       coluna: caixa.coluna,
       codigo: caixa.codigo,
       numeroVisivel: caixa.estante.numeroVisivel,
+      tipo,
       ...faseDaCaixa(
         {
-          tipo: deEstoque ? 'estoque' : 'casal',
+          tipo,
           ativa: caixa.ativa,
           ninhadas: naCaixa.partos,
-          partoPrevisto: casal === undefined ? null : partoPrevisto(casal.partos),
+          partoPrevisto: casal === undefined || daCaixa ? null : partoPrevisto(casal.partos),
         },
         hoje,
       ),
-      idLinhagem: deEstoque ? caixa.idLinhagem : (casal?.idLinhagem ?? null),
-      linhagem: deEstoque ? (caixa.linhagem?.nome ?? null) : (casal?.linhagem.nome ?? null),
-      casal: deEstoque ? null : casalNoCard(casal, naCaixa, hoje),
+      idLinhagem: daCaixa ? caixa.idLinhagem : (casal?.idLinhagem ?? null),
+      linhagem: daCaixa ? (caixa.linhagem?.nome ?? null) : (casal?.linhagem.nome ?? null),
+      casal: tipo === 'casal' ? casalNoCard(casal, naCaixa, hoje) : null,
       estoque: deEstoque ? estoqueNoCard(caixa, naCaixa, hoje) : null,
+      viuvas:
+        tipo === 'viuvas'
+          ? { viuvas: caixa._count.viuvas, vagas: Math.max(MAX_VIUVAS_POR_CAIXA - caixa._count.viuvas, 0) }
+          : null,
     }
   })
 }
