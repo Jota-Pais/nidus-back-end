@@ -24,13 +24,23 @@ O que mora aqui:
 - **Estantes** - a grade das duas faces, com a posição vazia como `caixa: null`.
   O endereço segue a etiqueta do cliente: face, linha e letra (`F1A`, `T2K`).
   Cada caixa traz a linhagem (`idLinhagem`), para a grade filtrar por ela
-- **Salas e estantes** (`/api/salas` e `/api/estantes`, escrita só do gestor) - a
-  sala é tabela própria e existe sem estante; renomear muda num lugar só. O nome
-  da sala é único entre as ativas, sem diferenciar maiúscula (`409 SALA_DUPLICADA`),
-  e o número da etiqueta é único na sala (`409 ESTANTE_DUPLICADA`). A estante muda
-  de número e de sala, mas não de modelo: para trocar, remove e cadastra de novo.
-  Remover é `ativa = false` e vai para o histórico: a sala só sai sem estante ativa
-  (`409 SALA_COM_ESTANTE`), e a estante, sem caixa ativa (`409 ESTANTE_OCUPADA`)
+- **Salas, formatos e estantes** (`/api/salas`, `/api/formatos` e `/api/estantes`,
+  técnico e gestor) - a sala é tabela própria e existe sem estante; renomear muda
+  num lugar só. O formato guarda as medidas de um modelo de estante (1 ou 2 faces,
+  linhas e colunas até 26, faces x colunas até as 26 letras do endereço), e a
+  estante aponta para ele: os 4 da spec (ALESCO Modelo 1 e 2, TECNIPLAST Modelo 1
+  e 2) vêm da migration. A estante muda de número, de sala e de formato, e mudar
+  as medidas de um formato muda todas as estantes dele. Nas duas mudanças o banco
+  reescreve o código das caixas ativas (a traseira continua as letras da frontal,
+  então a letra dela muda com o número de colunas), e a mudança que deixaria caixa
+  ativa fora é recusada antes, dizendo quais (`409 CAIXAS_FORA_DO_FORMATO`); a
+  caixa liberada guarda o código com que saiu. O nome da sala e o do formato são únicos
+  entre os ativos, sem diferenciar maiúscula (`409 SALA_DUPLICADA`,
+  `409 FORMATO_DUPLICADO`), e o número da etiqueta é único na sala
+  (`409 ESTANTE_DUPLICADA`). Remover é `ativa = false` (no formato, `ativo`) e vai
+  para o histórico: a sala só sai sem estante ativa (`409 SALA_COM_ESTANTE`), o
+  formato também (`409 FORMATO_EM_USO`), e a estante, sem caixa ativa
+  (`409 ESTANTE_OCUPADA`)
 - **Ficha da caixa** - casal (grupos A a E em qualquer par), do 1º ao 5º parto,
   com parto, eutanásia de seleção e desmame. As datas previstas saem sozinhas:
   parto = acasalamento + 23 dias, desmame = parto + 22. O acasalamento seguinte
@@ -173,14 +183,15 @@ e o que você grava rodando local aparece para o cliente.
 | `npm run build` | Gera o Prisma Client e compila para `dist/` |
 | `npm start` | Roda o build, é o comando da Render |
 | `npm run db:deploy` | Aplica migrations pendentes. Nunca dropa nada |
-| `npm run db:seed` | Carga inicial: espécies, linhagens, parâmetros, salas e estantes (não duplica nada) |
+| `npm run db:seed` | Carga inicial: espécies, linhagens, parâmetros, salas e uma estante de cada formato da spec, que vem da migration (não duplica nada) |
 | `npm run db:usuarios` | Cria os três usuários e o projeto CEUA num banco novo. Procura cada usuário pelo e-mail: o que acha fica como está, o que não acha é criado de novo |
 | `npm run db:senha -- <email> "<senha>"` | Define a senha de um usuário que já existe. É a reserva de quem já tem conta, quando o e-mail com o código não chega ou trava por código errado demais. Não cria conta |
 | `npm run desempenho` | Mede o tempo de resposta das rotas de leitura (veja Desempenho) |
 
 Os testes de serviço trocam o Prisma por um dublê e não enxergam o que o banco
-cobra sozinho: os triggers da topologia da caixa, do animal e do pedido, e os
-CHECKs. A suíte de integração roda contra um banco de verdade, já migrado, e só
+cobra sozinho: os triggers da topologia da caixa, do animal e do pedido, os que
+reescrevem o código das caixas quando o formato muda, e os CHECKs. A suíte de
+integração roda contra um banco de verdade, já migrado, e só
 quando `DATABASE_URL_TESTE` aponta para ele. Fica separada da unitária: os
 arquivos `*.banco.test.ts` saem do `npm test` e entram no `npm run test:banco`
 (`vitest.banco.config.ts`, um arquivo de cada vez):
@@ -194,7 +205,10 @@ arquivos `*.banco.test.ts` saem do `npm test` e entram no `npm run test:banco`
   completar, desfazer, recusar, entregar);
 - `src/modules/demanda/reserva-concorrente.banco.test.ts`: duas reservas ao mesmo
   tempo, cada uma na sua conexão (os animais travados são pulados, o pedido
-  travado faz a segunda esperar).
+  travado faz a segunda esperar);
+- `src/modules/infra/formato.banco.test.ts`: a troca de formato da estante e a
+  mudança de medidas do formato reescrevendo o código das caixas ativas, a recusa
+  do banco à caixa que ficaria fora e os 409 dos serviços.
 
 ```bash
 DATABASE_URL_TESTE="postgresql://...branch-de-teste..." npm run test:banco
@@ -235,7 +249,7 @@ src/
   shared/              prisma, erros, tradução dos códigos do banco, autorização,
                        parâmetros biológicos, envio de e-mail
   modules/
-    infra/             salas, estantes, grade, ficha e a mudanca de animais entre caixas
+    infra/             salas, formatos, estantes, grade, ficha e a mudanca de animais entre caixas
     reproducao/        casais e partos
     colonia/           os animais: escolha, baixa, anulacao, liberacao da caixa, a trilha e a visao geral
     demanda/           projetos CEUA e pedidos: aprovação, reserva, entrega e recusa
