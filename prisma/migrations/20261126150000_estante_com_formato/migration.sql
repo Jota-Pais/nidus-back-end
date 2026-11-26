@@ -197,6 +197,11 @@ ALTER TABLE "infra"."estante" ADD CONSTRAINT "estante_id_formato_fkey" FOREIGN K
 --
 -- O mesmo trigger de antes (o mesmo prefixo TOPOLOGIA e o codigo escrito em todo INSERT e em toda
 -- mudanca de posicao ou de codigo), lendo as medidas do formato da estante. O trigger em si nao muda.
+--
+-- A leitura trava a estante e o formato com FOR SHARE: a caixa que entra na estante enquanto outra
+-- transacao troca o formato dela (ou muda as medidas do formato) espera essa terminar e confere as
+-- medidas novas. Sem a trava, ela seria conferida pelas medidas antigas e poderia ficar fora da grade.
+-- As caixas que entram ao mesmo tempo so compartilham a trava, e uma nao espera a outra.
 -- ---------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION "infra"."caixa_dentro_da_topologia"()
@@ -210,7 +215,8 @@ BEGIN
     INTO v_formato
     FROM "infra"."estante" e
     JOIN "infra"."formato" f ON f."id" = e."id_formato"
-   WHERE e."id" = NEW."id_estante";
+   WHERE e."id" = NEW."id_estante"
+     FOR SHARE OF e, f;
 
   IF NOT FOUND THEN
     -- Estante inexistente e problema da FK, nao deste trigger.
