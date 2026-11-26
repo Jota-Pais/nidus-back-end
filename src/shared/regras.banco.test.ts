@@ -207,7 +207,7 @@ describe.skipIf(!URL_TESTE)('regras do banco', { timeout: 30_000 }, () => {
     m.pedidoK = await pedido(m.linhagemK, rato, 'aprovado', 1, 0, 0)
     m.pedidoEnviado = await pedido(m.linhagemW, rato, 'enviado', 1, 0, 0)
     m.baixa = await id(
-      `INSERT INTO colonia.ocorrencia (tipo, dt_fato, id_parto, motivo) VALUES ('baixa', '2026-11-01', $1, 'teste') RETURNING id`,
+      `INSERT INTO colonia.ocorrencia (tipo, dt_fato, id_parto, motivo, causa) VALUES ('baixa', '2026-11-01', $1, 'teste', 'morte') RETURNING id`,
       [m.parto1],
     )
   }, 120_000)
