@@ -68,6 +68,13 @@ export function dataLegivel(iso: string): string {
   return `${dia}/${mes}/${ano}`
 }
 
+/** A lista como se escreve na frase: 'A', 'A e B', 'A, B e C' */
+export function listaLegivel(itens: readonly string[]): string {
+  if (itens.length <= 1) return itens[0] ?? ''
+
+  return `${itens.slice(0, -1).join(', ')} e ${itens.at(-1)}`
+}
+
 /** 'aaaa-mm-dd' -> meia-noite UTC, como o projeto grava data de calendario */
 export function paraData(iso: string): Date {
   return new Date(`${iso}T00:00:00.000Z`)

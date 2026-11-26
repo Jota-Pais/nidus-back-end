@@ -5,6 +5,7 @@ import {
   exigirCodigo,
   face,
   hojeISO,
+  listaLegivel,
   paraData,
   perfil,
 } from './traducao.ts'
@@ -63,6 +64,15 @@ describe('codigo da especie', () => {
     // longe: [0-9] dentro da classe apagaria o numero da linhagem.
     expect(codigoDaEspecie('Ratao-do-banhado')).toBe('ratao-do-banhado')
     expect(codigoDaEspecie('C57BL/6J')).toBe('c57bl-6j')
+  })
+})
+
+describe('lista na frase', () => {
+  it('um item sozinho, dois com "e", e de tres em diante virgula ate o ultimo "e"', () => {
+    expect(listaLegivel(['F8A'])).toBe('F8A')
+    expect(listaLegivel(['F8A', 'T8C'])).toBe('F8A e T8C')
+    expect(listaLegivel(['F8A', 'F8B', 'T8C'])).toBe('F8A, F8B e T8C')
+    expect(listaLegivel([])).toBe('')
   })
 })
 
