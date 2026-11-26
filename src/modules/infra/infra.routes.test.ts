@@ -109,8 +109,8 @@ describe('autorizacao das rotas de infraestrutura', () => {
     expect(mocks.listarFormatos).not.toHaveBeenCalled()
   })
 
-  it('gestor cadastra, edita e remove estante, sala e formato', async () => {
-    const respostas = await escritas('gestor')
+  it.each(['tecnico', 'gestor'] as const)('%s cadastra, edita e remove estante, sala e formato', async (perfil) => {
+    const respostas = await escritas(perfil)
 
     expect(respostas.map((resposta) => resposta.status)).toEqual([201, 200, 204, 201, 200, 204, 201, 200, 204])
     expect(mocks.cadastrarEstante).toHaveBeenCalledWith(estante, 1)
@@ -118,15 +118,6 @@ describe('autorizacao das rotas de infraestrutura', () => {
     expect(mocks.cadastrarFormato).toHaveBeenCalledWith(formato, 1)
     expect(mocks.alterarFormato).toHaveBeenCalledWith(1, { colunas: 7 }, 1)
     expect(mocks.removerFormato).toHaveBeenCalledWith(1, 1)
-  })
-
-  it('tecnico cadastra, edita e remove formato; estante e sala ainda sao so do gestor', async () => {
-    const respostas = await escritas('tecnico')
-
-    expect(respostas.map((resposta) => resposta.status)).toEqual([403, 403, 403, 403, 403, 403, 201, 200, 204])
-    expect(mocks.cadastrarEstante).not.toHaveBeenCalled()
-    expect(mocks.criarSala).not.toHaveBeenCalled()
-    expect(mocks.cadastrarFormato).toHaveBeenCalledWith(formato, 1)
   })
 
   it('pesquisador nao escreve estante, sala nem formato - 403, sem chegar ao servico', async () => {

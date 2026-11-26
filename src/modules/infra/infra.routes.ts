@@ -52,23 +52,23 @@ estanteRoutes.get('/:id/grade', exigirPerfil(...OPERA_A_COLONIA), async (req, re
   res.json(await montarGrade(id))
 })
 
-/** POST /api/estantes - so o gestor cadastra estante */
-estanteRoutes.post('/', exigirPerfil('gestor'), async (req, res) => {
+/** POST /api/estantes - quem opera a colonia cadastra estante */
+estanteRoutes.post('/', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const dados = estanteNova.parse(req.body)
 
   res.status(201).json(await cadastrarEstante(dados, usuarioDaRequisicao(req).id))
 })
 
-/** PATCH /api/estantes/:id - so o gestor muda o numero, a sala e o formato */
-estanteRoutes.patch('/:id', exigirPerfil('gestor'), async (req, res) => {
+/** PATCH /api/estantes/:id - o numero, a sala e o formato */
+estanteRoutes.patch('/:id', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
   const dados = alteracaoDeEstante.parse(req.body)
 
   res.json(await alterarEstante(id, dados, usuarioDaRequisicao(req).id))
 })
 
-/** DELETE /api/estantes/:id - so o gestor remove, e so a estante vazia */
-estanteRoutes.delete('/:id', exigirPerfil('gestor'), async (req, res) => {
+/** DELETE /api/estantes/:id - so a estante vazia */
+estanteRoutes.delete('/:id', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
 
   await removerEstante(id, usuarioDaRequisicao(req).id)

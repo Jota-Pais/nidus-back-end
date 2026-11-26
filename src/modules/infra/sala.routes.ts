@@ -20,21 +20,21 @@ salaRoutes.get('/', exigirPerfil(...OPERA_A_COLONIA), async (_req, res) => {
   res.json(await listarSalas())
 })
 
-/** Cadastrar, renomear e remover sala e so do gestor */
-salaRoutes.post('/', exigirPerfil('gestor'), async (req, res) => {
+/** Cadastrar, renomear e remover sala e de quem opera a colonia, como as estantes */
+salaRoutes.post('/', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const dados = salaNova.parse(req.body)
 
   res.status(201).json(await criarSala(dados, usuarioDaRequisicao(req).id))
 })
 
-salaRoutes.patch('/:id', exigirPerfil('gestor'), async (req, res) => {
+salaRoutes.patch('/:id', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
   const dados = salaNova.parse(req.body)
 
   res.json(await renomearSala(id, dados, usuarioDaRequisicao(req).id))
 })
 
-salaRoutes.delete('/:id', exigirPerfil('gestor'), async (req, res) => {
+salaRoutes.delete('/:id', exigirPerfil(...OPERA_A_COLONIA), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
 
   await removerSala(id, usuarioDaRequisicao(req).id)
