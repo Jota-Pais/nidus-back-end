@@ -143,7 +143,7 @@ const db = {
   $queryRaw: async () => [],
   $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(db),
   linhagem: { findUnique: async () => banco.linhagem },
-  estante: { findFirst: async () => ({ id: 1, numeroVisivel: 'E1', faces: 2, linhas: 3, colunas: 3 }) },
+  estante: { findFirst: async () => ({ id: 1, numeroVisivel: 'E1', formato: { faces: 2, linhas: 3, colunas: 3 } }) },
   caixa: {
     findUnique: async ({ where }: { where: { id: number } }) => {
       const caixa = banco.caixas.get(where.id)

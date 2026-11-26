@@ -16,7 +16,7 @@ import type { ItemDaReserva } from './reserva.service.ts'
 // Teste de INTEGRACAO: so roda com DATABASE_URL_TESTE apontando para um banco ja migrado (o branch de
 // teste da Neon ou um Postgres local), pelo npm run test:banco. Sem a variavel, fica de fora.
 //
-// Para as duas conexoes verem os mesmos animais, o mundo (especie, linhagem, usuarios, estante,
+// Para as duas conexoes verem os mesmos animais, o mundo (especie, linhagem, usuarios, formato, estante,
 // caixas, casal, parto e 6 machos) e GRAVADO no comeco e apagado no fim, numa transacao so; uma
 // rodada que caiu no meio e limpa no comeco da seguinte, pelos nomes proprios. O animal nao se apaga
 // (o trigger colonia.animal_coerente recusa o DELETE): a limpeza desliga o trigger dentro da propria
@@ -36,6 +36,7 @@ const daqui = (dias: number) => somarDias(hoje, dias)
 /** Os nomes que marcam o mundo deste teste no banco */
 const ESPECIE = 'Rato do teste da reserva concorrente'
 const SALA = 'Sala do teste da reserva concorrente'
+const FORMATO = 'Formato do teste da reserva concorrente'
 const DOMINIO = '@reserva-concorrente.invalid'
 
 /** O parto nasceu 60 dias atras e desmamou 38 dias atras; os machos estao no estoque ha 30 */
@@ -113,6 +114,7 @@ async function apagarOMundo(banco: pg.Client): Promise<void> {
     await banco.query(`DELETE FROM infra.caixa WHERE id = ANY($1)`, [caixas])
     await banco.query(`DELETE FROM infra.estante WHERE id_sala IN (SELECT id FROM infra.sala WHERE nome = $1)`, [SALA])
     await banco.query(`DELETE FROM infra.sala WHERE nome = $1`, [SALA])
+    await banco.query(`DELETE FROM infra.formato WHERE nome = $1`, [FORMATO])
     await banco.query(`DELETE FROM catalogo.linhagem WHERE id = ANY($1)`, [linhagens])
     await banco.query(`DELETE FROM catalogo.especie WHERE id = ANY($1)`, [especies])
     await banco.query(`DELETE FROM login.usuario WHERE id = ANY($1)`, [usuarios])
@@ -139,10 +141,10 @@ async function gravarOMundo(banco: pg.Client): Promise<Mundo> {
     const pesquisador = await usuario('pesquisador', 'P')
 
     const sala = await id(`INSERT INTO infra.sala (nome) VALUES ($1) RETURNING id`, [SALA])
+    const formato = await id(`INSERT INTO infra.formato (nome, faces, linhas, colunas) VALUES ($1, 1, 1, 2) RETURNING id`, [FORMATO])
     const estante = await id(
-      `INSERT INTO infra.estante (id_sala, fabricante, modelo, numero_visivel, faces, linhas, colunas, capacidade)
-       VALUES ($1, 'Teste', 'Teste', 'RC1', 1, 1, 2, 2) RETURNING id`,
-      [sala],
+      `INSERT INTO infra.estante (id_sala, id_formato, numero_visivel) VALUES ($1, $2, 'RC1') RETURNING id`,
+      [sala, formato],
     )
     const caixa = (coluna: number, tipo: string) =>
       id(

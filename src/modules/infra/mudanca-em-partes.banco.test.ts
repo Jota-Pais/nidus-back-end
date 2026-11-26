@@ -48,10 +48,13 @@ describe.skipIf(!URL_TESTE)('a mudanca em varias caixas no banco de verdade', ()
       `INSERT INTO login.usuario (nome, email, perfil) VALUES ('tecnico', 'tecnico@mudanca-em-partes.invalid', 'T') RETURNING id`,
     )
     const sala = await id(`INSERT INTO infra.sala (nome) VALUES ('Sala do teste da mudanca em partes') RETURNING id`)
+    const formato = await id(
+      `INSERT INTO infra.formato (nome, faces, linhas, colunas) VALUES ('Formato do teste da mudanca em partes', 1, 3, 3) RETURNING id`,
+    )
     idEstante = await id(
-      `INSERT INTO infra.estante (id_sala, fabricante, modelo, numero_visivel, faces, linhas, colunas, capacidade)
-       VALUES ($1, 'Teste', 'Teste', 'MP1', 1, 3, 3, 9) RETURNING id`,
+      `INSERT INTO infra.estante (id_sala, id_formato, numero_visivel) VALUES ($1, $2, 'MP1') RETURNING id`,
       sala,
+      formato,
     )
   })
 

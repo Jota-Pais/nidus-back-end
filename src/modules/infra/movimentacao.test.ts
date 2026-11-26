@@ -43,7 +43,7 @@ const recusa = (status: number, codigo: string) => expect.objectContaining({ sta
 
 beforeEach(() => {
   banco.caixa = { id: 7, ativa: true, codigo: 'F1A', idEstante: 1 }
-  banco.estante = { id: 2, faces: 2, linhas: 5, colunas: 5, numeroVisivel: 'E-02' }
+  banco.estante = { id: 2, numeroVisivel: 'E-02', formato: { faces: 2, linhas: 5, colunas: 5 } }
   banco.ocupante = null
   banco.gravado = null
   banco.historico = null

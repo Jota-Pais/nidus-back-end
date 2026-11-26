@@ -15,7 +15,7 @@ type BancoComHistorico = Pick<Prisma.TransactionClient, 'historico'>
 /** Nome mostrado em "Quem" quando nao ha pessoa por tras da acao */
 export const NOME_DO_SISTEMA = 'Sistema'
 
-export type Entidade = 'caixa' | 'casal' | 'parto' | 'pedido' | 'usuario' | 'projeto' | 'linhagem' | 'sala' | 'estante'
+export type Entidade = 'caixa' | 'casal' | 'parto' | 'pedido' | 'usuario' | 'projeto' | 'linhagem' | 'sala' | 'estante' | 'formato'
 
 export type Alteracao = {
   /** null so quando foi o proprio sistema. Obrigatorio para nenhuma acao ficar sem dono por esquecimento */

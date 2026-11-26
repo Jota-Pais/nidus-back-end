@@ -12,14 +12,16 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 //   DATABASE_URL_TESTE="postgresql://..." npm run test:banco
 //
 // Nada fica gravado: tudo roda numa transacao que termina em ROLLBACK. O mundo minimo (especies,
-// estante, caixas, casais, partos, animais e pedidos) nasce dentro dela, com nomes proprios, e cada
-// caso roda num SAVEPOINT desfeito no fim. Os ids do banco nao importam; so as sequencias andam.
+// formato, estante, caixas, casais, partos, animais e pedidos) nasce dentro dela, com nomes proprios,
+// e cada caso roda num SAVEPOINT desfeito no fim. Os ids do banco nao importam; so as sequencias andam.
 
 const URL_TESTE = process.env.DATABASE_URL_TESTE
 
 /** Os ids do mundo de teste */
 type Mundo = {
   usuario: number
+  /** 2 faces, 4 x 4 */
+  formato: number
   estante: number
   rato: number
   linhagemW: number
@@ -151,10 +153,12 @@ describe.skipIf(!URL_TESTE)('regras do banco', { timeout: 30_000 }, () => {
     const linhagemS = await id(`INSERT INTO catalogo.linhagem (id_especie, nome) VALUES ($1, 'S') RETURNING id`, [camundongo])
     m.usuario = await id(`INSERT INTO login.usuario (nome, email, perfil) VALUES ('Teste', 'regras-do-banco@teste.invalid', 'T') RETURNING id`)
     const sala = await id(`INSERT INTO infra.sala (nome) VALUES ('Sala do teste') RETURNING id`)
+    m.formato = await id(
+      `INSERT INTO infra.formato (nome, faces, linhas, colunas) VALUES ('Formato do teste das regras do banco', 2, 4, 4) RETURNING id`,
+    )
     m.estante = await id(
-      `INSERT INTO infra.estante (id_sala, fabricante, modelo, numero_visivel, faces, linhas, colunas, capacidade)
-       VALUES ($1, 'Teste', 'Teste', 'T1', 2, 4, 4, 32) RETURNING id`,
-      [sala],
+      `INSERT INTO infra.estante (id_sala, id_formato, numero_visivel) VALUES ($1, $2, 'T1') RETURNING id`,
+      [sala, m.formato],
     )
 
     m.caixaCasal1 = await caixa(1, 1, 1, rato)
@@ -249,18 +253,17 @@ describe.skipIf(!URL_TESTE)('regras do banco', { timeout: 30_000 }, () => {
   const coberturaExata = () => [...m.machosNoEstoque.slice(0, 2), ...m.femeas.slice(0, 2)]
 
   describe('a caixa cabe na estante e o codigo e o da posicao (infra.caixa_dentro_da_topologia)', () => {
-    it('recusa a posicao fora da estante', async () => {
+    it('recusa a posicao fora das medidas do formato da estante', async () => {
       await recusaDoTrigger('TOPOLOGIA', {
         sql: `INSERT INTO infra.caixa (id_estante, face, linha, coluna, id_especie) VALUES ($1, 1, 9, 1, (SELECT id_especie FROM infra.caixa WHERE id = $2))`,
         valores: [m.estante, m.caixaCasal1],
       })
     })
 
-    it('recusa a estante com colunas demais para as 26 letras do endereco', async () => {
-      await recusaDoTrigger('TOPOLOGIA',
-        `UPDATE infra.estante SET colunas = 14, capacidade = faces * linhas * 14 WHERE id = ${m.estante}`,
-        `INSERT INTO infra.caixa (id_estante, face, linha, coluna, id_especie)
-         SELECT id_estante, 2, 1, 14, id_especie FROM infra.caixa WHERE id = ${m.caixaCasal1}`)
+    it('o formato nao passa das 26 letras do endereco: a traseira continua as letras da frontal', async () => {
+      // 2 faces x 14 colunas = 28 letras. Antes era o trigger da caixa que recusava, na primeira
+      // caixa da coluna sem letra; agora o formato nem chega a ter essas medidas
+      await recusaDaConstraint('formato_topologia', `UPDATE infra.formato SET colunas = 14 WHERE id = ${m.formato}`)
     })
 
     it('escreve o codigo no INSERT, a traseira continuando as letras da frontal', async () => {
@@ -611,10 +614,15 @@ describe.skipIf(!URL_TESTE)('regras do banco', { timeout: 30_000 }, () => {
       ['pedido_status_dominio', () => `UPDATE demanda.pedido SET status = 'cancelado' WHERE id = ${m.pedido}`],
       ['pedido_entregue_tem_data', () => `UPDATE demanda.pedido SET dt_entrega = '2026-11-05' WHERE id = ${m.pedido}`],
       ['pedido_qtd_nao_negativa', () => `UPDATE demanda.pedido SET qtd_m = -1, qtd_qualquer = 3 WHERE id = ${m.pedido}`],
+      // o formato da estante (migration 20261126150000_estante_com_formato)
+      ['formato_topologia', () => `UPDATE infra.formato SET linhas = 0 WHERE id = ${m.formato}`],
+      ['formato_topologia', () => `UPDATE infra.formato SET faces = 3 WHERE id = ${m.formato}`],
+      ['formato_topologia', () => `UPDATE infra.formato SET linhas = 27 WHERE id = ${m.formato}`],
+      ['formato_nome_preenchido', () => `UPDATE infra.formato SET nome = '   ' WHERE id = ${m.formato}`],
+      ['formato_nome_unico', () => `INSERT INTO infra.formato (nome, faces, linhas, colunas)
+                                    SELECT upper(nome), faces, linhas, colunas FROM infra.formato WHERE id = ${m.formato}`],
       // os de antes do modelo por rato, que continuam valendo
-      ['estante_capacidade_derivada', () => `UPDATE infra.estante SET capacidade = capacidade + 1 WHERE id = ${m.estante}`],
       ['caixa_posicao_positiva', () => `UPDATE infra.caixa SET linha = 0 WHERE id = ${m.caixaCasal1}`],
-      ['estante_topologia_positiva', () => `UPDATE infra.estante SET linhas = 0, capacidade = 0 WHERE id = ${m.estante}`],
       ['caixa_uma_por_posicao', () => `INSERT INTO infra.caixa (id_estante, face, linha, coluna, id_especie, tipo)
                                        SELECT id_estante, face, linha, coluna, id_especie, 'casal' FROM infra.caixa WHERE id = ${m.caixaCasal1}`],
       ['casal_grupo_macho_dominio', () => `UPDATE reproducao.casal SET grupo_macho = 'Z', identificacao = 'Z' || grupo_femea WHERE id_caixa = ${m.caixaCasal1}`],

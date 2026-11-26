@@ -87,6 +87,11 @@ const POR_CONSTRAINT: Record<string, Traducao> = {
     codigo: 'LINHAGEM_DUPLICADA',
     mensagem: 'Já existe uma linhagem com este nome nesta espécie.',
   },
+  // unicidade parcial: dois cadastros do mesmo nome ao mesmo tempo. O servico confere antes, com o nome
+  formato_nome_unico: {
+    codigo: 'FORMATO_DUPLICADO',
+    mensagem: 'Já existe um formato com este nome.',
+  },
 }
 
 /**

@@ -28,8 +28,8 @@ import { retiradaDoPedido } from './retirada.service.ts'
 // de teste da Neon ou um Postgres local), pelo npm run test:banco. Sem a variavel, fica de fora.
 //
 // Nada fica gravado: o Prisma dos servicos e trocado pela transacao do teste (shared/testes/transacao.ts),
-// desfeita no fim, e cada caso roda num SAVEPOINT. O mundo (especie, estante, caixas, casal, parto,
-// animais e usuarios) nasce dentro dela, com nomes proprios
+// desfeita no fim, e cada caso roda num SAVEPOINT. O mundo (especie, formato, estante, caixas, casal,
+// parto, animais e usuarios) nasce dentro dela, com nomes proprios
 
 const URL_TESTE = process.env.DATABASE_URL_TESTE
 
@@ -80,10 +80,13 @@ describe.skipIf(!URL_TESTE)('o pedido no banco de verdade', { timeout: 60_000 },
     const pesquisador = await usuario('pesquisador', 'P')
 
     const sala = await id(`INSERT INTO infra.sala (nome) VALUES ('Sala do teste dos pedidos') RETURNING id`)
+    const formato = await id(
+      `INSERT INTO infra.formato (nome, faces, linhas, colunas) VALUES ('Formato do teste dos pedidos', 2, 4, 4) RETURNING id`,
+    )
     const estante = await id(
-      `INSERT INTO infra.estante (id_sala, fabricante, modelo, numero_visivel, faces, linhas, colunas, capacidade)
-       VALUES ($1, 'Teste', 'Teste', 'P1', 2, 4, 4, 32) RETURNING id`,
+      `INSERT INTO infra.estante (id_sala, id_formato, numero_visivel) VALUES ($1, $2, 'P1') RETURNING id`,
       sala,
+      formato,
     )
     const caixa = (coluna: number, tipo: string, sexo: string | null) =>
       id(

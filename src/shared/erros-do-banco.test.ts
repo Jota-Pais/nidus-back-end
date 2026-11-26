@@ -140,6 +140,16 @@ describe('constraint do banco vira 409', () => {
     expect(traduzido?.message).toBe('Este parto já foi aberto por outro registro de acasalamento. Atualize a tela e tente de novo.')
   })
 
+  it('dois formatos ativos com o mesmo nome (dois cadastros ao mesmo tempo) vira FORMATO_DUPLICADO', () => {
+    // O indice e parcial e de lower(nome): o servico confere antes, com o nome digitado; este e o
+    // texto de quando os dois passam pela conferencia juntos
+    const traduzido = traduzirErroDoBanco(unique('formato_nome_unico', 'formato'))
+
+    expect(traduzido?.status).toBe(409)
+    expect(traduzido?.codigo).toBe('FORMATO_DUPLICADO')
+    expect(traduzido?.message).toBe('Já existe um formato com este nome.')
+  })
+
   it('sexto parto vira LIMITE_PARTOS_ATINGIDO', () => {
     const traduzido = traduzirErroDoBanco(check('parto_ordem_ciclo', 'parto'))
 

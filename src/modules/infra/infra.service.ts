@@ -1,39 +1,49 @@
-// Estantes: lista, grade das duas faces, cadastro, edicao e remocao
+// Estantes: lista, grade das duas faces, cadastro, edicao e remocao. As medidas sao as do formato
+// da estante (formato.service.ts), e a estante troca de formato
 
+import type { Prisma } from '@prisma/client'
 import { agora } from '../../shared/relogio.ts'
-import { ErroDeAplicacao, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
+import { ErroDeAplicacao, campoInvalido, erroDeRegra, naoEncontrado } from '../../shared/erros.ts'
 import { prisma } from '../../shared/prisma.ts'
-import { codigoDaEspecie, face as faceDic } from '../../shared/traducao.ts'
+import { codigoDaEspecie, face as faceDic, listaLegivel } from '../../shared/traducao.ts'
+import { travarCaixasDaEstante } from '../colonia/travas.ts'
 import { registrarHistorico } from '../historico/historico.service.ts'
 import { lerCards } from './card.ts'
 import { codigoDaPosicao } from './endereco.ts'
+import { foraDasMedidas } from './formato.service.ts'
+import type { Medidas } from './formato.service.ts'
+
+type Leitura = Pick<Prisma.TransactionClient, 'caixa'>
+
+/** As medidas que a estante tem: as do formato dela */
+const medidasDoFormato = { select: { faces: true, linhas: true, colunas: true } } as const
+
+/** O nome da sala e o formato vem junto: a grade separa as estantes pela sala, e as medidas sao do formato */
+const comSalaEFormato = {
+  sala: { select: { nome: true } },
+  formato: { select: { nome: true, faces: true, linhas: true, colunas: true } },
+} as const
 
 type LinhaDeEstante = {
   id: number
   idSala: number
-  sala: { nome: string }
-  fabricante: string
-  modelo: string
+  idFormato: number
   numeroVisivel: string
-  faces: number
-  linhas: number
-  colunas: number
+  sala: { nome: string }
+  formato: { nome: string } & Medidas
 }
-
-/** O nome da sala vem junto: a grade separa as estantes por ele */
-const comASala = { sala: { select: { nome: true } } } as const
 
 function paraApi(estante: LinhaDeEstante) {
   return {
     id: estante.id,
     idSala: estante.idSala,
     sala: estante.sala.nome,
-    fabricante: estante.fabricante,
-    modelo: estante.modelo,
+    idFormato: estante.idFormato,
+    formato: estante.formato.nome,
     numeroVisivel: estante.numeroVisivel,
-    faces: estante.faces,
-    linhas: estante.linhas,
-    colunas: estante.colunas,
+    faces: estante.formato.faces,
+    linhas: estante.formato.linhas,
+    colunas: estante.formato.colunas,
   }
 }
 
@@ -53,7 +63,7 @@ export async function idDaEspecie(codigo: string): Promise<number> {
 export async function listarEstantes() {
   const estantes = await prisma.estante.findMany({
     where: { ativa: true },
-    include: comASala,
+    include: comSalaEFormato,
     orderBy: [{ sala: { nome: 'asc' } }, { numeroVisivel: 'asc' }],
   })
 
@@ -64,30 +74,34 @@ export async function listarEstantes() {
  * GET /api/estantes/:id/grade - as duas faces, com posicao vazia como 'caixa: null'. Cada caixa
  * vem com a coluna (a cor), a linhagem (o id, para a grade filtrar por ela, e o nome) e o card: o
  * casal, ou o sexo e os vivos da caixa de estoque (a MiniGrade filtra os destinos da mudanca pelo
- * sexo e pela linhagem)
+ * sexo e pela linhagem). As posicoes sao as das medidas do formato
  */
 export async function montarGrade(id: number) {
-  const estante = await prisma.estante.findFirst({ where: { id, ativa: true } })
+  const estante = await prisma.estante.findFirst({
+    where: { id, ativa: true },
+    select: { formato: medidasDoFormato },
+  })
 
   if (estante === null) {
     throw naoEncontrado('Estante')
   }
 
+  const { faces: totalDeFaces, linhas, colunas } = estante.formato
   const caixas = await lerCards(prisma, { idEstante: id, ativa: true })
   const caixaPorEndereco = new Map(caixas.map((caixa) => [`${caixa.face}:${caixa.linha}:${caixa.coluna}`, caixa]))
 
-  const faces = Array.from({ length: estante.faces }, (_, indice) => {
+  const faces = Array.from({ length: totalDeFaces }, (_, indice) => {
     const numeroDaFace = indice + 1
     const posicoes = []
 
-    for (let linha = 1; linha <= estante.linhas; linha += 1) {
-      for (let coluna = 1; coluna <= estante.colunas; coluna += 1) {
+    for (let linha = 1; linha <= linhas; linha += 1) {
+      for (let coluna = 1; coluna <= colunas; coluna += 1) {
         const caixa = caixaPorEndereco.get(`${numeroDaFace}:${linha}:${coluna}`)
 
         posicoes.push({
           linha,
           coluna,
-          codigo: codigoDaPosicao(numeroDaFace, linha, coluna, estante.colunas),
+          codigo: codigoDaPosicao(numeroDaFace, linha, coluna, colunas),
           caixa:
             caixa === undefined
               ? null
@@ -112,23 +126,15 @@ export async function montarGrade(id: number) {
 
 export type NovaEstante = {
   idSala: number
-  fabricante: string
-  modelo: string
+  idFormato: number
   numeroVisivel: string
-  faces: number
-  linhas: number
-  colunas: number
 }
 
-/** O que a edicao muda. O modelo e a topologia ficam: para trocar, remove e cadastra de novo */
+/** O que a edicao muda, ao menos um. Trocar o formato muda as medidas e o codigo das caixas */
 export type AlteracaoDeEstante = {
   numeroVisivel?: string | undefined
   idSala?: number | undefined
-}
-
-/** capacidade e derivada da topologia e nunca vem do cliente - o CHECK do banco cobra o mesmo */
-export function capacidadeDerivada(faces: number, linhas: number, colunas: number): number {
-  return faces * linhas * colunas
+  idFormato?: number | undefined
 }
 
 /** A sala escolhida no formulario. Removida ou inexistente e campo invalido, como o responsavel do projeto */
@@ -142,6 +148,17 @@ async function salaDoCorpo(idSala: number) {
   }
 
   return sala
+}
+
+/** O formato escolhido no formulario. Removido ou inexistente e campo invalido, como a sala */
+async function formatoDoCorpo(idFormato: number) {
+  const formato = await prisma.formato.findFirst({ where: { id: idFormato, ativo: true } })
+
+  if (formato === null) {
+    throw campoInvalido('idFormato', 'Escolha um formato cadastrado.')
+  }
+
+  return formato
 }
 
 /** O numero da etiqueta e unico na sala, entre as estantes ativas */
@@ -164,8 +181,32 @@ async function conferirNumeroLivre(
   }
 }
 
+/**
+ * As caixas ativas da estante que ficariam fora do formato novo. O banco recusaria do mesmo jeito
+ * (TOPOLOGIA, no trigger da caixa); aqui a recusa diz quais sao. Le depois de travar as caixas
+ * (travarCaixasDaEstante)
+ */
+async function conferirCaixasNoFormato(tx: Leitura, idEstante: number, formato: { nome: string } & Medidas) {
+  const fora = await tx.caixa.findMany({
+    where: { idEstante, ativa: true, ...foraDasMedidas(formato) },
+    orderBy: [{ face: 'asc' }, { linha: 'asc' }, { coluna: 'asc' }],
+    select: { codigo: true },
+  })
+
+  if (fora.length === 0) return
+
+  const quais = listaLegivel(fora.map((caixa) => caixa.codigo))
+
+  throw erroDeRegra(
+    'CAIXAS_FORA_DO_FORMATO',
+    fora.length === 1
+      ? `A caixa ${quais} fica fora do formato ${formato.nome}. Mude-a de lugar antes de trocar o formato.`
+      : `As caixas ${quais} ficam fora do formato ${formato.nome}. Mude-as de lugar antes de trocar o formato.`,
+  )
+}
+
 async function estanteAtiva(id: number) {
-  const estante = await prisma.estante.findFirst({ where: { id, ativa: true }, include: comASala })
+  const estante = await prisma.estante.findFirst({ where: { id, ativa: true }, include: comSalaEFormato })
 
   if (estante === null) {
     throw naoEncontrado('Estante')
@@ -177,17 +218,12 @@ async function estanteAtiva(id: number) {
 /** POST /api/estantes */
 export async function cadastrarEstante(dados: NovaEstante, idUsuario: number) {
   const sala = await salaDoCorpo(dados.idSala)
+  const formato = await formatoDoCorpo(dados.idFormato)
 
   await conferirNumeroLivre(sala, dados.numeroVisivel)
 
   const criada = await prisma.$transaction(async (tx) => {
-    const estante = await tx.estante.create({
-      data: {
-        ...dados,
-        capacidade: capacidadeDerivada(dados.faces, dados.linhas, dados.colunas),
-      },
-      include: comASala,
-    })
+    const estante = await tx.estante.create({ data: dados, include: comSalaEFormato })
 
     await registrarHistorico(tx, {
       idUsuario,
@@ -195,7 +231,7 @@ export async function cadastrarEstante(dados: NovaEstante, idUsuario: number) {
       idEntidade: estante.id,
       acao: 'cadastro',
       descricao: `Estante ${dados.numeroVisivel} cadastrada na ${sala.nome}`,
-      dados: { ...dados, sala: sala.nome },
+      dados: { ...dados, sala: sala.nome, formato: formato.nome },
     })
 
     return estante
@@ -204,7 +240,11 @@ export async function cadastrarEstante(dados: NovaEstante, idUsuario: number) {
   return paraApi(criada)
 }
 
-/** PATCH /api/estantes/:id - o numero da etiqueta e a sala */
+/**
+ * PATCH /api/estantes/:id - o numero da etiqueta, a sala e o formato. Trocar o formato reescreve o
+ * codigo das caixas ativas (o banco faz, pelo trigger da estante); a caixa que ficaria fora e
+ * recusada antes
+ */
 export async function alterarEstante(id: number, dados: AlteracaoDeEstante, idUsuario: number) {
   const estante = await estanteAtiva(id)
 
@@ -212,15 +252,26 @@ export async function alterarEstante(id: number, dados: AlteracaoDeEstante, idUs
     dados.idSala === undefined || dados.idSala === estante.idSala
       ? { id: estante.idSala, nome: estante.sala.nome }
       : await salaDoCorpo(dados.idSala)
+  const formato =
+    dados.idFormato === undefined || dados.idFormato === estante.idFormato
+      ? { id: estante.idFormato, ...estante.formato }
+      : await formatoDoCorpo(dados.idFormato)
   const numeroVisivel = dados.numeroVisivel ?? estante.numeroVisivel
 
   await conferirNumeroLivre(sala, numeroVisivel, id)
 
+  const trocaDeFormato = formato.id !== estante.idFormato
+
   const salva = await prisma.$transaction(async (tx) => {
+    if (trocaDeFormato) {
+      await travarCaixasDaEstante(tx, id)
+      await conferirCaixasNoFormato(tx, id, formato)
+    }
+
     const atualizada = await tx.estante.update({
       where: { id },
-      data: { numeroVisivel, idSala: sala.id, dtManutencao: agora() },
-      include: comASala,
+      data: { numeroVisivel, idSala: sala.id, idFormato: formato.id, dtManutencao: agora() },
+      include: comSalaEFormato,
     })
 
     await registrarHistorico(tx, {
@@ -230,8 +281,14 @@ export async function alterarEstante(id: number, dados: AlteracaoDeEstante, idUs
       acao: 'alteracao',
       descricao: `Estante ${numeroVisivel} alterada na ${sala.nome}`,
       dados: {
-        antes: { numeroVisivel: estante.numeroVisivel, idSala: estante.idSala, sala: estante.sala.nome },
-        depois: { numeroVisivel, idSala: sala.id, sala: sala.nome },
+        antes: {
+          numeroVisivel: estante.numeroVisivel,
+          idSala: estante.idSala,
+          sala: estante.sala.nome,
+          idFormato: estante.idFormato,
+          formato: estante.formato.nome,
+        },
+        depois: { numeroVisivel, idSala: sala.id, sala: sala.nome, idFormato: formato.id, formato: formato.nome },
       },
     })
 

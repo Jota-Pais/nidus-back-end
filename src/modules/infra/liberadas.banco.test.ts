@@ -31,11 +31,12 @@ describe.skipIf(!URL_TESTE)('as caixas liberadas no banco de verdade', () => {
   let estante = 0
   let proximaColuna = 1
 
-  async function novaEstante(sala: number, numero: string) {
+  /** Uma estante do formato do teste (1 face, 1 x 9) */
+  async function novaEstante(sala: number, formato: number, numero: string) {
     return id(
-      `INSERT INTO infra.estante (id_sala, fabricante, modelo, numero_visivel, faces, linhas, colunas, capacidade)
-       VALUES ($1, 'Teste', 'Teste', $2, 1, 1, 9, 9) RETURNING id`,
+      `INSERT INTO infra.estante (id_sala, id_formato, numero_visivel) VALUES ($1, $2, $3) RETURNING id`,
       sala,
+      formato,
       numero,
     )
   }
@@ -121,8 +122,11 @@ describe.skipIf(!URL_TESTE)('as caixas liberadas no banco de verdade', () => {
     linhagemB = await id(`INSERT INTO catalogo.linhagem (id_especie, nome) VALUES ($1, 'LB') RETURNING id`, especie)
     linhagemDeFora = await id(`INSERT INTO catalogo.linhagem (id_especie, nome) VALUES ($1, 'LF') RETURNING id`, outraEspecie)
     const sala = await id(`INSERT INTO infra.sala (nome) VALUES ('Sala do teste das liberadas') RETURNING id`)
-    estante = await novaEstante(sala, 'Q7')
-    const estanteDeFora = await novaEstante(sala, 'Q8')
+    const formato = await id(
+      `INSERT INTO infra.formato (nome, faces, linhas, colunas) VALUES ('Formato do teste das liberadas', 1, 1, 9) RETURNING id`,
+    )
+    estante = await novaEstante(sala, formato, 'Q7')
+    const estanteDeFora = await novaEstante(sala, formato, 'Q8')
 
     // Do mais recente para o mais antigo (data, depois id): ativa, empate pelo id, antiga
     // - 'ativa': na estante, nunca na lista

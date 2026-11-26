@@ -41,7 +41,7 @@ const db = {
   },
   $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(db),
   linhagem: { findUnique: async ({ where }: { where: { id: number } }) => banco.linhagens.get(where.id) ?? null },
-  estante: { findFirst: async () => ({ id: 1, numeroVisivel: 'E1', faces: 2, linhas: 3, colunas: 3 }) },
+  estante: { findFirst: async () => ({ id: 1, numeroVisivel: 'E1', formato: { faces: 2, linhas: 3, colunas: 3 } }) },
   caixa: {
     findFirst: async () => banco.ocupante,
     findUnique: async ({ where }: { where: { id: number } }) => {

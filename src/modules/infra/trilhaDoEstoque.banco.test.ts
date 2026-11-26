@@ -64,10 +64,13 @@ describe.skipIf(!URL_TESTE)('a trilha da caixa de estoque no banco de verdade', 
       `INSERT INTO login.usuario (nome, email, perfil) VALUES ('trilha', 'trilha@trilha-no-banco.invalid', 'P') RETURNING id`,
     )
     const sala = await id(`INSERT INTO infra.sala (nome) VALUES ('Sala do teste da trilha') RETURNING id`)
+    const formato = await id(
+      `INSERT INTO infra.formato (nome, faces, linhas, colunas) VALUES ('Formato do teste da trilha', 1, 1, 9) RETURNING id`,
+    )
     const estante = await id(
-      `INSERT INTO infra.estante (id_sala, fabricante, modelo, numero_visivel, faces, linhas, colunas, capacidade)
-       VALUES ($1, 'Teste', 'Teste', 'T9', 1, 1, 9, 9) RETURNING id`,
+      `INSERT INTO infra.estante (id_sala, id_formato, numero_visivel) VALUES ($1, $2, 'T9') RETURNING id`,
       sala,
+      formato,
     )
     const caixa = (coluna: number) =>
       id(

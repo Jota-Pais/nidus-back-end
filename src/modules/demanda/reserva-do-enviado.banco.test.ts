@@ -15,7 +15,7 @@ import type { ItemDaReserva } from './reserva.service.ts'
 //
 // Teste de INTEGRACAO: so roda com DATABASE_URL_TESTE apontando para um banco ja migrado, pelo
 // npm run test:banco. Sem a variavel, fica de fora. Como na reserva concorrente, o mundo (especie,
-// linhagem, usuarios, estante, caixas, casal, parto e 6 machos) e GRAVADO no comeco e apagado no
+// linhagem, usuarios, formato, estante, caixas, casal, parto e 6 machos) e GRAVADO no comeco e apagado no
 // fim, para as conexoes verem os mesmos animais (a limpeza desliga o trigger do animal dentro da
 // propria transacao, que trava a tabela ate o COMMIT). Os casos rodam em transacoes desfeitas no
 // fim, menos os do pedido gravado, que a limpeza apaga.
@@ -32,6 +32,7 @@ const daqui = (dias: number) => somarDias(hoje, dias)
 /** Os nomes que marcam o mundo deste teste no banco */
 const ESPECIE = 'Rato do teste da reserva do enviado'
 const SALA = 'Sala do teste da reserva do enviado'
+const FORMATO = 'Formato do teste da reserva do enviado'
 const DOMINIO = '@reserva-do-enviado.invalid'
 
 /** O parto nasceu 60 dias atras e desmamou 38 dias atras; os machos estao no estoque ha 30 */
@@ -109,6 +110,7 @@ async function apagarOMundo(banco: pg.Client): Promise<void> {
     await banco.query(`DELETE FROM infra.caixa WHERE id = ANY($1)`, [caixas])
     await banco.query(`DELETE FROM infra.estante WHERE id_sala IN (SELECT id FROM infra.sala WHERE nome = $1)`, [SALA])
     await banco.query(`DELETE FROM infra.sala WHERE nome = $1`, [SALA])
+    await banco.query(`DELETE FROM infra.formato WHERE nome = $1`, [FORMATO])
     await banco.query(`DELETE FROM catalogo.linhagem WHERE id = ANY($1)`, [linhagens])
     await banco.query(`DELETE FROM catalogo.especie WHERE id = ANY($1)`, [especies])
     await banco.query(`DELETE FROM login.usuario WHERE id = ANY($1)`, [usuarios])
@@ -135,10 +137,10 @@ async function gravarOMundo(banco: pg.Client): Promise<Mundo> {
     const pesquisador = await usuario('pesquisador', 'P')
 
     const sala = await id(`INSERT INTO infra.sala (nome) VALUES ($1) RETURNING id`, [SALA])
+    const formato = await id(`INSERT INTO infra.formato (nome, faces, linhas, colunas) VALUES ($1, 1, 1, 2) RETURNING id`, [FORMATO])
     const estante = await id(
-      `INSERT INTO infra.estante (id_sala, fabricante, modelo, numero_visivel, faces, linhas, colunas, capacidade)
-       VALUES ($1, 'Teste', 'Teste', 'RE1', 1, 1, 2, 2) RETURNING id`,
-      [sala],
+      `INSERT INTO infra.estante (id_sala, id_formato, numero_visivel) VALUES ($1, $2, 'RE1') RETURNING id`,
+      [sala, formato],
     )
     const caixa = (coluna: number, tipo: string) =>
       id(

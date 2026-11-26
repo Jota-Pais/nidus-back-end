@@ -33,11 +33,14 @@ export function codigoDaPosicao(
 }
 
 /**
- * quantas letras a topologia consome. Serve para recusar cadastro impossivel no POST antes
- * de gravar, em vez de estourar na primeira leitura da grade.
+ * quantas letras a topologia consome. Serve para recusar formato impossivel antes de gravar, em
+ * vez de estourar na primeira leitura da grade.
  */
 export function letrasNecessarias(faces: number, colunas: number): number {
   return faces * colunas
 }
 
 export const LETRAS_DISPONIVEIS = ALFABETO.length
+
+/** A recusa no campo das colunas quando faces x colunas passa das letras do alfabeto */
+export const COLUNAS_SEM_LETRA = `Faces x colunas não pode passar de ${LETRAS_DISPONIVEIS} - o endereço ficaria sem letra.`

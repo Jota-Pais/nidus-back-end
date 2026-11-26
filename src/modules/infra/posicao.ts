@@ -1,6 +1,7 @@
 // Uma posicao da estante escolhida no formulario: onde nasce a caixa nova (do casal ou de
 // estoque) e para onde uma caixa muda. O codigo da caixa (F1A) quem escreve e o trigger da
-// posicao; aqui so se confere que a posicao existe e quem esta nela
+// posicao; aqui so se confere que a posicao existe nas medidas do formato da estante e quem esta
+// nela
 
 import type { Prisma } from '@prisma/client'
 import { campoInvalido, naoEncontrado } from '../../shared/erros.ts'
@@ -21,14 +22,15 @@ type Leitura = Pick<Prisma.TransactionClient, 'estante' | 'caixa'>
 export async function lerPosicao(banco: Leitura, posicao: PosicaoNaEstante, campo: string) {
   const estante = await banco.estante.findFirst({
     where: { id: posicao.idEstante, ativa: true },
-    select: { id: true, numeroVisivel: true, faces: true, linhas: true, colunas: true },
+    select: { id: true, numeroVisivel: true, formato: { select: { faces: true, linhas: true, colunas: true } } },
   })
 
   if (estante === null) throw naoEncontrado('Estante')
 
   const face = posicao.face === 'frontal' ? 1 : 2
+  const { faces, linhas, colunas } = estante.formato
 
-  if (face > estante.faces || posicao.linha > estante.linhas || posicao.coluna > estante.colunas) {
+  if (face > faces || posicao.linha > linhas || posicao.coluna > colunas) {
     throw campoInvalido(campo, 'Esta posição não existe na estante.')
   }
 

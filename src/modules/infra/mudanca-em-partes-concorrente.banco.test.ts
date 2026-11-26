@@ -14,7 +14,7 @@ import { registrarMudanca } from './mudanca.service.ts'
 // Teste de INTEGRACAO: so roda com DATABASE_URL_TESTE apontando para um banco ja migrado, pelo
 // npm run test:banco. Sem a variavel, fica de fora.
 //
-// O mundo (especie, linhagem, usuario, estante, o casal e quatro caixas de estoque) e GRAVADO no
+// O mundo (especie, linhagem, usuario, formato, estante, o casal e quatro caixas de estoque) e GRAVADO no
 // comeco e apagado no fim, como na reserva concorrente, que tem a explicacao do trigger do animal.
 
 const URL_TESTE = process.env.DATABASE_URL_TESTE
@@ -27,6 +27,7 @@ const daqui = (dias: number) => somarDias(hojeISO(), dias)
 
 const ESPECIE = 'Rato do teste da mudanca concorrente'
 const SALA = 'Sala do teste da mudanca concorrente'
+const FORMATO = 'Formato do teste da mudanca concorrente'
 const DOMINIO = '@mudanca-concorrente.invalid'
 
 /** O parto nasceu 60 dias atras e desmamou 38 dias atras; os machos estao no estoque ha 30 */
@@ -96,6 +97,7 @@ async function apagarOMundo(banco: pg.Client): Promise<void> {
     await banco.query(`DELETE FROM infra.caixa WHERE id = ANY($1)`, [caixas])
     await banco.query(`DELETE FROM infra.estante WHERE id_sala IN (SELECT id FROM infra.sala WHERE nome = $1)`, [SALA])
     await banco.query(`DELETE FROM infra.sala WHERE nome = $1`, [SALA])
+    await banco.query(`DELETE FROM infra.formato WHERE nome = $1`, [FORMATO])
     await banco.query(`DELETE FROM catalogo.linhagem WHERE id = ANY($1)`, [linhagens])
     await banco.query(`DELETE FROM catalogo.especie WHERE id = ANY($1)`, [especies])
     await banco.query(`DELETE FROM login.usuario WHERE id = ANY($1)`, [usuarios])
@@ -121,10 +123,10 @@ async function gravarOMundo(banco: pg.Client): Promise<Mundo> {
     ])
 
     const sala = await id(`INSERT INTO infra.sala (nome) VALUES ($1) RETURNING id`, [SALA])
+    const formato = await id(`INSERT INTO infra.formato (nome, faces, linhas, colunas) VALUES ($1, 1, 2, 3) RETURNING id`, [FORMATO])
     const idEstante = await id(
-      `INSERT INTO infra.estante (id_sala, fabricante, modelo, numero_visivel, faces, linhas, colunas, capacidade)
-       VALUES ($1, 'Teste', 'Teste', 'MC1', 1, 2, 3, 6) RETURNING id`,
-      [sala],
+      `INSERT INTO infra.estante (id_sala, id_formato, numero_visivel) VALUES ($1, $2, 'MC1') RETURNING id`,
+      [sala, formato],
     )
     const caixa = (linha: number, coluna: number, tipo: string) =>
       id(

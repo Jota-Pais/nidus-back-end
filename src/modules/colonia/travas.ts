@@ -38,6 +38,29 @@ export async function travarCaixas(tx: Transacao, ids: number[]): Promise<void> 
   await tx.$queryRaw`SELECT "id" FROM "infra"."caixa" WHERE "id" IN (${Prisma.join(caixas)}) ORDER BY "id" FOR UPDATE`
 }
 
+/**
+ * Trava as caixas ativas da estante em ordem de id, como travarCaixas: a troca de formato da estante
+ * reescreve o codigo de todas elas (trigger infra.estante_reescreve_as_caixas). Quem muda uma delas
+ * de lugar ao mesmo tempo espera, e a conferencia das que ficariam fora le o que o banco vai reescrever
+ */
+export async function travarCaixasDaEstante(tx: Transacao, idEstante: number): Promise<void> {
+  await tx.$queryRaw`SELECT "id" FROM "infra"."caixa" WHERE "id_estante" = ${idEstante} AND "ativa" ORDER BY "id" FOR UPDATE`
+}
+
+/**
+ * Trava as caixas ativas de todas as estantes do formato, em ordem de id: mudar as medidas reescreve o
+ * codigo de todas elas (trigger infra.formato_reescreve_as_caixas). O mesmo de travarCaixasDaEstante
+ */
+export async function travarCaixasDoFormato(tx: Transacao, idFormato: number): Promise<void> {
+  await tx.$queryRaw`
+    SELECT c."id"
+      FROM "infra"."caixa" c
+      JOIN "infra"."estante" e ON e."id" = c."id_estante"
+     WHERE e."id_formato" = ${idFormato} AND c."ativa"
+     ORDER BY c."id"
+       FOR UPDATE OF c`
+}
+
 /** Trava os pedidos em ordem de id, como o trigger do animal faz em cada reserva que entra ou sai */
 export async function travarPedidos(tx: Transacao, ids: number[]): Promise<void> {
   const pedidos = unicosEmOrdem(ids)

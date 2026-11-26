@@ -5,7 +5,7 @@ import {
   exigirPerfil,
   usuarioDaRequisicao,
 } from '../../shared/middlewares/autorizacao.ts'
-import { LETRAS_DISPONIVEIS, letrasNecessarias } from './endereco.ts'
+import { idNoCorpo } from '../../shared/validacao.ts'
 import {
   alterarEstante,
   cadastrarEstante,
@@ -20,33 +20,24 @@ const idNaRota = z.object({
   id: z.coerce.number().int().positive().max(2147483647),
 })
 
-/** corpo do cadastro. 'capacidade' nao esta aqui, e por isso o Zod a descarta */
-export const estanteNova = z
-  .object({
-    idSala: z.number().int().positive().max(2147483647),
-    fabricante: z.string().trim().min(1).max(60),
-    modelo: z.string().trim().min(1).max(60),
-    numeroVisivel: z.string().trim().min(1).max(30),
-    faces: z.number().int().min(1).max(2),
-    linhas: z.number().int().min(1).max(26),
-    colunas: z.number().int().min(1).max(26),
-  })
-  // a topologia tem de caber no alfabeto, senao a grade nao teria letra para as colunas
-  .refine((dados) => letrasNecessarias(dados.faces, dados.colunas) <= LETRAS_DISPONIVEIS, {
-    path: ['colunas'],
-    error: `Faces x colunas não pode passar de ${LETRAS_DISPONIVEIS} - o endereço ficaria sem letra.`,
-  })
-
 /**
- * corpo da edicao: so o numero e a sala. Fabricante, modelo e topologia nao estao aqui e o Zod
- * os descarta - o modelo nao muda depois do cadastro
+ * corpo do cadastro: a sala, o formato e o numero da etiqueta. As medidas sao as do formato:
+ * fabricante, modelo, medidas e capacidade nao estao aqui, e o Zod os descarta
  */
+export const estanteNova = z.object({
+  idSala: idNoCorpo,
+  idFormato: idNoCorpo,
+  numeroVisivel: z.string().trim().min(1).max(30),
+})
+
+/** corpo da edicao: o numero, a sala e o formato, ao menos um */
 export const alteracaoDeEstante = z
   .object({
     numeroVisivel: z.string().trim().min(1).max(30).optional(),
-    idSala: z.number().int().positive().max(2147483647).optional(),
+    idSala: idNoCorpo.optional(),
+    idFormato: idNoCorpo.optional(),
   })
-  .refine((dados) => dados.numeroVisivel !== undefined || dados.idSala !== undefined, {
+  .refine((dados) => dados.numeroVisivel !== undefined || dados.idSala !== undefined || dados.idFormato !== undefined, {
     path: ['numeroVisivel'],
     error: 'Informe o que alterar.',
   })
@@ -68,7 +59,7 @@ estanteRoutes.post('/', exigirPerfil('gestor'), async (req, res) => {
   res.status(201).json(await cadastrarEstante(dados, usuarioDaRequisicao(req).id))
 })
 
-/** PATCH /api/estantes/:id - so o gestor muda o numero e a sala */
+/** PATCH /api/estantes/:id - so o gestor muda o numero, a sala e o formato */
 estanteRoutes.patch('/:id', exigirPerfil('gestor'), async (req, res) => {
   const { id } = idNaRota.parse(req.params)
   const dados = alteracaoDeEstante.parse(req.body)

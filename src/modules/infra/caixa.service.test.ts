@@ -15,7 +15,7 @@ const banco = vi.hoisted(() => ({
 vi.mock('../../shared/prisma.ts', () => ({
   prisma: {
     especie: { findMany: async () => [{ id: 1, nome: 'Rato' }] },
-    estante: { findFirst: async () => ({ id: 1, faces: 1, linhas: 1, colunas: 3 }) },
+    estante: { findFirst: async () => ({ formato: { faces: 1, linhas: 1, colunas: 3 } }) },
     caixa: {
       findMany: async ({ where }: { where: unknown }) => {
         banco.onde = where

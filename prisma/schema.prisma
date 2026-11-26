@@ -39,27 +39,48 @@ model Sala {
   @@schema("infra")
 }
 
-/// Rack com fabricante, modelo e topologia. A capacidade e derivada
-/// (faces x linhas x colunas) e nunca vem do cliente. O modelo nao muda depois
-/// do cadastro; remover e `ativa = false`, so com a estante vazia.
+/// Formato = as medidas de um modelo de estante (faces, linhas e colunas). A estante aponta para
+/// ele, e mudar as medidas muda as estantes dele: o banco reescreve o codigo das caixas ativas e
+/// recusa (TOPOLOGIA) a que ficaria fora (trigger infra.formato_reescreve_as_caixas). Faces x
+/// colunas nao passa das 26 letras do endereco (CHECK formato_topologia). O nome e unico entre os
+/// ativos, sem diferenciar maiuscula (unique parcial formato_nome_unico, na migration SQL). Remover
+/// e `ativo = false`, so sem estante ativa.
+model Formato {
+  id           Int       @id @default(autoincrement())
+  nome         String    @db.VarChar(60)
+  /// 1 frontal, 2 frontal e traseira
+  faces        Int       @db.SmallInt
+  linhas       Int       @db.SmallInt
+  colunas      Int       @db.SmallInt
+  ativo        Boolean   @default(true)
+  dtCriacao    DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
+  dtManutencao DateTime? @map("dt_manutencao") @db.Timestamptz(6)
+
+  estantes Estante[]
+
+  @@map("formato")
+  @@schema("infra")
+}
+
+/// Rack numa sala, com as medidas do formato dele. A capacidade nao e gravada: sai do formato
+/// (faces x linhas x colunas). O formato muda depois do cadastro, e o banco reescreve o codigo das
+/// caixas ativas e recusa (TOPOLOGIA) a que ficaria fora (trigger infra.estante_reescreve_as_caixas);
+/// remover e `ativa = false`, so com a estante vazia.
 model Estante {
   id            Int       @id @default(autoincrement())
   idSala        Int       @map("id_sala")
-  fabricante    String    @db.VarChar(60)
-  modelo        String    @db.VarChar(60)
+  idFormato     Int       @map("id_formato")
   /// Como a etiqueta aparece na estante real.
   numeroVisivel String    @map("numero_visivel") @db.VarChar(30)
-  faces         Int       @db.SmallInt
-  linhas        Int       @db.SmallInt
-  colunas       Int       @db.SmallInt
-  capacidade    Int       @db.SmallInt
   ativa         Boolean   @default(true)
   dtCriacao     DateTime  @default(now()) @map("dt_criacao") @db.Timestamptz(6)
   dtManutencao  DateTime? @map("dt_manutencao") @db.Timestamptz(6)
 
-  sala   Sala    @relation(fields: [idSala], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  caixas Caixa[]
+  sala    Sala    @relation(fields: [idSala], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  formato Formato @relation(fields: [idFormato], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  caixas  Caixa[]
 
+  @@index([idFormato])
   @@map("estante")
   @@schema("infra")
 }
@@ -67,7 +88,7 @@ model Estante {
 /// A gaiola que ocupa uma posicao: so o lugar. Os animais apontam para ela
 /// (colonia.animal.id_caixa), e o que ela tem e sempre contado, nunca gravado.
 /// Nao existe tabela `slot`: o endereco vive na propria caixa e a grade vazia se
-/// gera em codigo a partir da topologia da estante.
+/// gera em codigo a partir das medidas do formato da estante.
 model Caixa {
   id        Int @id @default(autoincrement())
   idEstante Int @map("id_estante")
@@ -76,7 +97,8 @@ model Caixa {
   linha     Int @db.SmallInt
   coluna    Int @db.SmallInt
   /// Endereco legivel (ex.: F1A). Quem escreve e o trigger da posicao
-  /// (infra.caixa_dentro_da_topologia), com a mesma formula de `codigoDaPosicao`.
+  /// (infra.caixa_dentro_da_topologia), com a mesma formula de `codigoDaPosicao`, e ele
+  /// reescreve o da caixa ativa quando o formato da estante muda. A liberada guarda o da saida.
   codigo    String @default("") @db.VarChar(20)
   /// A segregacao por especie e aplicada no servidor.
   idEspecie Int @map("id_especie")

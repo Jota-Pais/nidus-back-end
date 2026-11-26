@@ -45,14 +45,20 @@ async function semearSalas() {
   return idDaSala
 }
 
+/**
+ * Os formatos nao sao da carga: os 4 da spec vem da migration 20261126150000_estante_com_formato.
+ * A estante acha o dela pelo nome
+ */
 async function semearEstantes(idDaSala: Map<string, number>) {
-  for (const { sala, ...estante } of estantes) {
+  for (const { sala, formato, numeroVisivel } of estantes) {
+    const doFormato = await prisma.formato.findFirst({ where: { nome: formato, ativo: true } })
+
+    if (doFormato === null) {
+      throw new Error(`A estante ${numeroVisivel} usa o formato ${formato}, que nao esta no banco: aplique as migrations antes.`)
+    }
+
     const jaTem = await prisma.estante.findFirst({
-      where: {
-        fabricante: estante.fabricante,
-        modelo: estante.modelo,
-        numeroVisivel: estante.numeroVisivel,
-      },
+      where: { idFormato: doFormato.id, numeroVisivel },
     })
 
     if (jaTem) continue
@@ -60,16 +66,11 @@ async function semearEstantes(idDaSala: Map<string, number>) {
     const idSala = idDaSala.get(sala)
 
     if (idSala === undefined) {
-      throw new Error(`A estante ${estante.numeroVisivel} aponta para a ${sala}, que nao esta em salas.`)
+      throw new Error(`A estante ${numeroVisivel} aponta para a ${sala}, que nao esta em salas.`)
     }
 
     await prisma.estante.create({
-      data: {
-        ...estante,
-        idSala,
-        // Derivada, e o banco cobra: CHECK estante_capacidade_derivada.
-        capacidade: estante.faces * estante.linhas * estante.colunas,
-      },
+      data: { idSala, idFormato: doFormato.id, numeroVisivel },
     })
   }
 }
