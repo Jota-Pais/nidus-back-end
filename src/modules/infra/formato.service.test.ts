@@ -271,6 +271,14 @@ describe('edicao de formato', () => {
       'Estas caixas ficam fora das medidas novas: E-01 (Sala 1): F8A, F8B e T8C. Mude-as de lugar antes de mudar o formato.',
     )
   })
+
+  it('uma caixa so vem no singular', async () => {
+    banco.fora = [caixaFora('F8A', 4, 'E-01', 'Sala 1')]
+
+    await expect(alterarFormato(1, { linhas: 7 }, 1)).rejects.toThrow(
+      'Esta caixa fica fora das medidas novas: E-01 (Sala 1): F8A. Mude-a de lugar antes de mudar o formato.',
+    )
+  })
 })
 
 describe('remocao de formato', () => {

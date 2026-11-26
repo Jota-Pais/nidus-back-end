@@ -143,7 +143,9 @@ async function conferirCaixasNasMedidas(tx: Leitura, idFormato: number, medidas:
 
   throw erroDeRegra(
     'CAIXAS_FORA_DO_FORMATO',
-    `Estas caixas ficam fora das medidas novas: ${quais}. Mude-as de lugar antes de mudar o formato.`,
+    fora.length === 1
+      ? `Esta caixa fica fora das medidas novas: ${quais}. Mude-a de lugar antes de mudar o formato.`
+      : `Estas caixas ficam fora das medidas novas: ${quais}. Mude-as de lugar antes de mudar o formato.`,
   )
 }
 
